@@ -72,6 +72,13 @@ enum class Arch(val id: String) {
     }
 }
 
+enum class SkiaGPUBackend(val id: String) {
+    GANESH("GANESH"),
+    GRAPHITE("GRAPHITE");
+
+    fun toCompilerFlag() :String = "-DSK_$id"
+}
+
 enum class SkiaBuildType(
     val id: String,
     val flags: Array<String>,
@@ -198,6 +205,12 @@ class SkikoProperties(private val myProject: Project) {
                 if (!file.isDirectory) throw (GradleException("\"skia.dir\" property was explicitly set to ${skiaDirProp} which is not resolved as a directory"))
                 file
             }
+
+    val skiaGPUBacked: SkiaGPUBackend
+        get() {
+            val isGraphiteEnabled = myProject.findProperty("skia.gpu.graphite.enable") == "true"
+            return if (isGraphiteEnabled) SkiaGPUBackend.GRAPHITE else SkiaGPUBackend.GANESH
+        }
 
     val composeRepoUrl: String
         get() = System.getenv("COMPOSE_REPO_URL") ?: "https://packages.jetbrains.team/maven/p/cmp/dev"
