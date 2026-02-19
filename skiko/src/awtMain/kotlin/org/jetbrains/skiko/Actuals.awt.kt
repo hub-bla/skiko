@@ -1,5 +1,6 @@
 package org.jetbrains.skiko
 
+import org.jetbrains.skia.SkiaGPUBackendUtils_nIsGraphiteEnabled
 import org.jetbrains.skiko.redrawer.*
 import javax.swing.UIManager
 
@@ -10,8 +11,13 @@ internal actual fun makeDefaultRenderFactory(): RenderFactory =
         when (hostOs) {
             OS.MacOS -> when (renderApi) {
                 GraphicsApi.SOFTWARE_COMPAT, GraphicsApi.SOFTWARE_FAST -> SoftwareRedrawer(layer, analytics, properties)
-                else -> MetalRedrawer(layer, analytics, properties)
+                else -> if (SkiaGPUBackendUtils_nIsGraphiteEnabled()) GraphiteMetalRedrawer(
+                    layer,
+                    analytics,
+                    properties
+                ) else MetalRedrawer(layer, analytics, properties)
             }
+
             OS.Windows -> when (renderApi) {
                 GraphicsApi.SOFTWARE_COMPAT -> SoftwareRedrawer(layer, analytics, properties)
                 GraphicsApi.SOFTWARE_FAST -> WindowsSoftwareRedrawer(layer, analytics, properties)
@@ -19,11 +25,13 @@ internal actual fun makeDefaultRenderFactory(): RenderFactory =
                 GraphicsApi.ANGLE -> AngleRedrawer(layer, analytics, properties)
                 else -> Direct3DRedrawer(layer, analytics, properties)
             }
+
             OS.Linux -> when (renderApi) {
                 GraphicsApi.SOFTWARE_COMPAT -> SoftwareRedrawer(layer, analytics, properties)
                 GraphicsApi.SOFTWARE_FAST -> LinuxSoftwareRedrawer(layer, analytics, properties)
                 else -> LinuxOpenGLRedrawer(layer, analytics, properties)
             }
+
             else -> throw UnsupportedOperationException("AWT doesn't support $hostOs")
         }
     }
