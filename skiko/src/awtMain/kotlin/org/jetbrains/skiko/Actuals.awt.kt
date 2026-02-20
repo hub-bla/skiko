@@ -11,11 +11,7 @@ internal actual fun makeDefaultRenderFactory(): RenderFactory =
         when (hostOs) {
             OS.MacOS -> when (renderApi) {
                 GraphicsApi.SOFTWARE_COMPAT, GraphicsApi.SOFTWARE_FAST -> SoftwareRedrawer(layer, analytics, properties)
-                else -> if (SkiaGPUBackendUtils_nIsGraphiteEnabled()) GraphiteMetalRedrawer(
-                    layer,
-                    analytics,
-                    properties
-                ) else MetalRedrawer(layer, analytics, properties)
+                else -> MetalRedrawer(layer, analytics, properties, SkiaGPUBackendUtils_nIsGraphiteEnabled())
             }
 
             OS.Windows -> when (renderApi) {
