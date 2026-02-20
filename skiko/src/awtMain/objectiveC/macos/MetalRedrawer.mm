@@ -8,12 +8,6 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
-#import "ganesh/GrBackendSurface.h"
-#import "ganesh/GrDirectContext.h"
-#import "ganesh/mtl/GrMtlBackendContext.h"
-#import "ganesh/mtl/GrMtlDirectContext.h"
-#import "ganesh/mtl/GrMtlTypes.h"
-
 #import "MetalDevice.h"
 
 #include <assert.h>
