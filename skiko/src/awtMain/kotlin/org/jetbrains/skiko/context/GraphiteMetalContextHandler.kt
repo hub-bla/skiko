@@ -1,0 +1,91 @@
+package org.jetbrains.skiko.context
+
+import org.jetbrains.skia.ColorSpace
+import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.Surface
+import org.jetbrains.skia.SurfaceColorFormat
+import org.jetbrains.skia.SurfaceProps
+import org.jetbrains.skia.graphite.BackendTexture
+import org.jetbrains.skia.graphite.Recorder
+import org.jetbrains.skiko.Logger
+import org.jetbrains.skiko.MetalAdapter
+import org.jetbrains.skiko.RenderException
+import org.jetbrains.skiko.SkiaLayer
+import org.jetbrains.skiko.redrawer.MetalDevice
+
+/**
+ * Provides a way to draw on Skia canvas created in [layer] bounds using Metal GPU acceleration.
+ *
+ * For each [ContextHandler.draw] request it initializes Skia Canvas with Metal context and
+ * draws [org.jetbrains.skiko.SkiaLayer.draw] content in this canvas.
+ *
+ * @see "src/awtMain/objectiveC/macos/MetalContextHandler.mm" -- native implementation
+ */
+internal class GraphiteMetalContextHandler(
+    layer: SkiaLayer,
+    private val device: MetalDevice,
+    private val adapter: MetalAdapter
+) : ContextBasedContextHandler(layer, "Metal") {
+    var backendTexture: BackendTexture? = null
+    var recorder: Recorder? = null
+    override fun initCanvas() {
+        disposeCanvas()
+
+        val scale = layer.contentScale
+        val width = (layer.backedLayer.width * scale).toInt().coerceAtLeast(0)
+        val height = (layer.backedLayer.height * scale).toInt().coerceAtLeast(0)
+        if (width > 0 && height > 0) {
+            backendTexture = BackendTexture(createBackendTexture(recorder!!._ptr, device.ptr, width, height))
+
+            surface = Surface.makeFromBackendTexture(
+                recorder!!,
+                backendTexture!!,
+                SurfaceColorFormat.BGRA_8888,
+                ColorSpace.Companion.sRGB,
+                SurfaceProps(pixelGeometry = layer.pixelGeometry)
+            ) ?: throw RenderException("Cannot create surface")
+
+            canvas = surface!!.canvas
+        } else {
+            renderTarget = null
+            surface = null
+            canvas = null
+        }
+    }
+
+    override fun flush() {
+        super.flush()
+        surface?.flushAndSubmit()
+        finishFrame()
+        Logger.debug { "MetalContextHandler finished drawing frame" }
+    }
+
+    override fun rendererInfo(): String {
+        return super.rendererInfo() +
+                "Video card: ${adapter.name}\n" +
+                "Total VRAM: ${adapter.memorySize / 1024 / 1024} MB\n"
+    }
+
+    override fun makeContext(): DirectContext {
+        val contextPtr = makeMetalContext(device.ptr)
+        if (contextPtr != 0L) {
+            println("Graphite metal context created")
+        }
+        recorder = Recorder(makeRecorder(contextPtr))
+        return DirectContext(
+            contextPtr, recorder!!
+        )
+    }
+
+    override fun dispose() {
+        disposeCanvas()
+        context?.close()
+    }
+
+    private fun finishFrame() = finishFrame(device.ptr)
+
+    private external fun makeMetalContext(device: Long): Long
+    private external fun makeRecorder(contextPtr: Long): Long
+    private external fun createBackendTexture(context: Long, device: Long, width: Int, height: Int): Long
+    private external fun finishFrame(device: Long)
+}

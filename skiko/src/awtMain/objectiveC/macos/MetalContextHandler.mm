@@ -1,3 +1,4 @@
+#ifndef SK_GRPAHITE
 #ifdef SK_METAL
 
 #import <jawt.h>
@@ -91,4 +92,5 @@ JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_fini
 }
 
 } // extern C
+#endif
 #endif

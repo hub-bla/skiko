@@ -1,11 +1,18 @@
 package org.jetbrains.skia
 
+import org.jetbrains.skia.graphite.Recorder
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skiko.RenderException
 import org.jetbrains.skiko.loadOpenGLLibrary
 
 class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
+    var recorder: Recorder? = null
+
+    internal constructor(ptr: NativePointer, rc: Recorder) : this(ptr) {
+        recorder = rc
+    }
+
     companion object {
         fun makeGL(): DirectContext {
             Stats.onNativeCall()
@@ -45,7 +52,9 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
 
     fun flush(): DirectContext {
         Stats.onNativeCall()
-        DirectContext_nFlushDefault(_ptr)
+        recorder?.let {
+            DirectContext_nGraphiteSubmit(_ptr, it._ptr)
+        } ?: DirectContext_nFlushDefault(_ptr)
         return this
     }
 
@@ -160,7 +169,8 @@ private external fun DirectContext_nFlush(ptr: NativePointer, surfacePtr: Native
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nFlushDefault")
 private external fun DirectContext_nFlushDefault(ptr: NativePointer)
-
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nGraphiteSubmit")
+private external fun DirectContext_nGraphiteSubmit(ptr: NativePointer, recorderPtr: NativePointer)
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nGetResourceCacheLimit")
 private external fun DirectContext_nGetResourceCacheLimit(ptr: NativePointer): Long
 
