@@ -39,21 +39,10 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHan
     }
 }
 
-JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_makeRecorder(
-        JNIEnv* env, jobject contextHandler, jlong contextPtr)
-{
-    @autoreleasepool {
-        skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
-        std::unique_ptr<skgpu::graphite::Recorder> graphiteRecorder = context->makeRecorder();
-        return (jlong) graphiteRecorder.release();
-    }
-}
-
 JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_createBackendTexture(
-        JNIEnv* env, jobject contextHandler, jlong recorderPtr, jlong devicePtr, jint width, jint height)
+        JNIEnv* env, jobject contextHandler, jlong devicePtr, jint width, jint height)
 {
     @autoreleasepool {
-        skgpu::graphite::Recorder *graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(recorderPtr);
         MetalDevice *device = (__bridge MetalDevice *) (void *) devicePtr;
 
         /// If we have more than `maximumDrawableCount` command buffers inflight, wait until one of them finishes work.

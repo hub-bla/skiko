@@ -120,25 +120,25 @@ val Project.supportNativeIosSimulatorArm64: Boolean
     get() = supportAllNativeIos || findProperty(SkikoGradleProperties.NATIVE_IOS_SIMULATOR_ARM64) == "true" || isInIdea
 
 val Project.supportNativeIosX64: Boolean
-    get() = supportAllNativeIos || findProperty(SkikoGradleProperties.NATIVE_IOS_X64) == "true" || isInIdea
+    get() = false
 
 val Project.supportAnyNativeIos: Boolean
     get() = supportAllNativeIos || supportNativeIosArm64 || supportNativeIosSimulatorArm64 || supportNativeIosX64
 
 val Project.supportAllNativeTvos: Boolean
-    get() = supportAllNative || findProperty("${SkikoGradleProperties.NATIVE_TVOS}.enabled") == "true" || isInIdea
+    get() = false
 
 val Project.supportNativeTvosArm64: Boolean
-    get() = supportAllNativeTvos || findProperty(SkikoGradleProperties.NATIVE_TVOS_ARM64) == "true" || isInIdea
+    get() = false
 
 val Project.supportNativeTvosSimulatorArm64: Boolean
-    get() = supportAllNativeTvos || findProperty(SkikoGradleProperties.NATIVE_TVOS_SIMULATOR_ARM64) == "true" || isInIdea
+    get() = false
 
 val Project.supportNativeTvosX64: Boolean
-    get() = supportAllNativeTvos || findProperty(SkikoGradleProperties.NATIVE_TVOS_X64) == "true" || isInIdea
+    get() = false
 
 val Project.supportAnyNativeTvos: Boolean
-    get() = supportAllNativeTvos || supportNativeTvosArm64 || supportNativeTvosSimulatorArm64 || supportNativeTvosX64
+    get() = false
 
 val Project.supportNativeMac: Boolean
     get() = supportAllNative || findProperty(SkikoGradleProperties.NATIVE_MAC) == "true" || isInIdea

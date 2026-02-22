@@ -5,6 +5,10 @@ import org.jetbrains.skia.impl.Managed
 import org.jetbrains.skia.impl.NativePointer
 
 class Recorder internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
+    companion object {
+        fun makeFromGraphiteContext(contextPtr: NativePointer) = Recorder(Recorder_nMakeFromContext(contextPtr))
+    }
+
     private object _FinalizerHolder {
         val PTR = Recorder_nGetFinalizer()
     }
@@ -12,3 +16,6 @@ class Recorder internal constructor(ptr: NativePointer) : Managed(ptr, _Finalize
 
 @ExternalSymbolName("org_jetbrains_skia_graphite_Recorder__1nGetFinalizer")
 private external fun Recorder_nGetFinalizer(): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_graphite_Recorder__1nGetFinalizer")
+private external fun Recorder_nMakeFromContext(contextPtr: NativePointer): NativePointer

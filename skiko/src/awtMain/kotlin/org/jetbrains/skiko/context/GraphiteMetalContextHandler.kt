@@ -35,13 +35,13 @@ internal class GraphiteMetalContextHandler(
         val width = (layer.backedLayer.width * scale).toInt().coerceAtLeast(0)
         val height = (layer.backedLayer.height * scale).toInt().coerceAtLeast(0)
         if (width > 0 && height > 0) {
-            backendTexture = BackendTexture(createBackendTexture(recorder!!._ptr, device.ptr, width, height))
+            backendTexture = BackendTexture(createBackendTexture(device.ptr, width, height))
 
             surface = Surface.makeFromBackendTexture(
                 recorder!!,
                 backendTexture!!,
                 SurfaceColorFormat.BGRA_8888,
-                ColorSpace.Companion.sRGB,
+                ColorSpace.sRGB,
                 SurfaceProps(pixelGeometry = layer.pixelGeometry)
             ) ?: throw RenderException("Cannot create surface")
 
@@ -71,7 +71,7 @@ internal class GraphiteMetalContextHandler(
         if (contextPtr != 0L) {
             println("Graphite metal context created")
         }
-        recorder = Recorder(makeRecorder(contextPtr))
+        recorder = Recorder.makeFromGraphiteContext(contextPtr)
         return DirectContext(
             contextPtr, recorder!!
         )
@@ -85,7 +85,6 @@ internal class GraphiteMetalContextHandler(
     private fun finishFrame() = finishFrame(device.ptr)
 
     private external fun makeMetalContext(device: Long): Long
-    private external fun makeRecorder(contextPtr: Long): Long
-    private external fun createBackendTexture(context: Long, device: Long, width: Int, height: Int): Long
+    private external fun createBackendTexture(device: Long, width: Int, height: Int): Long
     private external fun finishFrame(device: Long)
 }

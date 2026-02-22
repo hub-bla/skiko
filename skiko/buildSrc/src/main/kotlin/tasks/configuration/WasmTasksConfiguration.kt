@@ -35,6 +35,7 @@ fun SkikoProjectContext.declareWasmTasks() {
     }
 
     val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+    val dir = skiaWasmDir.get()
     val compileWasm by project.tasks.registering(CompileSkikoCppTask::class) {
         dependsOn(skiaWasmDir)
 
