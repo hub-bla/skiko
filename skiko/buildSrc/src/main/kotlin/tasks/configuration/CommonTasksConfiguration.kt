@@ -74,7 +74,7 @@ fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType, gpuBackend: SkiaGPUB
 
         // Temporary (m144) skia flag for migration to SkPathBuilder
         "-USK_HIDE_PATH_EDIT_METHODS",
-        *buildType.flags
+        *buildType.flags,
         gpuBackend.toCompilerFlag()
     )
 
