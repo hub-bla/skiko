@@ -3,13 +3,13 @@
 #include "include/gpu/graphite/Context.h"
 #include "gpu/graphite/Recorder.h"
 
-static void deleteRecorder(skgpu::graphite::Recorder* rt) {
-    delete rt;
+static void deleteRecorder(void* ptr) {
+    delete reinterpret_cast<skgpu::graphite::Recorder*>(ptr);
 }
 
-SKIKO_EXPORT KNativePointer jetbrains_skia_graphite_Recorder__1nGetFinalizer
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_Recorder__1nGetFinalizer
         () {
-    return reinterpret_cast<KNativePointer>(reinterpret_cast<uintptr_t>(&deleteRecorder));
+    return reinterpret_cast<KNativePointer>(&deleteRecorder);
 }
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_Recorder__1nMakeFromContext(KNativePointer contextPtr) {
