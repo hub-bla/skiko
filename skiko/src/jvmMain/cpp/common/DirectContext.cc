@@ -7,6 +7,7 @@
 
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/ContextOptions.h"
 #include "gpu/graphite/Recorder.h"
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nMakeGL
@@ -23,6 +24,19 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContext_1jvmKt_
 #ifdef SK_METAL
 #include "ganesh/mtl/GrMtlBackendContext.h"
 #include "ganesh/mtl/GrMtlDirectContext.h"
+
+#include "gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
+
+extern "C" JNIEXPORT jlong Java_org_jetbrains_skia_DirectContextKt_1nGraphiteMakeMetal
+        (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
+    skgpu::graphite::MtlBackendContext backendContext = {};
+    backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
+    backendContext.fQueue.retain(reinterpret_cast<CFTypeRef>(queuePtr));
+    skgpu::graphite::ContextOptions options;
+
+    return reinterpret_cast<jlong>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
+}
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nMakeMetal
   (JNIEnv* env, jclass jclass, long devicePtr, long queuePtr) {
