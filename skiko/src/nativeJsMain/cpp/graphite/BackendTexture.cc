@@ -15,12 +15,12 @@ SKIKO_EXPORT KNativePointer jetbrains_skia_graphite_BackendTexture__1nWrapMetalT
 }
 #endif
 
-static void deleteBackendTexture(skgpu::graphite::BackendTexture* rt) {
-    delete rt;
+static void deleteBackendTexture(void* ptr) {
+    delete reinterpret_cast<skgpu::graphite::BackendTexture*>(ptr);
 }
 
-SKIKO_EXPORT KNativePointer jetbrains_skia_graphite_BackendTexture__1nGetFinalizer
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_BackendTexture__1nGetFinalizer
         () {
-    return reinterpret_cast<KNativePointer>(reinterpret_cast<uintptr_t>(&deleteBackendTexture));
+    return reinterpret_cast<KNativePointer>(&deleteBackendTexture);
 }
 #endif
