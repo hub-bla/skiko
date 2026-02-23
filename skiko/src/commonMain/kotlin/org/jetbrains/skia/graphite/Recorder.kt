@@ -1,0 +1,25 @@
+package org.jetbrains.skia.graphite
+
+import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.ExternalSymbolName
+import org.jetbrains.skia.impl.Managed
+import org.jetbrains.skia.impl.NativePointer
+
+class Recorder internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
+    companion object {
+        fun makeFromGraphiteContext(contextPtr: NativePointer) = Recorder(Recorder_nMakeFromContext(contextPtr))
+        fun makeFromGraphiteContext(context: DirectContext) : Recorder  {
+            return Recorder(Recorder_nMakeFromContext( context._ptr))
+        }
+    }
+
+    private object _FinalizerHolder {
+        val PTR = Recorder_nGetFinalizer()
+    }
+}
+
+@ExternalSymbolName("org_jetbrains_skia_graphite_Recorder__1nGetFinalizer")
+private external fun Recorder_nGetFinalizer(): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_graphite_Recorder__1nMakeFromContext")
+private external fun Recorder_nMakeFromContext(contextPtr: NativePointer): NativePointer

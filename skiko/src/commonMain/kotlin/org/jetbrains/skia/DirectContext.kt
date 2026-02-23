@@ -1,12 +1,24 @@
 package org.jetbrains.skia
 
+import org.jetbrains.skia.graphite.Recorder
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skiko.RenderException
 import org.jetbrains.skiko.loadOpenGLLibrary
 
 class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
+    var recorder: Recorder? = null
+
+    internal constructor(ptr: NativePointer, rc: Recorder) : this(ptr) {
+        recorder = rc
+    }
+
     companion object {
+        fun makeGraphiteMetal(devicePtr: NativePointer, queuePtr: NativePointer): DirectContext {
+            Stats.onNativeCall()
+            return DirectContext(_nGraphiteMakeMetal(devicePtr, queuePtr))
+        }
+
         fun makeGL(): DirectContext {
             Stats.onNativeCall()
             loadOpenGLLibrary()
@@ -45,13 +57,17 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
 
     fun flush(): DirectContext {
         Stats.onNativeCall()
-        DirectContext_nFlushDefault(_ptr)
+        recorder?.let {
+            DirectContext_nGraphiteSubmit(_ptr, it._ptr)
+        } ?: DirectContext_nFlushDefault(_ptr)
         return this
     }
 
     fun flush(surface: Surface): DirectContext {
         Stats.onNativeCall()
-        DirectContext_nFlush(_ptr, surface._ptr)
+        recorder?.let {
+            DirectContext_nGraphiteSubmit(_ptr, it._ptr)
+        } ?: DirectContext_nFlush(_ptr, surface._ptr)
         return this
     }
 
@@ -93,7 +109,9 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
     fun flushAndSubmit(surface: Surface, syncCpu: Boolean = false) {
         try {
             Stats.onNativeCall()
-            _nFlushAndSubmit(_ptr, surface._ptr, syncCpu)
+            recorder?.let {
+                DirectContext_nGraphiteSubmit(_ptr, it._ptr)
+            } ?: _nFlushAndSubmit(_ptr, surface._ptr, syncCpu)
         } finally {
             reachabilityBarrier(this)
         }
@@ -160,7 +178,8 @@ private external fun DirectContext_nFlush(ptr: NativePointer, surfacePtr: Native
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nFlushDefault")
 private external fun DirectContext_nFlushDefault(ptr: NativePointer)
-
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nGraphiteSubmit")
+private external fun DirectContext_nGraphiteSubmit(ptr: NativePointer, recorderPtr: NativePointer)
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nGetResourceCacheLimit")
 private external fun DirectContext_nGetResourceCacheLimit(ptr: NativePointer): Long
 
@@ -187,3 +206,7 @@ private external fun _nReset(ptr: NativePointer, flags: Int)
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nAbandon")
 private external fun _nAbandon(ptr: NativePointer, flags: Int)
+
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nGraphiteMakeMetal")
+private external fun _nGraphiteMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer

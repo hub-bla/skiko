@@ -3,6 +3,8 @@ package org.jetbrains.skiko.redrawer
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.jetbrains.skiko.*
+import org.jetbrains.skiko.context.ContextBasedContextHandler
+import org.jetbrains.skiko.context.GraphiteMetalContextHandler
 import org.jetbrains.skiko.context.MetalContextHandler
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities.*
@@ -34,9 +36,10 @@ internal value class MetalDevice(val ptr: Long)
 internal class MetalRedrawer(
     private val layer: SkiaLayer,
     analytics: SkiaLayerAnalytics,
-    properties: SkiaLayerProperties
+    properties: SkiaLayerProperties,
+    isGraphiteEnabled: Boolean
 ) : AWTRedrawer(layer, analytics, GraphicsApi.METAL) {
-    private val contextHandler: MetalContextHandler
+    private val contextHandler: ContextBasedContextHandler
 
     companion object {
         init {
@@ -72,7 +75,11 @@ internal class MetalRedrawer(
             MetalDevice(createMetalDevice(layer.windowHandle, layer.transparency, numberOfBuffers, adapter.ptr, it))
         }
         _device = initDevice
-        contextHandler = MetalContextHandler(layer, initDevice, adapter)
+        contextHandler = if (isGraphiteEnabled) {
+            GraphiteMetalContextHandler(layer, initDevice, adapter)
+        } else {
+            MetalContextHandler(layer, initDevice, adapter)
+        }
         setDisplaySyncEnabled(initDevice.ptr, properties.isVsyncEnabled)
     }
 
