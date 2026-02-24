@@ -570,7 +570,7 @@ class Surface : RefCnt {
         }
     }
 
-    internal val _context: DirectContext?
+    var _context: DirectContext?
 
     internal val _renderTarget: BackendRenderTarget?
 
@@ -1050,6 +1050,14 @@ class Surface : RefCnt {
     internal constructor(ptr: NativePointer, context: DirectContext?, renderTarget: BackendRenderTarget?) : super(ptr) {
         _context = context
         _renderTarget = renderTarget
+    }
+
+    fun attachContext(context: DirectContext) {
+        _context = context
+    }
+
+    fun getContext(): DirectContext? {
+        return _context
     }
 }
 
