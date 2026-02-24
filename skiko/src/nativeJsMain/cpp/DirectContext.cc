@@ -67,7 +67,7 @@ SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nInsertRecording
 SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nDefaultGraphiteSubmit
         (KNativePointer contextPtr) {
     skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
-    context->submit(skgpu::graphite::SyncToCpu::kNo);
+    context->submit(skgpu::graphite::SyncToCpu::kYes);
 }
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nMakeGL
