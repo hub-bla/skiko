@@ -45,7 +45,7 @@ SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nGraphiteSubmit
         return;
     }
 
-    context->submit(skgpu::graphite::SyncToCpu::kNo);
+    context->submit(skgpu::graphite::SyncToCpu::kYes);
 }
 
 SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nInsertRecording

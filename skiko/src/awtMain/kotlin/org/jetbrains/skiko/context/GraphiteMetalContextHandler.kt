@@ -7,6 +7,7 @@ import org.jetbrains.skia.SurfaceColorFormat
 import org.jetbrains.skia.SurfaceProps
 import org.jetbrains.skia.graphite.BackendTexture
 import org.jetbrains.skia.graphite.Recorder
+import org.jetbrains.skia.impl.NativePointer
 import org.jetbrains.skiko.Logger
 import org.jetbrains.skiko.MetalAdapter
 import org.jetbrains.skiko.RenderException
@@ -26,8 +27,10 @@ internal class GraphiteMetalContextHandler(
     private val device: MetalDevice,
     private val adapter: MetalAdapter
 ) : ContextBasedContextHandler(layer, "Metal") {
-    var backendTexture: BackendTexture? = null
     var recorder: Recorder? = null
+
+    var textureInfo: NativePointer? = null
+    var imageInfo: NativePointer? = null
     override fun initCanvas() {
         disposeCanvas()
 
@@ -36,7 +39,7 @@ internal class GraphiteMetalContextHandler(
         val height = (layer.backedLayer.height * scale).toInt().coerceAtLeast(0)
         if (width > 0 && height > 0) {
             backendTexture = BackendTexture(createBackendTexture(device.ptr, width, height))
-
+            textureInfo = backendTexture!!.getTextureInfo()
             surface = Surface.makeFromBackendTexture(
                 recorder!!,
                 backendTexture!!,
@@ -46,16 +49,18 @@ internal class GraphiteMetalContextHandler(
             ) ?: throw RenderException("Cannot create surface")
 
             canvas = surface!!.canvas
+            imageInfo = canvas!!.getImageInfo()
         } else {
-            renderTarget = null
+            backendTexture = null
             surface = null
             canvas = null
         }
     }
 
     override fun flush() {
-        super.flush()
-        surface?.flushAndSubmit()
+//        super.flush()
+//        surface?.flushAndSubmit()
+        getDirectContext()?.graphiteSubmit()
         finishFrame()
         Logger.debug { "MetalContextHandler finished drawing frame" }
     }
@@ -82,9 +87,13 @@ internal class GraphiteMetalContextHandler(
         context?.close()
     }
 
+
+    fun getTextureInfo() = getTexInfo()
     private fun finishFrame() = finishFrame(device.ptr)
 
     private external fun makeMetalContext(device: Long): Long
     private external fun createBackendTexture(device: Long, width: Int, height: Int): Long
     private external fun finishFrame(device: Long)
+
+    private external fun getTexInfo() : NativePointer
 }

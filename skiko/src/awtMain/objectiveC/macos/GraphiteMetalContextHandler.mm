@@ -68,36 +68,49 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHan
 JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_finishFrame(
     JNIEnv *env, jobject contextHandler, jlong devicePtr)
 {
-    @autoreleasepool {
+  @autoreleasepool {
         MetalDevice *device = (__bridge MetalDevice *) (void *) devicePtr;
-
         id<CAMetalDrawable> currentDrawable = device.drawableHandle;
 
         if (currentDrawable) {
             id<MTLCommandBuffer> commandBuffer = [device.queue commandBuffer];
             commandBuffer.label = @"Present";
 
+            // 1. THE FIX: Tell Metal to present this drawable when the queue finishes
+            [commandBuffer presentDrawable:currentDrawable];
+
+            // 2. Signal the semaphore so the NEXT frame can start
             [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
-                /// commands have completed, allow next waiting (if any) to start encoding new work to gpu
+                if (buffer.status == MTLCommandBufferStatusError) {
+                    NSLog(@"Presentation Error: %@", buffer.error);
+                }
                 dispatch_semaphore_signal(device.inflightSemaphore);
             }];
 
-            [commandBuffer addScheduledHandler:^(id<MTLCommandBuffer> buffer) {
-                int drawableWidth = currentDrawable.texture.width;
-                int drawableHeight = currentDrawable.texture.height;
-
-                int layerWidth = device.layer.drawableSize.width;
-                int layerHeight = device.layer.drawableSize.height;
-
-                /// Avoid presenting drawable on layer that has already changed size by the moment it was scheduled
-                if (drawableWidth == layerWidth && drawableHeight == layerHeight) {
-                    [currentDrawable present];
-                }
-            }];
-
+            // 3. Commit to the GPU
             [commandBuffer commit];
             device.drawableHandle = nil;
         }
+    }
+}
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_getTexInfo(
+    JNIEnv *env, jobject contextHandler)
+{
+    @autoreleasepool {
+        skgpu::graphite::MtlTextureInfo mtlTexInfo;
+
+        mtlTexInfo.fSampleCount = 1;
+        mtlTexInfo.fMipmapped = skgpu::Mipmapped::kNo;
+        mtlTexInfo.fFormat = MTLPixelFormatBGRA8Unorm;
+        mtlTexInfo.fUsage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+        mtlTexInfo.fStorageMode = MTLStorageModeShared;
+        mtlTexInfo.fFramebufferOnly = false;
+
+        skgpu::graphite::TextureInfo* textureInfoPtr = new skgpu::graphite::TextureInfo(
+            skgpu::graphite::TextureInfos::MakeMetal(mtlTexInfo)
+        );
+
+        return reinterpret_cast<jlong>(textureInfoPtr);
     }
 }
 } // extern C

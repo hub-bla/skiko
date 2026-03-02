@@ -16,6 +16,16 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_graphite_BackendTextu
 }
 #endif
 
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_graphite_BackendTextureKt_BackendTexture_1nGetTextureInfo
+        (JNIEnv* env, jclass jclass, jlong backendTexturePtr) {
+    skgpu::graphite::BackendTexture* backendTexture = reinterpret_cast<skgpu::graphite::BackendTexture*>(backendTexturePtr);
+    const skgpu::graphite::TextureInfo& infoRef = backendTexture->info();
+
+    skgpu::graphite::TextureInfo* infoCopy = new skgpu::graphite::TextureInfo(infoRef);
+
+    return reinterpret_cast<jlong>(infoCopy);
+}
+
 static void deleteBackendTexture(skgpu::graphite::BackendTexture* rt) {
     delete rt;
 }

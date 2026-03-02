@@ -1,11 +1,17 @@
 package org.jetbrains.skiko.context
 
 import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.Surface
 import org.jetbrains.skiko.Logger
 import org.jetbrains.skiko.SkiaLayer
 
 internal abstract class ContextBasedContextHandler(layer: SkiaLayer, val name: String) : JvmContextHandler(layer) {
-
+    fun getDirectContext() : DirectContext? {
+        if (context == null) {
+            context = makeContext()
+        }
+        return context
+    }
     abstract protected fun makeContext(): DirectContext
 
     override fun initContext(): Boolean {

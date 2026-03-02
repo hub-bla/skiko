@@ -3,6 +3,7 @@ package org.jetbrains.skiko
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.Picture
 import org.jetbrains.skia.PixelGeometry
+import org.jetbrains.skia.graphite.Recording
 
 /**
  * Generic layer for Skiko rendering.
@@ -87,4 +88,6 @@ expect open class SkiaLayer {
 
 
 internal class PictureHolder(val instance: Picture, val width: Int, val height: Int)
+
+internal class RecordingHolder(val instance: Recording, val width: Int, val height: Int)
 

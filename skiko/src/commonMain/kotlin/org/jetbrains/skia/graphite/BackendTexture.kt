@@ -10,6 +10,10 @@ class BackendTexture internal constructor(ptr: NativePointer) : Managed(ptr, _Fi
             BackendTexture(BackendTexture_nWrapMetalTexture(texturePtr, width, height))
     }
 
+    fun getTextureInfo() : NativePointer {
+        return BackendTexture_nGetTextureInfo(_ptr)
+    }
+
     private object _FinalizerHolder {
         val PTR = BackendTexture_nGetFinalizer()
     }
@@ -20,3 +24,6 @@ private external fun BackendTexture_nGetFinalizer(): NativePointer
 
 @ExternalSymbolName("jetbrains_skia_graphite_BackendTexture__1nWrapMetalTexture")
 private external fun BackendTexture_nWrapMetalTexture(texturePtr: NativePointer, width: Int, height: Int): NativePointer
+
+@ExternalSymbolName("jetbrains_skia_graphite_BackendTexture__1nGetTextureInfo")
+private external fun BackendTexture_nGetTextureInfo(ptr: NativePointer) : NativePointer

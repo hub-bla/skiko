@@ -1133,7 +1133,7 @@ open class Canvas internal constructor(ptr: NativePointer, managed: Boolean, int
         get() = localToDevice.asMatrix33()
 
     fun clipRect(r: Rect, mode: ClipMode, antiAlias: Boolean): Canvas {
-      return clipRect(r.left, r.top, r.right, r.bottom, mode, antiAlias)
+        return clipRect(r.left, r.top, r.right, r.bottom, mode, antiAlias)
     }
 
     fun clipRect(left: Float, top: Float, right: Float, bottom: Float, mode: ClipMode, antiAlias: Boolean): Canvas {
@@ -1530,6 +1530,10 @@ open class Canvas internal constructor(ptr: NativePointer, managed: Boolean, int
         }
     }
 
+    fun getImageInfo(): NativePointer {
+        return _nGetImageInfo(_ptr)
+    }
+
     val saveCount: Int
         get() = try {
             Stats.onNativeCall()
@@ -1599,7 +1603,13 @@ private external fun _nMakeFromBitmap(bitmapPtr: NativePointer, flags: Int, pixe
 private external fun _nDrawPoint(ptr: NativePointer, x: Float, y: Float, paintPtr: NativePointer)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawPoints")
-private external fun _nDrawPoints(ptr: NativePointer, mode: Int, coordsCount: Int, coords: InteropPointer, paintPtr: NativePointer)
+private external fun _nDrawPoints(
+    ptr: NativePointer,
+    mode: Int,
+    coordsCount: Int,
+    coords: InteropPointer,
+    paintPtr: NativePointer
+)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawLine")
 private external fun _nDrawLine(ptr: NativePointer, x0: Float, y0: Float, x1: Float, y1: Float, paintPtr: NativePointer)
@@ -1618,10 +1628,24 @@ private external fun _nDrawArc(
 )
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawRect")
-private external fun _nDrawRect(ptr: NativePointer, left: Float, top: Float, right: Float, bottom: Float, paintPtr: NativePointer)
+private external fun _nDrawRect(
+    ptr: NativePointer,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    paintPtr: NativePointer
+)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawOval")
-private external fun _nDrawOval(ptr: NativePointer, left: Float, top: Float, right: Float, bottom: Float, paint: NativePointer)
+private external fun _nDrawOval(
+    ptr: NativePointer,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    paint: NativePointer
+)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawRRect")
 private external fun _nDrawRRect(
@@ -1654,6 +1678,8 @@ private external fun _nDrawDRRect(
     paintPtr: NativePointer
 )
 
+@ExternalSymbolName("org_jetbrains_skia_Canvas__1nGetImageInfo")
+private external fun _nGetImageInfo(ptr: NativePointer): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawPath")
 private external fun _nDrawPath(ptr: NativePointer, nativePath: NativePointer, paintPtr: NativePointer)
@@ -1696,13 +1722,25 @@ private external fun _nDrawImageNine(
 private external fun _nDrawRegion(ptr: NativePointer, nativeRegion: NativePointer, paintPtr: NativePointer)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawString")
-private external fun _nDrawString(ptr: NativePointer, string: InteropPointer, x: Float, y: Float, font: NativePointer, paint: NativePointer)
+private external fun _nDrawString(
+    ptr: NativePointer,
+    string: InteropPointer,
+    x: Float,
+    y: Float,
+    font: NativePointer,
+    paint: NativePointer
+)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawTextBlob")
 private external fun _nDrawTextBlob(ptr: NativePointer, blob: NativePointer, x: Float, y: Float, paint: NativePointer)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawPicture")
-private external fun _nDrawPicture(ptr: NativePointer, picturePtr: NativePointer, matrix: InteropPointer, paintPtr: NativePointer)
+private external fun _nDrawPicture(
+    ptr: NativePointer,
+    picturePtr: NativePointer,
+    matrix: InteropPointer,
+    paintPtr: NativePointer
+)
 
 @ExternalSymbolName("org_jetbrains_skia_Canvas__1nDrawVertices")
 private external fun _nDrawVertices(

@@ -1,6 +1,7 @@
 package org.jetbrains.skia
 
 import org.jetbrains.skia.graphite.Recorder
+import org.jetbrains.skia.graphite.Recording
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skiko.RenderException
@@ -111,6 +112,12 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
         recorder?.let {
             _nInsertRecording(_ptr, it._ptr)
         }
+    }
+
+    fun insertRecording(surface: Surface, recording: Recording) {
+        Stats.onNativeCall()
+
+        _nInsertRecordingInstance(_ptr, surface._ptr, recording._ptr)
     }
 
     fun graphiteSubmit() {
@@ -228,7 +235,14 @@ private external fun _nAbandon(ptr: NativePointer, flags: Int)
 private external fun _nGraphiteMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nInsertRecording")
-private external fun _nInsertRecording(contextPtr: NativePointer, recorderPtr: NativePointer)
+private external fun _nInsertRecording(contextPtr: NativePointer, recorderPtr: NativePointer) : Long
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nInsertRecordingInstance")
+private external fun _nInsertRecordingInstance(
+    contextPtr: NativePointer,
+    surfacePtr: NativePointer,
+    recordingPtr: NativePointer
+) :Long
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nDefaultGraphiteSubmit")
-private external fun _nDefaultGraphiteSubmit(contextPtr: NativePointer)
+private external fun _nDefaultGraphiteSubmit(contextPtr: NativePointer) : Long

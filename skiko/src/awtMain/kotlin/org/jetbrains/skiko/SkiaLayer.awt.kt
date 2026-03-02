@@ -5,6 +5,10 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.jetbrains.skia.*
+import org.jetbrains.skia.graphite.Recorder
+import org.jetbrains.skia.impl.NativePointer
+import org.jetbrains.skiko.context.GraphiteMetalContextHandler
+import org.jetbrains.skiko.redrawer.MetalRedrawer
 import org.jetbrains.skiko.redrawer.Redrawer
 import org.jetbrains.skiko.redrawer.RedrawerManager
 import java.awt.Color
@@ -25,7 +29,8 @@ import javax.swing.SwingUtilities.isEventDispatchThread
 import javax.swing.event.AncestorEvent
 import javax.swing.event.AncestorListener
 import kotlin.math.floor
-
+// TODO: refactor to use directly canvas from context?
+// TODO: think if i want seprate recorder for this or not? - i think i would
 actual open class SkiaLayer internal constructor(
     accessibleContextProvider: ((Component) -> AccessibleContext)? = null,
     val properties: SkiaLayerProperties,
@@ -364,16 +369,33 @@ actual open class SkiaLayer internal constructor(
         else
             redrawer!!.renderInfo
 
+
+    @Volatile
+    private var recording: RecordingHolder? = null
     @Volatile
     private var picture: PictureHolder? = null
     private var pictureRecorder: PictureRecorder? = null
+
+    private var graphiteRecorder: Recorder? = null
+
+    private var textureInfo: NativePointer? = null
+
     private val pictureLock = Any()
+
+    private val recordingLock = Any()
+
 
     private fun init(recreation: Boolean = false) {
         isDisposed = false
         backedLayer.init()
         pictureRecorder = PictureRecorder()
         redrawerManager.findNextWorkingRenderApi(recreation)
+//        graphiteRecorder = Recorder.makeFromGraphiteContext(redrawer?.directContext!!)
+//        textureInfo = (redrawer as? MetalRedrawer)
+//            ?.contextHandler
+//            ?.let { it as? GraphiteMetalContextHandler }
+//            ?.getTextureInfo()
+
         isInited = true
     }
 
@@ -399,7 +421,9 @@ actual open class SkiaLayer internal constructor(
             redrawer?.dispose()
             redrawerManager.dispose()
             picture?.instance?.close()
+            recording?.instance?.close()
             picture = null
+            recording = null
             pictureRecorder?.close()
             pictureRecorder = null
             backedLayer.dispose()
@@ -595,6 +619,22 @@ actual open class SkiaLayer internal constructor(
     internal fun update(nanoTime: Long) {
         check(isEventDispatchThread()) { "Method should be called from AWT event dispatch thread" }
         check(!isDisposed) { "SkiaLayer is disposed" }
+        if (graphiteRecorder == null) {
+            val metalRedrawer = redrawer as? MetalRedrawer
+            requireNotNull(metalRedrawer) {
+                "Graphite Recorder requires MetalRedrawer, but got ${redrawer?.javaClass?.name ?: "null"}"
+            }
+
+            val directContext = requireNotNull(metalRedrawer.directContext) {
+                "MetalRedrawer.directContext is null (context not initialized yet or already disposed)"
+            }
+
+            graphiteRecorder = Recorder.makeFromGraphiteContext(directContext)
+            textureInfo = (redrawer as? MetalRedrawer)
+                ?.contextHandler
+                ?.let { it as? GraphiteMetalContextHandler }
+                ?.getTextureInfo()
+        }
 
         checkContentScale()
         FrameWatcher.nextFrame()
@@ -607,9 +647,13 @@ actual open class SkiaLayer internal constructor(
         val pictureHeight = (backedLayer.height * contentScale).coerceAtLeast(0f)
         val intWidth = pictureWidth.toInt()
         val intHeight = pictureHeight.toInt()
+        // TODO: the only thing left is to figure out of to get this texture info and image info
+        // TODO: also when im inserting this recording i need to add to info target surface which i did not yet
+        val canvas = graphiteRecorder!!.makeDeferredCanvas(textureInfo!!, intWidth, intHeight)
 
-        val pictureRecorder = pictureRecorder!!
-        val canvas = pictureRecorder.beginRecording(0f, 0f, pictureWidth, pictureHeight)
+
+//        val pictureRecorder = pictureRecorder!!
+//        val canvas = pictureRecorder.beginRecording(0f, 0f, pictureWidth, pictureHeight)
 
         try {
             isRendering = true
@@ -620,11 +664,12 @@ actual open class SkiaLayer internal constructor(
 
         // we can dispose layer during onRender
         // or even dispose it and pack it again
-        if (!isDisposed && !pictureRecorder.isClosed) {
+        if (!isDisposed && !graphiteRecorder!!.isClosed) {
             synchronized(pictureLock) {
                 picture?.instance?.close()
-                val picture = pictureRecorder.finishRecordingAsPicture()
-                this.picture = PictureHolder(picture, intWidth, intHeight)
+                recording?.instance?.close()
+                val recording = graphiteRecorder?.snap()
+                this.recording = RecordingHolder(recording!!, intWidth, intHeight)
             }
         }
     }
@@ -656,11 +701,29 @@ actual open class SkiaLayer internal constructor(
         }
     }
 
+    internal fun graphiteDraw(context: DirectContext, surface: Surface) {
+        check(!isDisposed) { "SkiaLayer is disposed" }
+        lockRecording {
+            context.insertRecording(surface, it.instance)
+        }
+    }
+
     private fun <T : Any> lockPicture(action: (PictureHolder) -> T): T? {
         return synchronized(pictureLock) {
             val picture = picture
             if (picture != null) {
                 action(picture)
+            } else {
+                null
+            }
+        }
+    }
+
+    private fun <T : Any> lockRecording(action: (RecordingHolder) -> T): T? {
+        return synchronized(recordingLock) {
+            val recording = recording
+            if (recording != null) {
+                action(recording)
             } else {
                 null
             }

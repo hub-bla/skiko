@@ -2,6 +2,8 @@ package org.jetbrains.skiko.redrawer
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.Surface
 import org.jetbrains.skiko.*
 import org.jetbrains.skiko.context.ContextBasedContextHandler
 import org.jetbrains.skiko.context.GraphiteMetalContextHandler
@@ -39,7 +41,9 @@ internal class MetalRedrawer(
     properties: SkiaLayerProperties,
     isGraphiteEnabled: Boolean
 ) : AWTRedrawer(layer, analytics, GraphicsApi.METAL) {
-    private val contextHandler: ContextBasedContextHandler
+    val contextHandler: ContextBasedContextHandler
+    override val directContext: DirectContext?
+        get() = contextHandler.getDirectContext()
 
     companion object {
         init {

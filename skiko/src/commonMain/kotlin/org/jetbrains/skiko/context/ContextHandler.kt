@@ -1,14 +1,17 @@
 package org.jetbrains.skiko.context
 
 import org.jetbrains.skia.*
+import org.jetbrains.skia.graphite.BackendTexture
 import org.jetbrains.skiko.*
 
 internal abstract class ContextHandler(
     protected val layer: SkiaLayer,
-    private val drawContent: Canvas.() -> Unit
+    private val drawContent: Canvas.() -> Unit,
+    private val drawGraphiteContent : DirectContext.(surface: Surface) -> Unit = {  }
 ) {
     protected var context: DirectContext? = null
     protected var renderTarget: BackendRenderTarget? = null
+    protected var backendTexture: BackendTexture? = null
     protected var surface: Surface? = null
     protected var canvas: Canvas? = null
 
@@ -26,7 +29,7 @@ internal abstract class ContextHandler(
 
     protected open fun disposeCanvas() {
         surface?.close()
-        renderTarget?.close()
+        backendTexture?.close()
     }
 
     open fun rendererInfo(): String {
@@ -41,7 +44,7 @@ internal abstract class ContextHandler(
         }
         initCanvas()
         canvas?.apply {
-            clear(Color.TRANSPARENT)
+            clear(Color.MAGENTA)
 
             val scale = layer.contentScale
             for (clip in layer.cutoutRectangles) {
@@ -57,7 +60,14 @@ internal abstract class ContextHandler(
                 }
             )
 
-            drawContent()
+//            clear(Color.MAGENTA)
+
+        }
+
+        context?.apply {
+            insertRecording() //  apply above changes
+            drawGraphiteContent(surface!!) // insert the recording from skia Layer
+            graphiteSubmit() // send work to GPU
         }
         flush()
     }

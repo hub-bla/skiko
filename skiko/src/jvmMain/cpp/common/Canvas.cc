@@ -15,6 +15,13 @@ static void deleteCanvas(SkCanvas* canvas) {
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_CanvasKt_Canvas_1nGetFinalizer(JNIEnv* env, jclass jclass) {
     return static_cast<jlong>(reinterpret_cast<uintptr_t>(&deleteCanvas));
 }
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_CanvasKt__1nGetImageInfo(JNIEnv* env, jclass jclass, jlong canvasPtr) {
+    SkCanvas* canvas = reinterpret_cast<SkCanvas*>(static_cast<uintptr_t>(canvasPtr));
+    SkImageInfo info = canvas->imageInfo();
+    SkImageInfo* infoPtr = new SkImageInfo(info);
+
+    return reinterpret_cast<jlong>(infoPtr);
+}
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_CanvasKt__1nMakeFromBitmap
   (JNIEnv* env, jclass jclass, jlong bitmapPtr, jint flags, jint pixelGeometry) {

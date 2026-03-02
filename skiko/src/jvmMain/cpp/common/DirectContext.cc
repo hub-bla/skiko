@@ -85,6 +85,52 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_Direct
     context->submit(skgpu::graphite::SyncToCpu::kYes);
 }
 
+
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nInsertRecordingInstance
+(JNIEnv* env, jclass jclass, jlong contextPtr, jlong surfacePtr, jlong recorderPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    skgpu::graphite::Recording *graphiteRecording = reinterpret_cast<skgpu::graphite::Recording*>(recorderPtr);
+    SkSurface* surface = reinterpret_cast<SkSurface*>(surfacePtr);
+
+    skgpu::graphite::InsertRecordingInfo info;
+    info.fRecording = graphiteRecording;
+    info.fTargetSurface = surface;
+
+    if (!context->insertRecording(info)) {
+    printf("Context::insertRecording failed\n");
+    return 0;
+    }
+
+    return 1;
+}
+
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nInsertRecording
+        (JNIEnv* env, jclass jclass, jlong contextPtr, jlong recorderPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    skgpu::graphite::Recorder *graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(recorderPtr);
+
+    std::unique_ptr<skgpu::graphite::Recording> recording = graphiteRecorder->snap();
+
+    skgpu::graphite::InsertRecordingInfo info;
+    info.fRecording = recording.get();
+
+    if (!context->insertRecording(info)) {
+        printf("Context::insertRecording failed\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nDefaultGraphiteSubmit
+        (JNIEnv* env, jclass jclass, jlong contextPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    if(!context->submit(skgpu::graphite::SyncToCpu::kYes)) {
+        return 0;
+    }
+    return 1;
+}
+
 extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_DirectContext_1nFlushDefault
   (JNIEnv* env, jclass jclass, jlong ptr) {
   GrDirectContext* context = reinterpret_cast<GrDirectContext*>(static_cast<uintptr_t>(ptr));

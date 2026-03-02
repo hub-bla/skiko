@@ -8,7 +8,7 @@ internal abstract class ContextFreeContextHandler(layer: SkiaLayer) : JvmContext
     override fun initContext(): Boolean {
         if (!isInited) {
             isInited = true
-            onContextInitialized()
+//            onContextInitialized()
         }
         return isInited
     }
