@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
+import targetId
 import java.io.File
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
@@ -117,6 +118,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
             }
             OS.MacOS -> {
                 flags.set(listOf(
+                    "-mmacosx-version-min=11.0",
                     *buildType.clangFlags,
                     *skiaPreprocessorFlags(OS.MacOS, buildType, skiko.skiaGPUBacked),
                     when(arch) {
@@ -156,7 +158,13 @@ fun SkikoProjectContext.compileNativeBridgesTask(
 
         includeHeadersNonRecursive(projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
+
         includeHeadersNonRecursive(skiaHeadersDirs(unpackedSkia))
+
+        includeHeadersNonRecursive(unpackedSkia.resolve("third_party/externals/dawn/include/"))
+        val target = targetId(os, arch)
+        includeHeadersNonRecursive(unpackedSkia.resolve("out/Release-macos-arm64/gen/third_party/dawn/include"))
+        includeHeadersNonRecursive(unpackedSkia.resolve("third_party/externals/dawn/src/"))
     }
 }
 
@@ -189,7 +197,7 @@ fun configureCinterop(
 
 fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
-    return listOf(
+    val libs =  mutableListOf(
         "libskresources.a",
         "libskparagraph.a",
         "libskia.a",
@@ -210,7 +218,12 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libzlib.a",
         "libjpeg.a",
         "libskshaper.a"
-    ).map {
+    )
+
+    if (targetString == "macos-arm64") {
+        libs.add("libdawn_combined.a")
+    }
+    return libs.map {
         "$skiaBinSubdir/$it"
     }
 }
@@ -234,7 +247,7 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
     val linkerFlags = when (os) {
         OS.MacOS -> {
-            val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
+            val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices", "IOSurface", "IOKit", "QuartzCore")
             configureCinterop("skiko", os, arch, target, targetString, macFrameworks)
             mutableListOfLinkerOptions(macFrameworks)
         }

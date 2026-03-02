@@ -7,20 +7,21 @@
 #include "window_util.h"
 
 #include "SkColorSpace.h"
-#include "ganesh/GrBackendSurface.h"
-#include "ganesh/GrDirectContext.h"
 #include "SkSurface.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "interop.hh"
 #include "DCompLibrary.h"
 
-#include "ganesh/d3d/GrD3DTypes.h"
 #include <d3d12sdklayers.h>
-#include "ganesh/d3d/GrD3DBackendContext.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <dxgi1_6.h>
 
+#ifdef SK_GANESH
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "ganesh/GrBackendSurface.h"
+#include "ganesh/GrDirectContext.h"
+#include "ganesh/d3d/GrD3DBackendContext.h"
+#include "ganesh/d3d/GrD3DTypes.h"
 const int BuffersCount = 2;
 
 class DirectXDevice
@@ -515,5 +516,6 @@ extern "C"
         return (jlong)result;
     }
 }
+#endif
 
 #endif

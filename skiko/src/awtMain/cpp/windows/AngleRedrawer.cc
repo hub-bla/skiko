@@ -1,3 +1,5 @@
+#ifdef SK_GANESH
+
 #ifdef SK_ANGLE
 
 #include <Windows.h>
@@ -261,4 +263,5 @@ extern "C"
     }
 } // end extern C
 
+#endif
 #endif

@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <ganesh/mtl/GrMtlTypes.h>
 
 #include "ganesh/GrBackendSurface.h"
@@ -53,4 +54,4 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skiko_RenderTargetsKt_makeMetalContext
 #endif
 }
 #endif
-
+#endif

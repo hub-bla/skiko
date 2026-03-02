@@ -4,16 +4,18 @@
 #include <jawt_md.h>
 #include "jni_helpers.h"
 
+#ifdef SK_GANESH
 #include "ganesh/GrBackendSurface.h"
 #include "ganesh/GrDirectContext.h"
 #include "SkSurface.h"
 #include "exceptions_handler.h"
-
+#endif // SK_GANESH
 extern "C"
 {
     JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_Direct3DContextHandler_flush(
         JNIEnv *env, jobject redrawer, jlong contextPtr, jlong surfacePtr)
     {
+        #ifdef SK_GANESH
         __try
         {
             SkSurface *surface = fromJavaPointer<SkSurface *>(surfacePtr);
@@ -25,7 +27,9 @@ extern "C"
             auto code = GetExceptionCode();
             throwJavaRenderExceptionByExceptionCode(env, __FUNCTION__, code);
         }
+        #endif
     }
 }
 
-#endif
+
+#endif // SK_DIRECT3D

@@ -1,14 +1,14 @@
+#ifdef SK_GANESH
 #include <iostream>
 #include <jni.h>
-#include "ganesh/GrBackendSurface.h"
 #include "SkData.h"
 #include "SkImage.h"
+#include "ganesh/GrBackendSurface.h"
 #include <ganesh/gl/GrGLBackendSurface.h>
 #include "ganesh/gl/GrGLBackendSurface.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "ganesh/GrDirectContext.h"
 #include "ganesh/gl/GrGLDirectContext.h"
-
 
 static void deleteBackendTexture(GrBackendTexture* rt) {
     // std::cout << "Deleting [GrBackendTexture " << rt << "]" << std::endl;
@@ -43,3 +43,4 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_BackendTextureKt__1nGL
     GrBackendTexture* backendTexture = reinterpret_cast<GrBackendTexture*>(static_cast<uintptr_t>(backendTexturePtr));
     GrBackendTextures::GLTextureParametersModified(backendTexture);
 }
+#endif

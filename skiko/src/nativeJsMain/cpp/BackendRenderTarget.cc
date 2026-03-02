@@ -26,16 +26,7 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_BackendRenderTarget__1nMakeGL
 
 SKIKO_EXPORT KNativePointer BackendRenderTarget_nMakeMetal
   ( KInt width, KInt height, KNativePointer texturePtr) {
-#ifdef SK_METAL
-    GrMTLHandle texture = reinterpret_cast<GrMTLHandle>((texturePtr));
-    GrMtlTextureInfo fbInfo;
-    fbInfo.fTexture.retain(texture);
-    GrBackendRenderTarget obj = GrBackendRenderTargets::MakeMtl(width, height, fbInfo);
-    GrBackendRenderTarget* instance = new GrBackendRenderTarget(obj);
-    return instance;
-#else
-    return 0;
-#endif
+    return static_cast<KNativePointer>(nullptr);
 }
 
 #ifdef SK_DIRECT3D

@@ -73,6 +73,10 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     when (targetOs) {
         OS.MacOS -> {
             includeHeadersNonRecursive(jdkHome.resolve("include/darwin"))
+            includeHeadersNonRecursive(skiaDir.resolve("third_party/externals/dawn/include/"))
+            val target = targetId(targetOs, targetArch)
+            includeHeadersNonRecursive(skiaDir.resolve("out/Release-$target/gen/third_party/dawn/include"))
+            includeHeadersNonRecursive(skiaDir.resolve("third_party/externals/dawn/src/"))
             osFlags = arrayOf(
                 *targetOs.clangFlags,
                 *buildType.clangFlags,
@@ -190,7 +194,7 @@ fun SkikoProjectContext.createObjcCompileTask(
     )
     sourceRoots.set(srcDirs)
     val jdkHome = File(System.getProperty("java.home") ?: error("'java.home' is null"))
-
+    val skiaDir = skiaJvmBindingsDir.get()
     includeHeadersNonRecursive(jdkHome.resolve("include"))
     includeHeadersNonRecursive(jdkHome.resolve("include/darwin"))
     includeHeadersNonRecursive(skiaHeadersDirs(skiaJvmBindingsDir.get()))
@@ -198,7 +202,9 @@ fun SkikoProjectContext.createObjcCompileTask(
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp"))
-
+    includeHeadersNonRecursive(skiaDir.resolve("third_party/externals/dawn/include/"))
+    includeHeadersNonRecursive(skiaDir.resolve("out/Release-macos-arm64/gen/third_party/dawn/include"))
+    includeHeadersNonRecursive(skiaDir.resolve("third_party/externals/dawn/src/"))
     compiler.set("clang")
     buildVariant.set(buildType)
     buildTargetOS.set(os)
@@ -259,6 +265,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-install_name", "./${libOutputFileName.get()}",
                 "-current_version", skiko.planeDeployVersion,
                 "-framework", "AppKit",
+                "-framework", "IOSurface",
                 "-framework", "CoreFoundation",
                 "-framework", "CoreGraphics",
                 "-framework", "CoreServices",

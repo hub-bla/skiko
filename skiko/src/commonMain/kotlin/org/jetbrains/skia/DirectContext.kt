@@ -1,5 +1,6 @@
 package org.jetbrains.skia
 
+import org.jetbrains.skia.graphite.BackendTexture
 import org.jetbrains.skia.graphite.Recorder
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
@@ -8,15 +9,37 @@ import org.jetbrains.skiko.loadOpenGLLibrary
 
 class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
     var recorder: Recorder? = null
+    var backendContextPtr: NativePointer? = null
+
+    var submissionPtr: NativePointer? = null
 
     internal constructor(ptr: NativePointer, rc: Recorder) : this(ptr) {
         recorder = rc
+    }
+
+    internal constructor(ptr: NativePointer, bcPtr: NativePointer, rc: Recorder, sbPtr: NativePointer) : this(ptr) {
+        recorder = rc
+        backendContextPtr = bcPtr
+        submissionPtr = sbPtr
     }
 
     companion object {
         fun makeGraphiteMetal(devicePtr: NativePointer, queuePtr: NativePointer): DirectContext {
             Stats.onNativeCall()
             return DirectContext(_nGraphiteMakeMetal(devicePtr, queuePtr))
+        }
+
+        fun createGrahiteMetalDawnBackendContext() : NativePointer {
+            return _nDawnBackendContext()
+        }
+
+        fun makeGraphiteDawnMetal() : DirectContext{
+            val bcPtr =  _nDawnBackendContext()
+            val ctx = _nCreateDawnContext(bcPtr)
+
+            val rc = Recorder.makeFromGraphiteContext(ctx)
+            val sbPtr = _nCreateSkiaSubmissionHandle()
+            return DirectContext(ctx, bcPtr, rc, sbPtr)
         }
 
         fun makeGL(): DirectContext {
@@ -120,12 +143,28 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
     fun flushAndSubmit(surface: Surface, syncCpu: Boolean = false) {
         try {
             Stats.onNativeCall()
-            recorder?.let {
+            val status = backendContextPtr?.let {
+                return@let _nDawnSubmit(_ptr, recorder!!._ptr, submissionPtr!!)
+            } ?:  recorder?.let {
                 DirectContext_nGraphiteSubmit(_ptr, it._ptr)
             } ?: _nFlushAndSubmit(_ptr, surface._ptr, syncCpu)
+
+            if (status == 1) {
+                println("good")
+            } else if (status == -1) {
+                println("bad")
+            } else {
+                println("unknown")
+            }
+
+
         } finally {
             reachabilityBarrier(this)
         }
+    }
+
+    fun createDawnBackendTexture(width: Int, height: Int) : BackendTexture {
+        return BackendTexture(_nCreateDawnBackendTexture(backendContextPtr!!, recorder!!._ptr, width, height))
     }
 
     /**
@@ -157,6 +196,15 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
         }
     }
 
+    fun precompile() {
+        _nPrecompile(_ptr)
+        println("precompiled")
+    }
+
+    fun waitForSubmission() {
+        _nDawnWait(submissionPtr!!)
+    }
+
     /**
      * GPU resource cache limit. If the cache currently exceeds this limit,
      * it will be purged (LRU) to keep the cache within the limit.
@@ -183,6 +231,40 @@ class DirectContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
 fun <R> DirectContext.useContext(block: (ctx: DirectContext) -> R): R = use {
     block(this).also { abandon() }
 }
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nPrecompile")
+private external fun _nPrecompile(contextPtr: NativePointer)
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nDawnBackendContext")
+private external fun _nDawnBackendContext(): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nCreateDawnContext")
+private external fun _nCreateDawnContext(backendContextPtr: NativePointer): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nCreateDawnBackendTexture")
+private external fun _nCreateDawnBackendTexture(
+    backendContextPtr: NativePointer,
+    recorderPtr: NativePointer,
+    width: Int,
+    height: Int
+): NativePointer
+
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nDawnSubmit")
+private external fun _nDawnSubmit(
+    contextPtr: NativePointer,
+    recorderPtr: NativePointer,
+    submissionPtr: NativePointer
+): Int
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nDawnWait")
+private external fun _nDawnWait(
+    submissionPtr: NativePointer,
+)
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nCreateSkiaSubmissionHandle")
+private external fun _nCreateSkiaSubmissionHandle() : NativePointer
+
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nFlush")
 private external fun DirectContext_nFlush(ptr: NativePointer, surfacePtr: NativePointer)
@@ -232,3 +314,4 @@ private external fun _nInsertRecording(contextPtr: NativePointer, recorderPtr: N
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nDefaultGraphiteSubmit")
 private external fun _nDefaultGraphiteSubmit(contextPtr: NativePointer)
+

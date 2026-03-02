@@ -1,3 +1,5 @@
+#ifdef SK_GANESH
+
 #include <jni.h>
 #include "ganesh/gl/GrGLDirectContext.h" // TODO: skia update: check if it's correct
 #include "ganesh/gl/GrGLBackendSurface.h" // TODO: skia update: check if it's correct
@@ -67,3 +69,4 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_RenderTargetsKt_makeMetalContex
 }
 
 }  // extern "C"
+#endif
