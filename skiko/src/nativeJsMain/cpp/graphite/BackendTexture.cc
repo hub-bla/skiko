@@ -5,7 +5,7 @@
 #ifdef SK_METAL
 #include "gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
 
-SKIKO_EXPORT KNativePointer jetbrains_skia_graphite_BackendTexture__1nWrapMetalTexture(KNativePointer texturePtr, KInt width, KInt height){
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_BackendTexture__1nWrapMetalTexture(KNativePointer texturePtr, KInt width, KInt height){
     skgpu::graphite::BackendTexture backendTexture = skgpu::graphite::BackendTextures::MakeMetal(
             SkISize::Make(width, height),
             reinterpret_cast<CFTypeRef>(texturePtr)

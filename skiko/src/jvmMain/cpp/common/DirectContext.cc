@@ -82,7 +82,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_Direct
         return;
     }
 
-    context->submit(skgpu::graphite::SyncToCpu::kYes);
+    context->submit(skgpu::graphite::SyncToCpu::kNo);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_DirectContext_1nFlushDefault

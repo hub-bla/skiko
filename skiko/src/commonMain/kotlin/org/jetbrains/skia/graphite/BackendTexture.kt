@@ -18,5 +18,5 @@ class BackendTexture internal constructor(ptr: NativePointer) : Managed(ptr, _Fi
 @ExternalSymbolName("org_jetbrains_skia_graphite_BackendTexture__1nGetFinalizer")
 private external fun BackendTexture_nGetFinalizer(): NativePointer
 
-@ExternalSymbolName("jetbrains_skia_graphite_BackendTexture__1nWrapMetalTexture")
+@ExternalSymbolName("org_jetbrains_skia_graphite_BackendTexture__1nWrapMetalTexture")
 private external fun BackendTexture_nWrapMetalTexture(texturePtr: NativePointer, width: Int, height: Int): NativePointer
