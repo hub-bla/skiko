@@ -26,6 +26,7 @@ internal class GraphiteMetalContextHandler(
     private val device: MetalDevice,
     private val adapter: MetalAdapter
 ) : ContextBasedContextHandler(layer, "Metal") {
+    val startupTime = System.nanoTime()
     var backendTexture: BackendTexture? = null
     var recorder: Recorder? = null
     override fun initCanvas() {
@@ -52,11 +53,25 @@ internal class GraphiteMetalContextHandler(
             canvas = null
         }
     }
-
+    @Volatile private var firstFrameReported = 0
     override fun flush() {
-        super.flush()
-        surface?.flushAndSubmit()
-        finishFrame()
+        val t0 = System.nanoTime()
+        super.flush()                   // calls onRender on your render delegate
+        val t1 = System.nanoTime()
+        surface?.flushAndSubmit()       // submits GPU commands
+        val t2 = System.nanoTime()
+        finishFrame()                   // Metal present — frame is now on screen
+        val t3 = System.nanoTime()
+
+        if (firstFrameReported < 10) {
+            println("SKIKO_PROBE super.flush()  took=${(t1 - t0)} ns")
+            println("SKIKO_PROBE flushAndSubmit() took=${(t2 - t1)} ns")
+            println("SKIKO_PROBE finishFrame() took=${(t3 - t2)} ns")
+            println("APP_READY")
+            System.out.flush()
+            firstFrameReported += 1
+        }
+
         Logger.debug { "MetalContextHandler finished drawing frame" }
     }
 
@@ -71,6 +86,10 @@ internal class GraphiteMetalContextHandler(
         if (contextPtr != 0L) {
             println("Graphite metal context created")
         }
+//        val t0 = System.nanoTime()
+//        performPrecompilation(contextPtr)
+//        val t1 = System.nanoTime()
+//        println("SKIKO_PROBE performPrecompilation  took=${(t1 - t0)} ns")
         recorder = Recorder.makeFromGraphiteContext(contextPtr)
         return DirectContext(
             contextPtr, recorder!!
@@ -84,6 +103,7 @@ internal class GraphiteMetalContextHandler(
 
     private fun finishFrame() = finishFrame(device.ptr)
 
+    private external fun performPrecompilation(context: Long)
     private external fun makeMetalContext(device: Long): Long
     private external fun createBackendTexture(device: Long, width: Int, height: Int): Long
     private external fun finishFrame(device: Long)

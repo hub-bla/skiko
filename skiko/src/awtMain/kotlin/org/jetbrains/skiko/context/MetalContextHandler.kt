@@ -20,7 +20,21 @@ internal class MetalContextHandler(
     private val device: MetalDevice,
     private val adapter: MetalAdapter
 ) : ContextBasedContextHandler(layer, "Metal") {
+
+    companion object {
+        /** Set this to System.nanoTime() as the very first line of main() */
+        @JvmField var t0LaunchNs: Long = 0L
+    }
+
+    private fun msSinceLaunch() = (System.nanoTime() - t0LaunchNs) / 1_000_000
+
+    override fun makeContext(): DirectContext {
+        val t = System.nanoTime()
+        return DirectContext(makeMetalContext(device.ptr))
+    }
+
     override fun initCanvas() {
+        val t = System.nanoTime()
         disposeCanvas()
 
         val scale = layer.contentScale
@@ -45,12 +59,30 @@ internal class MetalContextHandler(
             surface = null
             canvas = null
         }
+
+        System.out.flush()
     }
 
+    @Volatile private var firstFrameReported = 0
+
     override fun flush() {
-        super.flush()
-        surface?.flushAndSubmit()
-        finishFrame()
+        val t0 = System.nanoTime()
+        super.flush()                   // calls onRender on your render delegate
+        val t1 = System.nanoTime()
+        surface?.flushAndSubmit()       // submits GPU commands
+        val t2 = System.nanoTime()
+        finishFrame()                   // Metal present — frame is now on screen
+        val t3 = System.nanoTime()
+
+        if (firstFrameReported < 10) {
+            println("SKIKO_PROBE super.flush()  took=${(t1 - t0)} ns")
+            println("SKIKO_PROBE flushAndSubmit() took=${(t2 - t1)} ns")
+            println("SKIKO_PROBE finishFrame() took=${(t3 - t2)} ns")
+            println("APP_READY")
+            System.out.flush()
+            firstFrameReported += 1
+        }
+
         Logger.debug { "MetalContextHandler finished drawing frame" }
     }
 
@@ -62,10 +94,6 @@ internal class MetalContextHandler(
 
     private fun makeRenderTarget(width: Int, height: Int) = BackendRenderTarget(
         makeMetalRenderTarget(device.ptr, width, height)
-    )
-
-    override fun makeContext() = DirectContext(
-        makeMetalContext(device.ptr)
     )
 
     private fun finishFrame() = finishFrame(device.ptr)
