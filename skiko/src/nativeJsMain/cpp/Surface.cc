@@ -9,9 +9,11 @@
 #include "include/gpu/graphite/TextureInfo.h"
 #include "gpu/graphite/Recorder.h"
 #include "gpu/graphite/Surface.h"
+#endif
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_Surface__1nMakeFromBackendTexture
         (KNativePointer pRecorder, KNativePointer pBackendTexture, KInt colorType, KNativePointer colorSpacePtr, KInteropPointer surfacePropsInts) {
+#ifdef SK_GRAPHITE
     skgpu::graphite::Recorder* graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(pRecorder);
     skgpu::graphite::BackendTexture* backendTexture = reinterpret_cast<skgpu::graphite::BackendTexture*>(pBackendTexture);
     SkColorType skColorType = static_cast<SkColorType>(colorType);
@@ -26,8 +28,11 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_Surface__1nMakeFromBackendTexture
             surfaceProps.get());
 
     return reinterpret_cast<KNativePointer>(surface.release());
-}
+#else
+    return 0;
 #endif
+}
+
 
 
 #ifdef SK_GANESH
