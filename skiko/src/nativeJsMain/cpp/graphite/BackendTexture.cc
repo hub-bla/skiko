@@ -1,4 +1,4 @@
-#ifdef SK_GRAPHITE
+//#ifdef SK_GRAPHITE
 #include "../common.h"
 #include "include/gpu/graphite/BackendTexture.h"
 
@@ -23,4 +23,4 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_BackendTexture__1nGetFin
         () {
     return reinterpret_cast<KNativePointer>(&deleteBackendTexture);
 }
-#endif
+//#endif

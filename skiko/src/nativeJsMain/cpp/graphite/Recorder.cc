@@ -1,4 +1,3 @@
-#ifdef SK_GRAPHITE
 #include "../common.h"
 #include "include/gpu/graphite/Context.h"
 #include "gpu/graphite/Recorder.h"
@@ -127,4 +126,3 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_graphite_Recorder__1nMakeFromCont
     std::unique_ptr<skgpu::graphite::Recorder> graphiteRecorder = context->makeRecorder(options);
     return reinterpret_cast<KNativePointer>(graphiteRecorder.release());
 }
-#endif
