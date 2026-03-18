@@ -1,10 +1,11 @@
-#ifdef SK_GRAPHITE
 #import <jawt.h>
 #import <jawt_md.h>
-
+#include <fstream>
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
-
+#include "include/core/SkData.h"
+#include "include/core/SkString.h"
+#include "include/core/SkExecutor.h"
 #include "core/SkColorSpace.h"
 #include "core/SkImageInfo.h"
 #include "core/SkSurface.h"
@@ -351,6 +352,112 @@ PaintOptions image_srgb_hw_only_porter_duff_cf_srcover() {
                    {&c.fRenderPassProps, 1});
     }
 }
+
+namespace fs = std::filesystem;
+
+std::vector<sk_sp<SkData>> loadAllShadersFromDisk(const std::string& dirPath) {
+    std::vector<sk_sp<SkData>> loadedShaders;
+
+    if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
+        NSLog(@"[ShaderCache] ERROR - Directory does not exist: %s", dirPath.c_str());
+        return loadedShaders;
+    }
+
+    for (const auto& entry : fs::directory_iterator(dirPath)) {
+        if (entry.is_regular_file()) {
+            std::string path = entry.path().string();
+
+            std::ifstream file(path, std::ios::binary | std::ios::ate);
+            if (!file.is_open()) {
+                continue;
+            }
+
+            std::streamsize size = file.tellg();
+            if (size <= 0) continue;
+
+            file.seekg(0, std::ios::beg);
+
+            sk_sp<SkData> data = SkData::MakeUninitialized(static_cast<size_t>(size));
+
+            if (file.read(static_cast<char*>(data->writable_data()), size)) {
+                NSLog(@"[ShaderCache] BULK LOAD - Success: %s (%lld bytes)",
+                      entry.path().filename().c_str(), size);
+                loadedShaders.push_back(std::move(data));
+            } else {
+                NSLog(@"[ShaderCache] ERROR - Failed to read: %s", path.c_str());
+            }
+        }
+    }
+
+    return loadedShaders;
+}
+
+void PrecompilationFromDisk(
+    std::unique_ptr<skgpu::graphite::PrecompileContext> precompileContext,
+    std::vector<sk_sp<SkData>> pipelines)
+{
+    if (!precompileContext) {
+        NSLog(@"[ShaderCache] ERROR - PrecompileContext is null");
+        return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (const auto& pipelineData : pipelines) {
+        if (!pipelineData || pipelineData->size() == 0) {
+            continue;
+        }
+
+        bool success = precompileContext->precompile(pipelineData);
+
+        if (success) {
+            successCount++;
+            NSLog(@"[ShaderCache] PRECOMPILE - Success (%zu bytes)", pipelineData->size());
+        } else {
+            failCount++;
+            NSLog(@"[ShaderCache] PRECOMPILE - Failed to ingest pipeline data");
+        }
+    }
+
+    NSLog(@"[ShaderCache] COMPLETED - Successfully warmed up %d pipelines (%d failed)",
+          successCount, failCount);
+}
+
+
+void HandlePipelineCaching(
+        void* context,
+        skgpu::graphite::ContextOptions::PipelineCacheOp op,
+        const std::string& label,
+        unsigned int useCount,
+        bool wasPrecompiled,
+        sk_sp<SkData> pipelineData)
+{
+    static std::set<std::string> uniqueLabels;
+    static std::mutex countMutex;
+
+    if (op == skgpu::graphite::ContextOptions::PipelineCacheOp::kAddingPipeline && pipelineData) {
+        std::lock_guard<std::mutex> lock(countMutex);
+
+        auto [it, inserted] = uniqueLabels.insert(label);
+        size_t currentUniqueCount = uniqueLabels.size();
+
+        if (inserted) {
+            std::string path = "/Users/hubert.blaszczyk/Desktop/graphite_shaders/" + label + ".bin";
+            std::ofstream file(path, std::ios::binary);
+
+            if (file.is_open()) {
+                file.write(static_cast<const char*>(pipelineData->data()), pipelineData->size());
+                NSLog(@"[ShaderCache] NEW | Unique Count: %zu | Saved: %s",
+                        currentUniqueCount, label.c_str());
+            }
+        } else {
+            NSLog(@"[ShaderCache] REPEAT | Unique Count: %zu | Label: %s",
+                    currentUniqueCount, label.c_str());
+        }
+    }
+}
+
 extern "C"
 {
 
@@ -366,12 +473,12 @@ JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHand
         std::unique_ptr<skgpu::graphite::PrecompileContext> precompileContext =
             context->makePrecompileContext();
         if (precompileContext) {
-            GraphitePerformPrecompilation(std::move(precompileContext));
+            std::vector<sk_sp<SkData>> pipelines = loadAllShadersFromDisk("/tmp/graphite_shaders");
+            PrecompilationFromDisk(std::move(precompileContext), pipelines);
         }
     }
 }
-#include "include/core/SkData.h"
-#include "include/core/SkExecutor.h"
+
 JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_makeMetalContext(
     JNIEnv* env, jobject contextHandler, jlong devicePtr)
 {
@@ -382,19 +489,7 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHan
         backendContext.fQueue.retain((__bridge CFTypeRef) device.queue);
         skgpu::graphite::ContextOptions options;
 //        options.fExecutor = SkExecutor::MakeFIFOThreadPool(4).release();
-        options.fPipelineCachingCallback = [](
-            void* context,
-            skgpu::graphite::ContextOptions::PipelineCacheOp op,
-            const std::string& label,
-            unsigned int useCount,
-            bool wasPrecompiled,
-            sk_sp<SkData> key)
-        {
-            if (key) {
-                NSLog(@"Pipeline compiled: label=%s useCount=%u wasPrecompiled=%d keySize=%zu",
-                      label.c_str(), useCount, wasPrecompiled, key->size());
-            }
-        };
+//        options.fPipelineCachingCallback = HandlePipelineCaching;
         return reinterpret_cast<jlong>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
     }
 }
@@ -461,4 +556,3 @@ JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHand
     }
 }
 } // extern C
-#endif
