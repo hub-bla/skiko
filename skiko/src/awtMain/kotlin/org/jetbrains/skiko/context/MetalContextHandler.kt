@@ -21,13 +21,6 @@ internal class MetalContextHandler(
     private val adapter: MetalAdapter
 ) : ContextBasedContextHandler(layer, "Metal") {
 
-    companion object {
-        /** Set this to System.nanoTime() as the very first line of main() */
-        @JvmField var t0LaunchNs: Long = 0L
-    }
-
-    private fun msSinceLaunch() = (System.nanoTime() - t0LaunchNs) / 1_000_000
-
     override fun makeContext(): DirectContext {
         val t = System.nanoTime()
         return DirectContext(makeMetalContext(device.ptr))
