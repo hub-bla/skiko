@@ -30,6 +30,9 @@
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
 #include "include/gpu/graphite/precompile/PrecompileShader.h"
 #include "include/effects/SkGradientShader.h"
+
+#include <set>
+
 using ::skgpu::graphite::PrecompileShaders::GradientShaderFlags;
 using ::skgpu::graphite::PrecompileShaders::ImageShaderFlags;
 using ::skgpu::graphite::PrecompileShaders::YUVImageShaderFlags;
