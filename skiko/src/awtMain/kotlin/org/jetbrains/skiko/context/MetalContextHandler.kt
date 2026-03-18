@@ -63,8 +63,7 @@ internal class MetalContextHandler(
         System.out.flush()
     }
 
-    @Volatile private var firstFrameReported = 0
-
+    @Volatile private var producedFrames = 0
     override fun flush() {
         val t0 = System.nanoTime()
         super.flush()                   // calls onRender on your render delegate
@@ -73,14 +72,14 @@ internal class MetalContextHandler(
         val t2 = System.nanoTime()
         finishFrame()                   // Metal present — frame is now on screen
         val t3 = System.nanoTime()
+        producedFrames += 1
 
-        if (firstFrameReported < 10) {
-            println("SKIKO_PROBE super.flush()  took=${(t1 - t0)} ns")
-            println("SKIKO_PROBE flushAndSubmit() took=${(t2 - t1)} ns")
-            println("SKIKO_PROBE finishFrame() took=${(t3 - t2)} ns")
-            println("APP_READY")
+        if (producedFrames <= 30) {
+            println("SKIKO_PROBE FRAME($producedFrames) super.flush()  took=${(t1 - t0)} ns")
+            println("SKIKO_PROBE FRAME($producedFrames) flushAndSubmit() took=${(t2 - t1)} ns")
+            println("SKIKO_PROBE FRAME($producedFrames) finishFrame() took=${(t3 - t2)} ns")
+            println("SKIKO_PROBE FRAME($producedFrames) total took=${(t3 - t0)} ns")
             System.out.flush()
-            firstFrameReported += 1
         }
 
         Logger.debug { "MetalContextHandler finished drawing frame" }
