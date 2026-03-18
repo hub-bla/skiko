@@ -12,10 +12,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.skia.BackendRenderTarget
 import org.jetbrains.skia.DirectContext
+import org.jetbrains.skia.SkiaGPUBackendUtils_nIsGraphiteEnabled
 import org.jetbrains.skiko.FrameDispatcher
 import org.jetbrains.skiko.SkikoDispatchers
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.context.ContextHandler
+import org.jetbrains.skiko.context.MacOsGraphiteMetalContextHandler
 import org.jetbrains.skiko.context.MacOsMetalContextHandler
 import org.jetbrains.skiko.currentNanoTime
 import platform.AppKit.NSWindowDidChangeOcclusionStateNotification
@@ -47,7 +49,11 @@ import kotlin.concurrent.Volatile
 internal class MacOsMetalRedrawer(
     private val skiaLayer: SkiaLayer
 ) : Redrawer {
-    private val contextHandler = MacOsMetalContextHandler(skiaLayer)
+    private val contextHandler = if (SkiaGPUBackendUtils_nIsGraphiteEnabled()) {
+        MacOsGraphiteMetalContextHandler(skiaLayer)
+    } else {
+        MacOsMetalContextHandler(skiaLayer)
+    }
     override val renderInfo: String get() = contextHandler.rendererInfo()
 
     private var isDisposed = false
@@ -84,7 +90,13 @@ internal class MacOsMetalRedrawer(
     /**
      * Creates and returns an instances of [DirectContext]
      */
-    fun makeContext(): DirectContext = DirectContext.makeMetal(device.objcPtr(), queue.objcPtr())
+    fun makeContext(): DirectContext  {
+        return if (SkiaGPUBackendUtils_nIsGraphiteEnabled()) {
+            DirectContext.makeGraphiteMetal(device.objcPtr(), queue.objcPtr())
+        } else {
+            DirectContext.makeMetal(device.objcPtr(), queue.objcPtr())
+        }
+    }
 
     /**
      * Creates and returns an instances of [BackendRenderTarget] ready for rendering.
@@ -94,6 +106,11 @@ internal class MacOsMetalRedrawer(
     fun makeRenderTarget(width: Int, height: Int): BackendRenderTarget {
         currentDrawable = metalLayer.nextDrawable()!!
         return BackendRenderTarget.makeMetal(width, height, currentDrawable!!.texture.objcPtr())
+    }
+
+    fun getNextDrawable(): CAMetalDrawableProtocol? {
+        currentDrawable = metalLayer.nextDrawable()!!
+        return currentDrawable
     }
 
     override fun dispose() {

@@ -1,23 +1,32 @@
 package org.jetbrains.skiko.context
 
+import kotlinx.cinterop.objcPtr
 import kotlinx.cinterop.useContents
 import org.jetbrains.skia.*
+import org.jetbrains.skia.graphite.BackendTexture
+import org.jetbrains.skia.graphite.Recorder
 import org.jetbrains.skiko.RenderException
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.redrawer.MacOsMetalRedrawer
 import kotlin.time.TimeSource
 
+
 /**
  * Metal ContextHandler implementation for MacOs.
  */
-internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer, layer::draw) {
+internal class MacOsGraphiteMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer, layer::draw) {
     private val metalRedrawer: MacOsMetalRedrawer
         get() = layer.redrawer!! as MacOsMetalRedrawer
 
+    private var recorder: Recorder? = null
+    private var backendTexture: BackendTexture? = null
     override fun initContext(): Boolean {
         try {
             if (context == null) {
                 context = metalRedrawer.makeContext()
+                recorder = Recorder.makeFromGraphiteContext(context!!).also {
+                    context!!.recorder = it
+                }
             }
         } catch (e: Exception) {
             println("${e.message}\nFailed to create Skia Metal context!")
@@ -34,20 +43,20 @@ internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer
         val h = (layer.nsView.frame.useContents { size.height } * scale).toInt().coerceAtLeast(0)
 
         if (w > 0 && h > 0) {
-            renderTarget = metalRedrawer.makeRenderTarget(w, h)
-
-            surface = Surface.makeFromBackendRenderTarget(
-                context!!,
-                renderTarget!!,
-                SurfaceOrigin.TOP_LEFT,
+            val drawable = metalRedrawer.getNextDrawable()
+            backendTexture = BackendTexture.wrapMetalTexture(drawable!!.texture.objcPtr(), w, h)
+            surface =  Surface.makeFromBackendTexture(
+                recorder!!,
+                backendTexture!!,
                 SurfaceColorFormat.BGRA_8888,
                 ColorSpace.sRGB,
-                SurfaceProps(pixelGeometry = layer.pixelGeometry)
-            ) ?: throw RenderException("Cannot create surface")
+                SurfaceProps(pixelGeometry = PixelGeometry.UNKNOWN)
+            )
+                ?: throw RenderException("Cannot create surface")
 
             canvas = surface!!.canvas
         } else {
-            renderTarget = null
+            backendTexture = null
             surface = null
             canvas = null
         }
@@ -82,8 +91,8 @@ internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer
         }
     }
 
-   override fun rendererInfo(): String {
-        return "Native Metal: device ${metalRedrawer.device.name}"
+    override fun rendererInfo(): String {
+        return "Graphite Native Metal: device ${metalRedrawer.device.name}"
     }
 }
 
