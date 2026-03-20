@@ -44,7 +44,7 @@ python3 script/checkout.py --version "$SKIA_VERSION"
 # Build Skia binaries
 cd "$SCRIPT_DIR"
 echo "Building Skia binaries with Gradle..."
-./gradlew prepareLocalSkiaBuild -Pskia.pack.dir="$SKIA_PACK_DIR"
+./gradlew prepareLocalSkiaBuild -Pskia.pack.dir="$SKIA_PACK_DIR" -Pskia.gpu.graphite.enable="true"
 
 # Publish Skiko to Maven Local with the built Skia binaries
 # If SKIA_DIR not explicitly set, use the default location where Python scripts output built Skia

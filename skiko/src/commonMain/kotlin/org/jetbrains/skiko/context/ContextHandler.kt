@@ -33,7 +33,6 @@ internal abstract class ContextHandler(
         return "GraphicsApi: ${layer.renderApi}\n" +
                 "OS: ${hostOs.id} ${hostArch.id}\n"
     }
-
     // throws RenderException if initialization of graphic context was not successful
     fun draw() {
         if (!initContext()) {

@@ -1,3 +1,4 @@
+#ifndef SK_GRPAHITE
 #ifdef SK_METAL
 
 #import <jawt.h>
@@ -14,6 +15,90 @@
 
 #import "MetalDevice.h"
 
+#include "include/gpu/ganesh/GrContextOptions.h"
+#include "include/core/SkData.h"
+#include "include/core/SkString.h"
+
+#include <fstream>
+#include <string>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
+#import <Foundation/Foundation.h>
+#import <CommonCrypto/CommonDigest.h>
+#include <unordered_set>
+#include <mutex>
+
+class FilePersistentCache : public GrContextOptions::PersistentCache {
+public:
+    FilePersistentCache(const std::string& cacheDir) : fCacheDir(cacheDir) {
+        std::filesystem::create_directories(fCacheDir);
+        NSLog(@"[ShaderCache] Initialized Persistent Cache at: %s", fCacheDir.c_str());
+    }
+
+    sk_sp<SkData> load(const SkData& key) override {
+        std::string hashStr = getHashString(key);
+        trackUnique(hashStr);
+
+        std::string path = fCacheDir + "/" + hashStr + ".bin";
+        std::ifstream file(path, std::ios::binary | std::ios::ate);
+
+        if (!file.is_open()) {
+            return nullptr;
+        }
+
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+        sk_sp<SkData> data = SkData::MakeUninitialized(size);
+
+        if (file.read(static_cast<char*>(data->writable_data()), size)) {
+            NSLog(@"[ShaderCache] HIT  - Loaded %zd bytes", size);
+            return data;
+        }
+        return nullptr;
+    }
+
+    void store(const SkData& key, const SkData& data, const SkString& description) override {
+        std::string hashStr = getHashString(key);
+        trackUnique(hashStr);
+
+        std::string path = fCacheDir + "/" + hashStr + ".bin";
+        std::ofstream file(path, std::ios::binary);
+
+        if (file.is_open()) {
+            file.write(static_cast<const char*>(data.data()), data.size());
+            NSLog(@"[ShaderCache] STORE - Saved %zu bytes", data.size());
+        }
+    }
+
+private:
+    std::string fCacheDir;
+
+
+    void trackUnique(const std::string& hash) {
+        static std::unordered_set<std::string> seenKeys;
+        static std::mutex countMutex;
+
+        std::lock_guard<std::mutex> lock(countMutex);
+        seenKeys.insert(hash);
+
+
+        NSLog(@"[ShaderCache] Global Unique Pipelines Seen: %zu", seenKeys.size());
+    }
+
+    std::string getHashString(const SkData& key) const {
+        unsigned char hash[CC_SHA256_DIGEST_LENGTH];
+        CC_SHA256(key.bytes(), static_cast<CC_LONG>(key.size()), hash);
+
+        std::stringstream hexStream;
+        hexStream << std::hex << std::setfill('0');
+        for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; ++i) {
+            hexStream << std::setw(2) << static_cast<int>(hash[i]);
+        }
+        return hexStream.str();
+    }
+};
+
 extern "C"
 {
 JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_makeMetalContext(
@@ -24,7 +109,15 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_mak
         GrMtlBackendContext backendContext = {};
         backendContext.fDevice.retain((__bridge GrMTLHandle) device.adapter);
         backendContext.fQueue.retain((__bridge GrMTLHandle) device.queue);
-        return (jlong) GrDirectContexts::MakeMetal(backendContext).release();
+
+        GrContextOptions options;
+
+//        auto gShaderCache = std::make_unique<FilePersistentCache>("/tmp/ganesh_shader_cache");
+
+//        options.fPersistentCache = gShaderCache.release();
+
+
+        return (jlong) GrDirectContexts::MakeMetal(backendContext, options).release();
     }
 }
 
@@ -91,4 +184,5 @@ JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_fini
 }
 
 } // extern C
+#endif
 #endif

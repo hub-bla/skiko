@@ -3,14 +3,72 @@
 #include "common.h"
 #include "ganesh/gl/GrGLDirectContext.h" // TODO: skia update: check if it's correct
 
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/ContextOptions.h"
+#include "gpu/graphite/Recorder.h"
+
 #ifdef SK_METAL
 #include "ganesh/mtl/GrMtlBackendContext.h"
 #include "ganesh/mtl/GrMtlDirectContext.h"
+#include "gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
+
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nGraphiteMakeMetal
+        (KNativePointer devicePtr, KNativePointer queuePtr) {
+    skgpu::graphite::MtlBackendContext backendContext = {};
+    backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
+    backendContext.fQueue.retain(reinterpret_cast<CFTypeRef>(queuePtr));
+    skgpu::graphite::ContextOptions options;
+    options.fRequireOrderedRecordings = true;
+    return static_cast<KNativePointer>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
+}
 #endif
 
 #ifdef SK_DIRECT3D
 #include "ganesh/d3d/GrD3DBackendContext.h"
 #endif
+
+
+SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nGraphiteSubmit
+(KNativePointer contextPtr, KNativePointer recorderPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    skgpu::graphite::Recorder *graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(recorderPtr);
+
+    std::unique_ptr<skgpu::graphite::Recording> recording = graphiteRecorder->snap();
+
+    skgpu::graphite::InsertRecordingInfo info;
+    info.fRecording = recording.get();
+
+    if (!context->insertRecording(info)) {
+        printf("Context::insertRecording failed\n");
+        return;
+    }
+
+    context->submit(skgpu::graphite::SyncToCpu::kNo);
+}
+
+SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nInsertRecording
+        (KNativePointer contextPtr, KNativePointer recorderPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    skgpu::graphite::Recorder *graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(recorderPtr);
+
+    std::unique_ptr<skgpu::graphite::Recording> recording = graphiteRecorder->snap();
+
+    skgpu::graphite::InsertRecordingInfo info;
+    info.fRecording = recording.get();
+
+    if (!context->insertRecording(info)) {
+        printf("Context::insertRecording failed\n");
+        return;
+    }
+}
+
+SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nDefaultGraphiteSubmit
+        (KNativePointer contextPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    context->submit(skgpu::graphite::SyncToCpu::kNo);
+}
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nMakeGL
   () {

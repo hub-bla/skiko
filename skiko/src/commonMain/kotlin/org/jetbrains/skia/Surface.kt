@@ -1,5 +1,7 @@
 package org.jetbrains.skia
 
+import org.jetbrains.skia.graphite.BackendTexture
+import org.jetbrains.skia.graphite.Recorder
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
 
@@ -297,6 +299,35 @@ class Surface : RefCnt {
             }
         }
 
+        fun makeFromBackendTexture(
+            recorder: Recorder,
+            backendTexture: BackendTexture,
+            colorFormat: SurfaceColorFormat,
+            colorSpace: ColorSpace?,
+            surfaceProps: SurfaceProps? = null
+        ): Surface? {
+            return try {
+                Stats.onNativeCall()
+                val ptr = interopScope {
+                    _nMakeFromBackendTexture(
+                        recorder._ptr,
+                        backendTexture._ptr,
+                        colorFormat.ordinal,
+                        getPtr(colorSpace),
+                        toInterop(surfaceProps?.packToIntArray())
+                    )
+                }
+                if (ptr == NullPointer)
+                    null
+                else
+                    Surface(ptr)
+            } finally {
+                reachabilityBarrier(recorder)
+                reachabilityBarrier(backendTexture)
+                reachabilityBarrier(colorSpace)
+            }
+        }
+
         fun makeFromMTKView(
             context: DirectContext,
             mtkViewPtr: NativePointer,
@@ -539,7 +570,7 @@ class Surface : RefCnt {
         }
     }
 
-    internal val _context: DirectContext?
+    var _context: DirectContext?
 
     internal val _renderTarget: BackendRenderTarget?
 
@@ -1020,6 +1051,14 @@ class Surface : RefCnt {
         _context = context
         _renderTarget = renderTarget
     }
+
+    fun attachContext(context: DirectContext) {
+        _context = context
+    }
+
+    fun getContext(): DirectContext? {
+        return _context
+    }
 }
 
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nGetWidth")
@@ -1077,6 +1116,15 @@ private external fun _nMakeFromBackendRenderTarget(
     colorSpacePtr: NativePointer,
     surfaceProps: InteropPointer
 ): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeFromBackendTexture")
+private external fun _nMakeFromBackendTexture(
+    recorderPtr: NativePointer,
+    backendTexturePtr: NativePointer,
+    colorType: Int,
+    colorSpacePtr: NativePointer,
+    surfaceProps: InteropPointer
+    ): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeFromMTKView")
 private external fun _nMakeFromMTKView(

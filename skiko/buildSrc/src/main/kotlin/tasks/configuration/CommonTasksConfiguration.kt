@@ -9,6 +9,7 @@ import org.gradle.api.Project
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool
 import registerSkikoTask
+import SkiaGPUBackend
 import skiaVersion
 import supportAndroid
 import supportAwt
@@ -50,7 +51,7 @@ fun skiaHeadersDirs(skiaDir: File): List<File> =
 fun includeHeadersFlags(headersDirs: List<File>) =
     headersDirs.map { "-I${it.absolutePath}" }.toTypedArray()
 
-fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType): Array<String> {
+fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType, gpuBackend: SkiaGPUBackend): Array<String> {
     val base = listOf(
         "-DSK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
         "-DSK_FORCE_DISTANCE_FIELD_TEXT=0",
@@ -58,7 +59,6 @@ fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType): Array<String> {
         "-DSK_GAMMA_SRGB",
         "-DSK_SCALAR_TO_FLOAT_EXCLUDED",
         "-DSK_SUPPORT_GPU=1",
-        "-DSK_GANESH",
         "-DSK_GL",
         "-DSK_SHAPER_HARFBUZZ_AVAILABLE",
         "-DSK_UNICODE_AVAILABLE",
@@ -74,7 +74,8 @@ fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType): Array<String> {
 
         // Temporary (m144) skia flag for migration to SkPathBuilder
         "-USK_HIDE_PATH_EDIT_METHODS",
-        *buildType.flags
+        *buildType.flags,
+        gpuBackend.toCompilerFlag()
     )
 
     val perOs = when (os) {

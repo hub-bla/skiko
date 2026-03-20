@@ -54,7 +54,7 @@ fun SkikoProjectContext.declareWasmTasks() {
 
         flags.set(
             buildList {
-                addAll(skiaPreprocessorFlags(OS.Wasm, buildType))
+                addAll(skiaPreprocessorFlags(OS.Wasm, buildType, skiko.skiaGPUBacked))
                 addAll(buildType.clangFlags)
                 add("-fno-rtti")
                 add("-fno-exceptions")

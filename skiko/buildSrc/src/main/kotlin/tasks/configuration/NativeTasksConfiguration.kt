@@ -88,7 +88,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *iosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.IOS, buildType),
+                    *skiaPreprocessorFlags(OS.IOS, buildType, skiko.skiaGPUBacked),
                 ))
             }
             OS.TVOS -> {
@@ -112,13 +112,13 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *tvosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.TVOS, buildType),
+                    *skiaPreprocessorFlags(OS.TVOS, buildType, skiko.skiaGPUBacked),
                 ))
             }
             OS.MacOS -> {
                 flags.set(listOf(
                     *buildType.clangFlags,
-                    *skiaPreprocessorFlags(OS.MacOS, buildType),
+                    *skiaPreprocessorFlags(OS.MacOS, buildType, skiko.skiaGPUBacked),
                     when(arch) {
                         Arch.Arm64 -> "-arch arm64"
                         Arch.X64 -> "-arch x86_64"
@@ -139,7 +139,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     "-fvisibility=hidden",
                     "-fvisibility-inlines-hidden",
                     *archFlags,
-                    *skiaPreprocessorFlags(OS.Linux, buildType)
+                    *skiaPreprocessorFlags(OS.Linux, buildType, skiko.skiaGPUBacked)
                 )
                 // Add sysroot for ARM64 cross-compilation
                 if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
