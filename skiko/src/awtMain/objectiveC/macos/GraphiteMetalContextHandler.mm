@@ -446,7 +446,7 @@ void HandlePipelineCaching(
         size_t currentUniqueCount = uniqueLabels.size();
 
         if (inserted) {
-            std::string path = "/Users/hubert.blaszczyk/Desktop/graphite_shaders/" + label + ".bin";
+            std::string path = "/tmp/graphite_shaders/" + label + ".bin";
             std::ofstream file(path, std::ios::binary);
 
             if (file.is_open()) {
