@@ -20,7 +20,7 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nGraphiteMakeMeta
     backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
     backendContext.fQueue.retain(reinterpret_cast<CFTypeRef>(queuePtr));
     skgpu::graphite::ContextOptions options;
-
+    options.fRequireOrderedRecordings = true;
     return static_cast<KNativePointer>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
 }
 #endif
@@ -67,7 +67,7 @@ SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nInsertRecording
 SKIKO_EXPORT void org_jetbrains_skia_DirectContext__1nDefaultGraphiteSubmit
         (KNativePointer contextPtr) {
     skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
-    context->submit(skgpu::graphite::SyncToCpu::kYes);
+    context->submit(skgpu::graphite::SyncToCpu::kNo);
 }
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nMakeGL

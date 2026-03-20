@@ -26,7 +26,6 @@ internal class GraphiteMetalContextHandler(
     private val device: MetalDevice,
     private val adapter: MetalAdapter
 ) : ContextBasedContextHandler(layer, "Metal") {
-    val startupTime = System.nanoTime()
     var backendTexture: BackendTexture? = null
     var recorder: Recorder? = null
     override fun initCanvas() {
@@ -53,25 +52,11 @@ internal class GraphiteMetalContextHandler(
             canvas = null
         }
     }
-    @Volatile private var producedFrames = 0
+
     override fun flush() {
-        val t0 = System.nanoTime()
         super.flush()                   // calls onRender on your render delegate
-        val t1 = System.nanoTime()
         surface?.flushAndSubmit()       // submits GPU commands
-        val t2 = System.nanoTime()
         finishFrame()                   // Metal present — frame is now on screen
-        val t3 = System.nanoTime()
-        producedFrames += 1
-
-        if (producedFrames <= 30) {
-            println("SKIKO_PROBE FRAME($producedFrames) super.flush()  took=${(t1 - t0)} ns")
-            println("SKIKO_PROBE FRAME($producedFrames) flushAndSubmit() took=${(t2 - t1)} ns")
-            println("SKIKO_PROBE FRAME($producedFrames) finishFrame() took=${(t3 - t2)} ns")
-            println("SKIKO_PROBE FRAME($producedFrames) total took=${(t3 - t0)} ns")
-            System.out.flush()
-        }
-
         Logger.debug { "MetalContextHandler finished drawing frame" }
     }
 
@@ -86,10 +71,7 @@ internal class GraphiteMetalContextHandler(
         if (contextPtr != 0L) {
             println("Graphite metal context created")
         }
-//        val t0 = System.nanoTime()
 //        performPrecompilation(contextPtr)
-//        val t1 = System.nanoTime()
-//        println("SKIKO_PROBE performPrecompilation  took=${(t1 - t0)} ns")
         recorder = Recorder.makeFromGraphiteContext(contextPtr)
         return DirectContext(
             contextPtr, recorder!!

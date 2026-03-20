@@ -62,33 +62,10 @@ internal class MacOsGraphiteMetalContextHandler(layer: SkiaLayer) : ContextHandl
         }
     }
 
-    private var producedFrames = 0
     override fun flush() {
-        val timeSource = TimeSource.Monotonic
-
-        val m0 = timeSource.markNow()
         super.flush()
-        val m1 = timeSource.markNow()
-
         surface?.flushAndSubmit()
-        val m2 = timeSource.markNow()
-
         metalRedrawer.finishFrame()
-        val m3 = timeSource.markNow()
-
-        producedFrames += 1
-
-        if (producedFrames <= 30) {
-            val t10 = (m1 - m0).inWholeNanoseconds
-            val t21 = (m2 - m1).inWholeNanoseconds
-            val t32 = (m3 - m2).inWholeNanoseconds
-            val total = (m3 - m0).inWholeNanoseconds
-
-            println("SKIKO_PROBE FRAME($producedFrames) super.flush()  took=$t10 ns")
-            println("SKIKO_PROBE FRAME($producedFrames) flushAndSubmit() took=$t21 ns")
-            println("SKIKO_PROBE FRAME($producedFrames) finishFrame() took=$t32 ns")
-            println("SKIKO_PROBE FRAME($producedFrames) total took=$total ns")
-        }
     }
 
     override fun rendererInfo(): String {
