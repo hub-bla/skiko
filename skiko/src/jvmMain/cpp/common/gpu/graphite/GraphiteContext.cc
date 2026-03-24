@@ -133,7 +133,6 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteC
     info.fRecording = recording;
 
     context->insertRecording(info);
-    delete recording; // TODO: consider what to do with the recordings if we want to maybe reuse them in the future
 }
 
 skgpu::graphite::SyncToCpu syncToCpuFromBool(bool syncCpu) {
