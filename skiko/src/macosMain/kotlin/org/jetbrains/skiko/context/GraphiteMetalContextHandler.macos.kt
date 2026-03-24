@@ -64,6 +64,7 @@ internal class MacOsGraphiteMetalContextHandler(layer: SkiaLayer) : GraphiteCont
         // TODO: maybe make flush async as in JVM version.
         val recording = recorder!!.snap()
         context!!.insertRecording(recording)
+        recording.close()
         context!!.submit()
         metalRedrawer.finishFrame()
     }

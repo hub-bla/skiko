@@ -20,7 +20,7 @@ class GraphiteContext internal constructor(ptr: NativePointer) : RefCnt(ptr) {
     }
 
     fun insertRecording(recording: Recording) {
-        GraphiteContext_nInsertRecording(_ptr, recording.ptr)
+        GraphiteContext_nInsertRecording(_ptr, recording._ptr)
     }
 
     fun submit(syncCpu: Boolean = false) {

@@ -1,15 +1,9 @@
 package org.jetbrains.skia.gpu.graphite
 
-import kotlin.jvm.JvmInline
-
 import org.jetbrains.skiko.ExperimentalSkikoApi
 import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skia.impl.Managed
 import org.jetbrains.skia.impl.NativePointer
-
-@ExperimentalSkikoApi
-@JvmInline
-value class Recording(val ptr: NativePointer)
 
 @ExperimentalSkikoApi
 class Recorder internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {

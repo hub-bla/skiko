@@ -131,7 +131,6 @@ SKIKO_EXPORT void org_jetbrains_skia_gpu_graphite_GraphiteContext__1nInsertRecor
     info.fRecording = recording;
 
     context->insertRecording(info);
-    delete recording; // TODO: consider what to do with the recordings if we want to maybe reuse them in the future
 }
 
 skgpu::graphite::SyncToCpu syncToCpuFromBool(bool syncCpu) {
