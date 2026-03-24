@@ -1,5 +1,6 @@
 package org.jetbrains.skiko.context
 
+import kotlinx.cinterop.objcPtr
 import org.jetbrains.skia.*
 import org.jetbrains.skiko.LayerDrawScope
 import org.jetbrains.skiko.RenderException
@@ -9,17 +10,17 @@ import org.jetbrains.skiko.redrawer.MacOsMetalRedrawer
 /**
  * Metal ContextHandler implementation for macOS.
  */
-internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer, layer::draw) {
+internal class MacOsMetalContextHandler(layer: SkiaLayer) : GaneshContextHandler(layer) {
     private val metalRedrawer: MacOsMetalRedrawer
         get() = layer.redrawer!! as MacOsMetalRedrawer
 
     override fun initContext(): Boolean {
         try {
             if (context == null) {
-                context = metalRedrawer.makeContext()
+                context = DirectContext.makeMetal(metalRedrawer.device.objcPtr(), metalRedrawer.queue.objcPtr())
             }
         } catch (e: Exception) {
-            println("${e.message}\nFailed to create Skia Metal context!")
+            println("${e.message}\nFailed to create Skia Ganesh Metal context!")
             return false
         }
         return true
@@ -32,7 +33,7 @@ internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer
         val h = scaledLayerHeight
 
         if (w > 0 && h > 0) {
-            renderTarget = metalRedrawer.makeRenderTarget(w, h)
+            renderTarget = BackendRenderTarget.makeMetal(w, h, metalRedrawer.getDrawableTexture())
 
             surface = Surface.makeFromBackendRenderTarget(
                 context!!,
@@ -53,13 +54,13 @@ internal class MacOsMetalContextHandler(layer: SkiaLayer) : ContextHandler(layer
 
     override fun flush(scope: LayerDrawScope) {
         // TODO: maybe make flush async as in JVM version.
-        super.flush(scope)
+        context?.flush()
         surface?.flushAndSubmit()
         metalRedrawer.finishFrame()
     }
 
-   override fun rendererInfo(): String {
-        return "Native Metal: device ${metalRedrawer.device.name}"
+    override fun rendererInfo(): String {
+        return "Ganesh Native Metal: device ${metalRedrawer.device.name}"
     }
 }
 
