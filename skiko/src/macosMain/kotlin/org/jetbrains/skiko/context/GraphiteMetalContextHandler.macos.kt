@@ -10,6 +10,7 @@ import org.jetbrains.skia.SurfaceProps
 import org.jetbrains.skia.gpu.graphite.BackendTexture
 import org.jetbrains.skia.gpu.graphite.GraphiteContext
 import org.jetbrains.skia.gpu.graphite.Recorder
+import org.jetbrains.skia.gpu.graphite.makeFromBackendTexture
 import org.jetbrains.skiko.ExperimentalSkikoApi
 import org.jetbrains.skiko.LayerDrawScope
 import org.jetbrains.skiko.RenderException

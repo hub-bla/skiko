@@ -9,7 +9,7 @@
 #include "gpu/graphite/Recorder.h"
 #include "gpu/graphite/Surface.h"
 
-SKIKO_EXPORT KNativePointer org_jetbrains_skia_Surface__1nMakeFromBackendTexture
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_gpu_graphite_SurfaceFactory__1nMakeFromBackendTexture
 (KNativePointer pRecorder,
 KNativePointer pBackendTexture,
 KInt colorType,

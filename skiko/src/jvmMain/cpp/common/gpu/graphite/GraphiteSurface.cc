@@ -10,7 +10,7 @@
 #include "gpu/graphite/Recorder.h"
 #include "gpu/graphite/Surface.h"
 
-extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_SurfaceKt__1nMakeFromBackendTexture
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_SurfaceFactoryKt__1nMakeFromBackendTexture
         (JNIEnv* env, jclass jclass, jlong pRecorder, jlong pBackendTexture, jint colorType, jlong colorSpacePtr, jintArray surfacePropsInts) {
     skgpu::graphite::Recorder* graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(static_cast<uintptr_t>(pRecorder));
     skgpu::graphite::BackendTexture* backendTexture = reinterpret_cast<skgpu::graphite::BackendTexture*>(static_cast<uintptr_t>(pBackendTexture));
