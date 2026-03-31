@@ -5,6 +5,11 @@
 #include "ganesh/gl/GrGLDirectContext.h"
 #include "ganesh/gl/GrGLInterface.h"
 
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/ContextOptions.h"
+#include "gpu/graphite/Recorder.h"
+
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nMakeGL
   (JNIEnv* env, jclass jclass) {
     return reinterpret_cast<jlong>(GrDirectContexts::MakeGL().release());
@@ -19,6 +24,19 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContext_1jvmKt_
 #ifdef SK_METAL
 #include "ganesh/mtl/GrMtlBackendContext.h"
 #include "ganesh/mtl/GrMtlDirectContext.h"
+
+#include "gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
+
+extern "C" JNIEXPORT jlong Java_org_jetbrains_skia_DirectContextKt_1nGraphiteMakeMetal
+        (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
+    skgpu::graphite::MtlBackendContext backendContext = {};
+    backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
+    backendContext.fQueue.retain(reinterpret_cast<CFTypeRef>(queuePtr));
+    skgpu::graphite::ContextOptions options;
+
+    return reinterpret_cast<jlong>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
+}
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nMakeMetal
   (JNIEnv* env, jclass jclass, long devicePtr, long queuePtr) {
@@ -48,6 +66,24 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_DirectContextKt__1nMa
     return reinterpret_cast<jlong>(instance.release());
 }
 #endif //SK_DIRECT3D 
+
+extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_DirectContext_1nGraphiteSubmit
+(JNIEnv* env, jclass jclass, jlong contextPtr, jlong recorderPtr) {
+    skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
+    skgpu::graphite::Recorder *graphiteRecorder = reinterpret_cast<skgpu::graphite::Recorder*>(recorderPtr);
+
+    std::unique_ptr<skgpu::graphite::Recording> recording = graphiteRecorder->snap();
+
+    skgpu::graphite::InsertRecordingInfo info;
+    info.fRecording = recording.get();
+
+    if (!context->insertRecording(info)) {
+        printf("Context::insertRecording failed\n");
+        return;
+    }
+
+    context->submit(skgpu::graphite::SyncToCpu::kYes);
+}
 
 extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt_DirectContext_1nFlushDefault
   (JNIEnv* env, jclass jclass, jlong ptr) {

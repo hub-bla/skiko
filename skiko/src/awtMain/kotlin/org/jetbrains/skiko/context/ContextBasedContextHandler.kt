@@ -12,7 +12,7 @@ internal abstract class ContextBasedContextHandler(layer: SkiaLayer, val name: S
         try {
             if (context == null) {
                 context = makeContext()
-                onContextInitialized()
+//                onContextInitialized()
             }
         } catch (e: Exception) {
             Logger.warn(e) { "Failed to create Skia $name context!" }

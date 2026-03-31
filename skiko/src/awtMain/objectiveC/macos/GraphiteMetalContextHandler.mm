@@ -1,44 +1,52 @@
-#ifndef SK_GRPAHITE
-#ifdef SK_METAL
-
+#ifdef SK_GRAPHITE
 #import <jawt.h>
 #import <jawt_md.h>
 
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
-#import "ganesh/GrDirectContext.h"
-#import "gpu/ganesh/GrBackendSurface.h"
-#import "ganesh/mtl/GrMtlBackendContext.h"
-#import "ganesh/mtl/GrMtlDirectContext.h"
-#import "ganesh/mtl/GrMtlBackendSurface.h"
-#import "ganesh/mtl/GrMtlTypes.h"
+
+#include "core/SkColorSpace.h"
+#include "core/SkImageInfo.h"
+#include "core/SkSurface.h"
+#include "core/SkSurfaceProps.h"
+
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/ContextOptions.h"
+#include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/TextureInfo.h"
+#include "gpu/graphite/Recorder.h"
+#include "gpu/graphite/Surface.h"
+
+#include "include/gpu/graphite/mtl/MtlBackendContext.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteUtils.h"
+#include "gpu/graphite/mtl/MtlGraphiteTypes.h"
 
 #import "MetalDevice.h"
 
 extern "C"
 {
-JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_makeMetalContext(
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_makeMetalContext(
     JNIEnv* env, jobject contextHandler, jlong devicePtr)
 {
     @autoreleasepool {
-        MetalDevice *device = (__bridge MetalDevice *) (void*) devicePtr;
-        GrMtlBackendContext backendContext = {};
-        backendContext.fDevice.retain((__bridge GrMTLHandle) device.adapter);
-        backendContext.fQueue.retain((__bridge GrMTLHandle) device.queue);
-        return (jlong) GrDirectContexts::MakeMetal(backendContext).release();
+        MetalDevice *device = (__bridge MetalDevice *) (void *) devicePtr;
+        skgpu::graphite::MtlBackendContext backendContext = {};
+        backendContext.fDevice.retain((__bridge CFTypeRef) device.adapter);
+        backendContext.fQueue.retain((__bridge CFTypeRef) device.queue);
+        skgpu::graphite::ContextOptions options;
+
+        return (jlong) skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release();
     }
 }
 
-JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_makeMetalRenderTarget(
-    JNIEnv* env, jobject contextHandler, jlong devicePtr, jint width, jint height)
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_createBackendTexture(
+        JNIEnv* env, jobject contextHandler, jlong devicePtr, jint width, jint height)
 {
     @autoreleasepool {
         MetalDevice *device = (__bridge MetalDevice *) (void *) devicePtr;
-        GrBackendRenderTarget* renderTarget = NULL;
 
         /// If we have more than `maximumDrawableCount` command buffers inflight, wait until one of them finishes work.
         dispatch_semaphore_wait(device.inflightSemaphore, DISPATCH_TIME_FOREVER);
-
         id<CAMetalDrawable> currentDrawable = [device.layer nextDrawable];
         if (!currentDrawable) {
             /// Signal semaphore immediately, no command buffer will be commited
@@ -47,15 +55,17 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_mak
             return NULL;
         }
         device.drawableHandle = currentDrawable;
-        GrMtlTextureInfo info;
-        info.fTexture.retain((__bridge GrMTLHandle) currentDrawable.texture);
-        GrBackendRenderTarget obj = GrBackendRenderTargets::MakeMtl(width, height, info);
-        renderTarget = new GrBackendRenderTarget(obj);
-        return (jlong) renderTarget;
+
+        skgpu::graphite::BackendTexture backendTexture = skgpu::graphite::BackendTextures::MakeMetal(
+                SkISize::Make(width, height),
+                (__bridge CFTypeRef) currentDrawable.texture
+        );
+
+        return reinterpret_cast<jlong>(new skgpu::graphite::BackendTexture(backendTexture));
     }
 }
 
-JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_finishFrame(
+JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_GraphiteMetalContextHandler_finishFrame(
     JNIEnv *env, jobject contextHandler, jlong devicePtr)
 {
     @autoreleasepool {
@@ -90,7 +100,5 @@ JNIEXPORT void JNICALL Java_org_jetbrains_skiko_context_MetalContextHandler_fini
         }
     }
 }
-
 } // extern C
-#endif
 #endif
