@@ -25,6 +25,7 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
 import java.io.File
+import SkiaGPUBackend
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
     this + if (isUikitSim) "Sim" else ""
@@ -48,21 +49,18 @@ fun Project.findXcodeSdkRoot(): String {
 }
 
 fun SkikoProjectContext.compileNativeBridgesTask(
-    os: OS, arch: Arch, isUikitSim: Boolean
-): TaskProvider<CompileSkikoCppTask> = with (this.project) {
+    os: OS, arch: Arch, isUikitSim: Boolean, backend: SkiaGPUBackend
+): TaskProvider<CompileSkikoCppTask> = with(this.project) {
     val skiaNativeDir = registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
-
     val actionName = "compileNativeBridges".withSuffix(isUikitSim = isUikitSim)
 
-    return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch) {
+    return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch, backend) {
         dependsOn(skiaNativeDir)
         val unpackedSkia = skiaNativeDir.get()
 
         compiler.set(compilerForTarget(os, arch))
         buildTargetOS.set(os)
-        if (isUikitSim) {
-            buildSuffix.set("sim")
-        }
+        buildSuffix.set(if (isUikitSim) "sim-${backend.id}" else backend.id)
         buildTargetArch.set(arch)
         buildVariant.set(buildType)
 
@@ -88,7 +86,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *iosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.IOS, buildType, skiko.skiaGPUBacked),
+                    *skiaPreprocessorFlags(OS.IOS, buildType, backend),
                 ))
             }
             OS.TVOS -> {
@@ -98,7 +96,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                 val tvosArchFlags = when (arch) {
                     Arch.Arm64 -> arrayOf(
                         "-target", if (isUikitSim) "arm64-apple-tvos-simulator" else "arm64-apple-tvos",
-                        if (isUikitSim) "-mappletvsimulator-version-min=12.0" else "-mappletvos-version-min=12.0" ,
+                        if (isUikitSim) "-mappletvsimulator-version-min=12.0" else "-mappletvos-version-min=12.0",
                         "-isysroot", if (isUikitSim) tvSimSdk else tvOsSdk,
                     )
                     Arch.X64 -> arrayOf(
@@ -112,14 +110,14 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *tvosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.TVOS, buildType, skiko.skiaGPUBacked),
+                    *skiaPreprocessorFlags(OS.TVOS, buildType, backend),
                 ))
             }
             OS.MacOS -> {
                 flags.set(listOf(
                     *buildType.clangFlags,
-                    *skiaPreprocessorFlags(OS.MacOS, buildType, skiko.skiaGPUBacked),
-                    when(arch) {
+                    *skiaPreprocessorFlags(OS.MacOS, buildType, backend),
+                    when (arch) {
                         Arch.Arm64 -> "-arch arm64"
                         Arch.X64 -> "-arch x86_64"
                         else -> error("Unexpected arch: $arch for $os")
@@ -127,10 +125,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                 ))
             }
             OS.Linux -> {
-                val archFlags = if (arch == Arch.Arm64) arrayOf(
-                    // Always inline atomics for ARM64 to prevent linking incompatibility issues after updating GCC to 10
-                    "-mno-outline-atomics",
-                ) else arrayOf()
+                val archFlags = if (arch == Arch.Arm64) arrayOf("-mno-outline-atomics") else arrayOf()
                 val linuxFlags = mutableListOf(
                     *buildType.clangFlags,
                     "-fPIC",
@@ -139,9 +134,8 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     "-fvisibility=hidden",
                     "-fvisibility-inlines-hidden",
                     *archFlags,
-                    *skiaPreprocessorFlags(OS.Linux, buildType, skiko.skiaGPUBacked)
+                    *skiaPreprocessorFlags(OS.Linux, buildType, backend)
                 )
-                // Add sysroot for ARM64 cross-compilation
                 if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
                     linuxFlags.add(0, "--sysroot=/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc")
                 }
@@ -168,20 +162,67 @@ fun configureCinterop(
     target: KotlinNativeTarget,
     targetString: String,
     linkerOpts: List<String>,
+    staticLibraries: List<String> = emptyList(),
+    libraryPaths: List<String> = emptyList(),
+    dependsOnTasks: List<Any> = emptyList(),
+    backend: SkiaGPUBackend,
 ) {
     val tasks = target.project.tasks
-    val taskNameSuffix = joinToTitleCamelCase(os.idWithSuffix(isUikitSim = target.isUikitSimulator()), arch.id)
-    val writeCInteropDef = tasks.register("writeCInteropDef$taskNameSuffix", WriteCInteropDefFile::class.java) {
+    val taskNameSuffix = joinToTitleCamelCase(
+        os.idWithSuffix(isUikitSim = target.isUikitSimulator()), arch.id, backend.id
+    )
+    val writeCInteropDef = tasks.register(
+        "writeCInteropDef$taskNameSuffix", WriteCInteropDefFile::class.java
+    ) {
         this.linkerOpts.set(linkerOpts)
-        outputFile.set(project.layout.buildDirectory.file("cinterop/$targetString/skiko.def"))
+        this.staticLibraries.set(staticLibraries)
+        this.libraryPaths.set(libraryPaths)
+        outputFile.set(project.layout.buildDirectory.file("cinterop/$targetString/${backend.id}/skiko.def"))
     }
+
     tasks.withType(CInteropProcess::class.java).configureEach {
         if (konanTarget == target.konanTarget) {
             dependsOn(writeCInteropDef)
+            dependsOnTasks.forEach { dependsOn(it) }
+            doLast {
+                val klibFile = outputFileProvider.get().absoluteFile
+                if (!klibFile.exists()) return@doLast
+                val tmpFile = File(klibFile.parent, "${klibFile.name}.tmp")
+                java.util.zip.ZipInputStream(klibFile.inputStream().buffered()).use { zin ->
+                    java.util.zip.ZipOutputStream(tmpFile.outputStream().buffered()).use { zout ->
+                        var entry = zin.nextEntry
+                        while (entry != null) {
+                            zout.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                            if (entry.name == "default/manifest") {
+                                val patched = zin.readBytes()
+                                    .toString(Charsets.UTF_8)
+                                    .lines()
+                                    .filter { line ->
+                                        !line.startsWith("libraryPaths=") &&
+                                                !line.startsWith("staticLibraries=")
+                                    }
+                                    .joinToString("\n")
+                                zout.write(patched.toByteArray(Charsets.UTF_8))
+                            } else {
+                                zin.copyTo(zout)
+                            }
+                            zout.closeEntry()
+                            entry = zin.nextEntry
+                        }
+                    }
+                }
+                tmpFile.renameTo(klibFile)
+            }
         }
     }
+
+
+
+
+    // Use backend-suffixed cinterop name so both don't clash on the same target
+    val backendCinteropName = "${cinteropName}-${backend.id}"
     target.compilations.getByName("main") {
-        cinterops.create(cinteropName).apply {
+        cinterops.create(backendCinteropName).apply {
             defFileProperty.set(writeCInteropDef.map { it.outputFile.get().asFile })
         }
     }
@@ -215,127 +256,161 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
     }
 }
 
+@OptIn(ExperimentalStdlibApi::class)
 fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) = with(this.project) {
     if (!os.isCompatibleWithHost) return
 
     target.generateVersion(os, arch, skiko)
     val isUikitSim = target.isUikitSimulator()
-
     val targetString = "${os.idWithSuffix(isUikitSim = isUikitSim)}-${arch.id}"
 
     val unzipper = registerOrGetSkiaDirProvider(os, arch, isUikitSim)
     val unpackedSkia = unzipper.get()
     val skiaDir = unpackedSkia.absolutePath
-
-    val bridgesLibrary = layout.buildDirectory.file("nativeBridges/static/$targetString/skiko-native-bridges-$targetString.a")
-    val bridgesLibraryPath = bridgesLibrary.get().asFile.absolutePath
-    val allLibraries = skiaStaticLibraries(skiaDir, targetString, buildType) + bridgesLibraryPath
-
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
-    val linkerFlags = when (os) {
-        OS.MacOS -> {
-            val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
-            configureCinterop("skiko", os, arch, target, targetString, macFrameworks)
-            mutableListOfLinkerOptions(macFrameworks)
-        }
-        OS.IOS -> {
-            val iosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
-            // list of linker options to be included into klib, which are needed for skiko consumers
-            // https://github.com/JetBrains/compose-multiplatform/issues/3178
-            // Important! Removing or renaming cinterop-uikit publication might cause compile error
-            // for projects depending on older Compose/Skiko transitively https://youtrack.jetbrains.com/issue/KT-60399
-            configureCinterop("uikit", os, arch, target, targetString, iosFrameworks)
-            mutableListOfLinkerOptions(iosFrameworks)
-        }
-        OS.TVOS -> {
-            val tvosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
-            configureCinterop("uikit", os, arch, target, targetString, tvosFrameworks)
-            mutableListOfLinkerOptions(tvosFrameworks)
-        }
-        OS.Linux -> {
-            val options = mutableListOf(
-                "-L/usr/lib64",
-                "-L/usr/lib/${if (arch == Arch.Arm64) "aarch64" else "x86_64"}-linux-gnu",
-                "-lfontconfig",
-                "-lGL",
-                // TODO: an ugly hack, Linux linker searches only unresolved symbols.
-                "$skiaBinDir/libskottie.a",
-                "$skiaBinDir/libjsonreader.a",
-                "$skiaBinDir/libsksg.a",
-                "$skiaBinDir/libskshaper.a",
-                "$skiaBinDir/libskunicode_core.a",
-                "$skiaBinDir/libskunicode_icu.a",
-                "$skiaBinDir/libskia.a"
-            )
-            if (arch == Arch.Arm64) {
-                options.add("-lEGL")
+
+    val allStaticLibraries = skiaStaticLibraries(skiaDir, targetString, buildType)
+    val staticLibFileNames = allStaticLibraries.map { File(it).name }
+    val libraryPaths = allStaticLibraries.map { File(it).parent }.distinct()
+
+    // Run the full compile→link→cinterop pipeline once per backend
+    SkiaGPUBackend.values().forEach { backend ->
+        val crossCompileTask = compileNativeBridgesTask(os, arch, isUikitSim, backend)
+
+        val linkActionName = "linkNativeBridges".withSuffix(isUikitSim = isUikitSim)
+        val linkTask = project.registerSkikoTask<Exec>(linkActionName, os, arch, backend) {
+            dependsOn(crossCompileTask)
+            val objectFilesDir = crossCompileTask.map { it.outDir.get() }
+            val objectFiles = project.fileTree(objectFilesDir) { include("**/*.o") }
+            inputs.files(objectFiles)
+            val outDir = layout.buildDirectory
+                .dir("nativeBridges/static/$targetString/${backend.id}")
+                .get().asFile
+            val staticLib = "skiko-native-bridges-$targetString-${backend.id}.a"
+            workingDir = outDir
+            when (os) {
+                OS.Linux -> {
+                    executable = if (arch == Arch.Arm64 && hostArch != Arch.Arm64) "aarch64-linux-gnu-ar" else "ar"
+                    argumentProviders.add { listOf("-crs", staticLib) }
+                }
+                OS.MacOS, OS.IOS, OS.TVOS -> {
+                    executable = "libtool"
+                    argumentProviders.add { listOf("-static", "-o", staticLib) }
+                }
+                else -> error("Unexpected OS for native bridges linking: $os")
             }
-            // When cross-compiling for ARM64 from x64, use the ARM toolchain sysroot
-            if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
-                // ARM GNU toolchain sysroot paths
-                options.add(0, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/lib64")
-                options.add(1, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/usr/lib64")
+            argumentProviders.add { objectFiles.files.map { it.absolutePath } }
+            file(outDir).mkdirs()
+            outputs.dir(outDir)
+        }
+
+        val bridgesLibraryPath = layout.buildDirectory
+            .file("nativeBridges/static/$targetString/${backend.id}/skiko-native-bridges-$targetString-${backend.id}.a")
+            .get().asFile.absolutePath
+
+        val allLibsForBackend = allStaticLibraries + bridgesLibraryPath
+        val staticLibFileNamesForBackend = allLibsForBackend.map { File(it).name }
+        val libraryPathsForBackend = allLibsForBackend.map { File(it).parent }.distinct()
+
+        val linkerFlags = when (os) {
+            OS.MacOS -> {
+                val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
+                configureCinterop(
+                    cinteropName = "skiko",
+                    os = os, arch = arch, target = target,
+                    targetString = targetString,
+                    linkerOpts = macFrameworks,
+                    staticLibraries = staticLibFileNamesForBackend,
+                    libraryPaths = libraryPathsForBackend,
+                    dependsOnTasks = listOf(linkTask),
+                    backend = backend
+                )
+                mutableListOfLinkerOptions(macFrameworks)
             }
-            mutableListOfLinkerOptions(options)
-        }
-        else -> mutableListOf()
-    }
-    if (skiko.includeTestHelpers) {
-        linkerFlags.addAll(when (os) {
-            OS.Linux -> listOf(
-                "-linker-option", "-lX11",
-                "-linker-option", "-lGLX",
-            )
-            else -> emptyList()
-        })
-    }
-
-    // For some reason since 1.8.0 we need to set freeCompilerArgs for binaries AND for compilations
-    target.binaries.all {
-        freeCompilerArgs += allLibraries.map { listOf("-include-binary", it) }.flatten() + linkerFlags
-    }
-    target.compilations.all {
-        kotlinOptions {
-            freeCompilerArgs += allLibraries.map { listOf("-include-binary", it) }.flatten() + linkerFlags
-        }
-    }
-
-    val crossCompileTask = compileNativeBridgesTask(os, arch, isUikitSim = isUikitSim)
-
-    // TODO: move to LinkSkikoTask.
-    val actionName = "linkNativeBridges".withSuffix(isUikitSim = isUikitSim)
-    val linkTask = project.registerSkikoTask<Exec>(actionName, os, arch) {
-        dependsOn(crossCompileTask)
-        val objectFilesDir = crossCompileTask.map { it.outDir.get() }
-        val objectFiles = project.fileTree(objectFilesDir) {
-            include("**/*.o")
-        }
-        inputs.files(objectFiles)
-        val outDir = layout.buildDirectory.dir("nativeBridges/static/$targetString").get().asFile
-        val staticLib = "skiko-native-bridges-$targetString.a"
-        workingDir = outDir
-        when (os) {
+            OS.IOS -> {
+                val iosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
+                configureCinterop(
+                    cinteropName = "uikit",
+                    os = os, arch = arch, target = target,
+                    targetString = targetString,
+                    linkerOpts = iosFrameworks,
+                    staticLibraries = staticLibFileNamesForBackend,
+                    libraryPaths = libraryPathsForBackend,
+                    dependsOnTasks = listOf(linkTask),
+                    backend = backend
+                )
+                mutableListOfLinkerOptions(iosFrameworks)
+            }
+            OS.TVOS -> {
+                val tvosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
+                configureCinterop(
+                    cinteropName = "uikit",
+                    os = os, arch = arch, target = target,
+                    targetString = targetString,
+                    linkerOpts = tvosFrameworks,
+                    staticLibraries = staticLibFileNamesForBackend,
+                    libraryPaths = libraryPathsForBackend,
+                    dependsOnTasks = listOf(linkTask),
+                    backend = backend
+                )
+                mutableListOfLinkerOptions(tvosFrameworks)
+            }
             OS.Linux -> {
-                executable = if (arch == Arch.Arm64 && hostArch != Arch.Arm64) "aarch64-linux-gnu-ar" else "ar"
-                argumentProviders.add { listOf("-crs", staticLib) }
+                val options = mutableListOf(
+                    "-L/usr/lib64",
+                    "-L/usr/lib/${if (arch == Arch.Arm64) "aarch64" else "x86_64"}-linux-gnu",
+                    "-lfontconfig", "-lGL",
+                    "$skiaBinDir/libskottie.a",
+                    "$skiaBinDir/libjsonreader.a",
+                    "$skiaBinDir/libsksg.a",
+                    "$skiaBinDir/libskshaper.a",
+                    "$skiaBinDir/libskunicode_core.a",
+                    "$skiaBinDir/libskunicode_icu.a",
+                    "$skiaBinDir/libskia.a"
+                )
+                if (arch == Arch.Arm64) options.add("-lEGL")
+                if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
+                    options.add(0, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/lib64")
+                    options.add(1, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/usr/lib64")
+                }
+                configureCinterop(
+                    cinteropName = "skiko",
+                    os = os, arch = arch, target = target,
+                    targetString = targetString,
+                    linkerOpts = mutableListOfLinkerOptions(options),
+                    staticLibraries = staticLibFileNamesForBackend,
+                    libraryPaths = libraryPathsForBackend,
+                    dependsOnTasks = listOf(linkTask),
+                    backend = backend
+                )
+                mutableListOfLinkerOptions(options)
             }
-            OS.MacOS, OS.IOS, OS.TVOS -> {
-                executable = "libtool"
-                argumentProviders.add { listOf("-static", "-o", staticLib) }
-            }
-            else -> error("Unexpected OS for native bridges linking: $os")
+            else -> mutableListOf()
         }
-        argumentProviders.add { objectFiles.files.map { it.absolutePath } }
-        file(outDir).mkdirs()
-        outputs.dir(outDir)
+
+        if (skiko.includeTestHelpers) {
+            linkerFlags.addAll(when (os) {
+                OS.Linux -> listOf("-linker-option", "-lX11", "-linker-option", "-lGLX")
+                else -> emptyList()
+            })
+        }
+
+        target.binaries.all { freeCompilerArgs += linkerFlags }
+        target.compilations.all {
+            kotlinOptions { freeCompilerArgs += linkerFlags }
+            compileTaskProvider.configure { dependsOn(linkTask) }
+        }
     }
-    target.compilations.all {
-        compileTaskProvider.configure {
-            dependsOn(linkTask)
-        }
+
+    // We remove them since we publish them separately
+    // with backend variants in configureNativeCinteropPublications.
+    project.afterEvaluate {
+        project.configurations
+            .findByName("${target.name}ApiElements")
+            ?.artifacts
+            ?.removeIf { it.file.name.contains("cinterop") }
     }
 }
-
 
 fun KotlinMultiplatformExtension.configureIOSTestsWithMetal(project: Project) {
     val metalTestTargets = listOf("iosX64", "iosSimulatorArm64")

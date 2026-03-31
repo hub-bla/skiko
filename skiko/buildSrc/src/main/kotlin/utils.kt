@@ -34,6 +34,17 @@ inline fun <reified T : Task> Project.registerSkikoTask(
     return registerSkikoTask(taskName, fn)
 }
 
+inline fun <reified T : Task> Project.registerSkikoTask(
+    actionName: String,
+    targetOs: OS,
+    targetArch: Arch,
+    backend: SkiaGPUBackend,
+    crossinline fn: T.() -> Unit
+): TaskProvider<T> {
+    val taskName = actionName + joinToTitleCamelCase(targetOs.id, targetArch.id, backend.id)
+    return registerSkikoTask(taskName, fn)
+}
+
 fun joinToTitleCamelCase(vararg parts: String): String =
     parts.joinToString(separator = "") { toTitleCase(it) }
 

@@ -384,6 +384,11 @@ class Surface : RefCnt {
          * @see [https://fiddle.skia.org/c/@Surface_MakeRasterN32Premul](https://fiddle.skia.org/c/@Surface_MakeRasterN32Premul)
          */
         fun makeRasterN32Premul(width: Int, height: Int): Surface {
+            if (SkiaGPUBackendUtils_nIsGraphiteEnabled()) {
+                println("hello from Graphite")
+            } else {
+                println("hello from Ganesh")
+            }
             Stats.onNativeCall()
             val ptr = _nMakeRasterN32Premul(width, height)
             require(ptr != NullPointer) { "Failed Surface.makeRasterN32Premul($width, $height)" }
