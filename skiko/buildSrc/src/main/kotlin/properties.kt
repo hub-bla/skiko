@@ -82,15 +82,15 @@ enum class SkiaBuildType(
     DEBUG(
         id = "Debug",
         flags = arrayOf("-DSK_DEBUG"),
-        clangFlags = arrayOf("-std=c++17", "-g", "-DSK_TRIVIAL_ABI=[[clang::trivial_abi]]"),
-        winCompilerFlags = arrayOf("/Zi", "/std:c++17"),
+        clangFlags = arrayOf("-std=c++20", "-g", "-DSK_TRIVIAL_ABI=[[clang::trivial_abi]]"),
+        winCompilerFlags = arrayOf("/Zi", "/std:c++20"),
         winLinkerFlags = arrayOf("/DEBUG"),
     ),
     RELEASE(
         id = "Release",
         flags = arrayOf("-DNDEBUG"),
-        clangFlags = arrayOf("-std=c++17", "-O3"),
-        winCompilerFlags = arrayOf("/O2", "/std:c++17"),
+        clangFlags = arrayOf("-std=c++20", "-O3"),
+        winCompilerFlags = arrayOf("/O2", "/std:c++20"),
         winLinkerFlags = arrayOf("/DEBUG"),
     );
     override fun toString() = id
@@ -144,6 +144,14 @@ class SkikoProperties(private val myProject: Project) {
 
     val targetArch: Arch
         get() = myProject.findProperty("skiko.arch")?.toString()?.let(Arch::byName) ?: hostArch
+
+    val requestedGpuBackends: List<RequestedSkiaGpuBackend>
+        get() {
+            val propertyValue = myProject.findProperty("skia.gpu.backend")?.toString()
+                ?: System.getProperty("skia.gpu.backend")
+
+            return RequestedSkiaGpuBackend.parse(propertyValue)
+        }
 
     val includeTestHelpers: Boolean
         get() = !isRelease
