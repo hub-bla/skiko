@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <jni.h>
 
 #include "ganesh/gl/GrGLAssembleInterface.h"
@@ -10,3 +11,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_GLAssembledInterfaceK
     sk_sp<const GrGLInterface> interface = GrGLMakeAssembledInterface(ctx, f);
     return reinterpret_cast<jlong>(interface.release());
 }
+#endif

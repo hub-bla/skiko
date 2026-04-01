@@ -1,3 +1,4 @@
+#ifdef SK_GRAPHITE
 #include <jni.h>
 #include "../../interop.hh"
 #include "include/core/SkImage.h"
@@ -126,3 +127,4 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteC
 
     context->submit(syncToCpuFromBool(syncCpu));
 }
+#endif

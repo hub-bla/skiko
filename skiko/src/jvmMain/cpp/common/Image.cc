@@ -2,11 +2,6 @@
 #include <jni.h>
 #include "SkData.h"
 #include "SkImage.h"
-#include "ganesh/GrBackendSurface.h"
-#include "ganesh/gl/GrGLBackendSurface.h"
-#include "include/gpu/ganesh/SkImageGanesh.h"
-#include "ganesh/GrDirectContext.h"
-#include "ganesh/gl/GrGLDirectContext.h"
 #include "SkBitmap.h"
 #include "SkShader.h"
 #include "SkEncodedImageFormat.h"
@@ -14,6 +9,14 @@
 #include "encode/SkJpegEncoder.h"
 #include "encode/SkWebpEncoder.h"
 #include "interop.hh"
+
+#ifdef SK_GANESH
+#include "ganesh/GrBackendSurface.h"
+#include "ganesh/gl/GrGLBackendSurface.h"
+#include "include/gpu/ganesh/SkImageGanesh.h"
+#include "ganesh/GrDirectContext.h"
+#include "ganesh/gl/GrGLDirectContext.h"
+#endif
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_ImageKt__1nMakeRaster
   (JNIEnv* env, jclass jclass, jint width, jint height, jint colorType, jint alphaType, jlong colorSpacePtr, jbyteArray bytesArr, jint rowBytes) {
@@ -164,6 +167,7 @@ extern "C" JNIEXPORT jboolean JNICALL Java_org_jetbrains_skia_ImageKt__1nScalePi
     return instance->scalePixels(*pixmap, skija::SamplingMode::unpackFrom2Ints(env, samplingOptionsVal1, samplingOptionsVal2), cachingHint);
 }
 
+#ifdef SK_GANESH
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_ImageKt__1nAdoptTextureFrom
   (JNIEnv* env, jclass jclass, jlong contextPtr, jlong backendTexturePtr, jint surfaceOrigin, jint colorType) {
     GrBackendTexture* backendTexture = reinterpret_cast<GrBackendTexture*>(static_cast<uintptr_t>(backendTexturePtr));
@@ -177,3 +181,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_ImageKt__1nAdoptTextu
     );
     return reinterpret_cast<jlong>(image.release());
 }
+#endif

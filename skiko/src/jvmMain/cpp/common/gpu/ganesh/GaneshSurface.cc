@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <iostream>
 #include <jni.h>
 #include "../../interop.hh"
@@ -76,4 +77,6 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_SurfaceKt__1nMakeFrom
         surfaceProps.get());
     return reinterpret_cast<jlong>(surface.release());
 }
+#endif
+
 #endif

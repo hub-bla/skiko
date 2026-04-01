@@ -1,3 +1,4 @@
+#ifdef SK_GRAPHITE
 #include <iostream>
 #include <jni.h>
 #include "../../interop.hh"
@@ -27,3 +28,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_SurfaceF
 
     return reinterpret_cast<jlong>(surface.release());
 }
+#endif
