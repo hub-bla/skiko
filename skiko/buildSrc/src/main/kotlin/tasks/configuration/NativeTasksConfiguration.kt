@@ -4,6 +4,7 @@ import Arch
 import CompileSkikoCppTask
 import OS
 import SkiaBuildType
+import SkiaGpuBackend
 import SkikoProjectContext
 import WriteCInteropDefFile
 import compilerForTarget
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
+import resolveForTarget
 import java.io.File
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
@@ -57,6 +59,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
     return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch) {
         dependsOn(skiaNativeDir)
         val unpackedSkia = skiaNativeDir.get()
+        val backends = skiko.requestedGpuBackends.resolveForTarget(os, isNative = true)
 
         compiler.set(compilerForTarget(os, arch))
         buildTargetOS.set(os)
@@ -88,7 +91,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *iosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.IOS, buildType),
+                    *skiaPreprocessorFlags(OS.IOS, buildType, backends),
                 ))
             }
             OS.TVOS -> {
@@ -112,7 +115,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *tvosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
-                    *skiaPreprocessorFlags(OS.TVOS, buildType),
+                    *skiaPreprocessorFlags(OS.TVOS, buildType, backends),
                 ))
             }
             OS.MacOS -> {
@@ -120,7 +123,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                 flags.set(listOf(
                     *project.appleMacOsSdkFlags().toTypedArray(),
                     *buildType.clangFlags,
-                    *skiaPreprocessorFlags(OS.MacOS, buildType),
+                    *skiaPreprocessorFlags(OS.MacOS, buildType, backends),
                     when(arch) {
                         Arch.Arm64 -> "-arch arm64"
                         Arch.X64 -> "-arch x86_64"
@@ -141,7 +144,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     "-fvisibility=hidden",
                     "-fvisibility-inlines-hidden",
                     *archFlags,
-                    *skiaPreprocessorFlags(OS.Linux, buildType)
+                    *skiaPreprocessorFlags(OS.Linux, buildType, backends)
                 )
                 // Add sysroot for ARM64 cross-compilation
                 if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
@@ -158,7 +161,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
 
         includeHeadersNonRecursive(projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
-        includeHeadersNonRecursive(skiaHeadersDirs(unpackedSkia))
+        includeHeadersNonRecursive(skiaHeadersDirs(os, arch, buildType, unpackedSkia))
     }
 }
 
@@ -189,30 +192,41 @@ fun configureCinterop(
     }
 }
 
-fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
+fun skiaStaticLibraries(
+    skiaDir: String,
+    targetString: String,
+    os: OS,
+    buildType: SkiaBuildType,
+    backends: List<SkiaGpuBackend>
+): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
-    return listOf(
-        "libskresources.a",
-        "libskparagraph.a",
-        "libskia.a",
-        "libicu.a",
-        "libjsonreader.a",
-        "libskottie.a",
-        "libsvg.a",
-        "libpng.a",
-        "libwebp_sse41.a",
-        "libsksg.a",
-        "libskunicode_core.a",
-        "libskunicode_icu.a",
-        "libwebp.a",
-        "libdng_sdk.a",
-        "libpiex.a",
-        "libharfbuzz.a",
-        "libexpat.a",
-        "libzlib.a",
-        "libjpeg.a",
-        "libskshaper.a"
-    ).map {
+    return buildList {
+        addAll(listOf(
+            "libskresources.a",
+            "libskparagraph.a",
+            "libskia.a",
+            "libicu.a",
+            "libjsonreader.a",
+            "libskottie.a",
+            "libsvg.a",
+            "libpng.a",
+            "libwebp_sse41.a",
+            "libsksg.a",
+            "libskunicode_core.a",
+            "libskunicode_icu.a",
+            "libwebp.a",
+            "libdng_sdk.a",
+            "libpiex.a",
+            "libharfbuzz.a",
+            "libexpat.a",
+            "libzlib.a",
+            "libjpeg.a",
+            "libskshaper.a"
+        ))
+        addAll(
+            backends.flatMap { it.staticLibraries(os) }.distinct()
+        )
+    }.map {
         "$skiaBinSubdir/$it"
     }
 }
@@ -220,6 +234,7 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
 fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) = with(this.project) {
     if (!os.isCompatibleWithHost) return
 
+    val backends = skiko.requestedGpuBackends.resolveForTarget(os, isNative = true)
     target.generateVersion(os, arch, skiko)
     val isUikitSim = target.isUikitSimulator()
 
@@ -231,7 +246,7 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
 
     val bridgesLibrary = layout.buildDirectory.file("nativeBridges/static/$targetString/skiko-native-bridges-$targetString.a")
     val bridgesLibraryPath = bridgesLibrary.get().asFile.absolutePath
-    val allLibraries = skiaStaticLibraries(skiaDir, targetString, buildType) + bridgesLibraryPath
+    val allLibraries = skiaStaticLibraries(skiaDir, targetString, os, buildType, backends) + bridgesLibraryPath
 
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
     val linkerFlags = when (os) {
@@ -269,6 +284,9 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
                 "$skiaBinDir/libskunicode_icu.a",
                 "$skiaBinDir/libskia.a"
             )
+            backends.forEach { backend ->
+                options.addAll(backend.preprocessorFlags(os))
+            }
             if (arch == Arch.Arm64) {
                 options.add("-lEGL")
             }

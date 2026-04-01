@@ -28,6 +28,7 @@ import org.gradle.kotlin.dsl.withType
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
+import resolveForTarget
 import runPkgConfig
 import targetId
 import java.io.File
@@ -60,7 +61,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     sourceRoots.set(srcDirs)
     if (targetOs != OS.Android) includeHeadersNonRecursive(jdkHome.resolve("include"))
     val skiaDir = skiaJvmBindingsDir.get()
-    includeHeadersNonRecursive(skiaHeadersDirs(skiaDir))
+    includeHeadersNonRecursive(skiaHeadersDirs(targetOs, targetArch, buildType, skiaJvmBindingsDir.get()))
     val projectDir = project.projectDir
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/common"))
@@ -132,9 +133,10 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
         OS.Wasm, OS.IOS, OS.TVOS -> error("Should not reach here")
     }
 
+    val backends = skiko.requestedGpuBackends.resolveForTarget(targetOs, isNative = false)
     flags.set(
         listOf(
-            *skiaPreprocessorFlags(targetOs, buildType),
+            *skiaPreprocessorFlags(targetOs, buildType, backends),
             *osFlags
         )
     )
@@ -195,11 +197,13 @@ fun SkikoProjectContext.createObjcCompileTask(
 
     includeHeadersNonRecursive(jdkHome.resolve("include"))
     includeHeadersNonRecursive(jdkHome.resolve("include/darwin"))
-    includeHeadersNonRecursive(skiaHeadersDirs(skiaJvmBindingsDir.get()))
+    includeHeadersNonRecursive(skiaHeadersDirs(os, arch, buildType, skiaJvmBindingsDir.get()))
     val projectDir = project.projectDir
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp"))
+
+    val backends = skiko.requestedGpuBackends.resolveForTarget(os, isNative = false)
 
     compiler.set(project.appleToolchainExecutableOrDefault("clang", "clang"))
     buildVariant.set(buildType)
@@ -212,7 +216,7 @@ fun SkikoProjectContext.createObjcCompileTask(
             *project.appleMacOsSdkFlags().toTypedArray(),
             *os.clangFlags,
             *buildType.clangFlags,
-            *skiaPreprocessorFlags(os, buildType),
+            *skiaPreprocessorFlags(os, buildType, backends),
             "-fPIC"
         )
     )
@@ -230,9 +234,21 @@ fun SkikoProjectContext.createLinkJvmBindings(
     val skiaBinSubdir = "out/${buildType.id}-$target"
     val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
     val osFlags: Array<String>
+    val enabledSkiaBackends = skiko.requestedGpuBackends.resolveForTarget(targetOs, isNative = false)
 
+    val disabledSkiaBackends = SkiaGpuBackend.values().toSet() - enabledSkiaBackends.toSet()
+    val libsToExclude = disabledSkiaBackends.flatMap { skiaBackend ->
+        val libs = skiaBackend.staticLibraries(targetOs)
+
+        if (targetOs.isWindows) {
+            libs.map { it.replace(".a", ".lib") }
+        } else {
+            libs
+        }
+    }
     libFiles = project.fileTree(skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }) {
         include(if (targetOs.isWindows) "*.lib" else "*.a")
+        exclude(libsToExclude)
     }
 
     dependsOn(compileTask)
@@ -262,6 +278,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-install_name", "./${libOutputFileName.get()}",
                 "-current_version", skiko.planeDeployVersion,
                 "-framework", "AppKit",
+                "-framework", "IOSurface",
                 "-framework", "CoreFoundation",
                 "-framework", "CoreGraphics",
                 "-framework", "CoreServices",
@@ -295,6 +312,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "$skiaBinDir/libskshaper.a",
                         "$skiaBinDir/libjsonreader.a"
                     )
+                )
+                addAll(
+                    enabledSkiaBackends.flatMap { it.staticLibraries(OS.Linux) }.map { "$skiaBinDir/$it" }
                 )
                 if (targetArch == Arch.Arm64) {
                     add("-lEGL")
@@ -340,6 +360,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-latomic",
                 // Hack to fix problem with linker not always finding certain declarations.
                 "$skiaBinDir/libskia.a",
+                *enabledSkiaBackends.flatMap { it.staticLibraries(OS.Android) }.map { "$skiaBinDir/$it" }.toTypedArray()
             )
             linker.set(project.androidClangFor(targetArch))
         }
