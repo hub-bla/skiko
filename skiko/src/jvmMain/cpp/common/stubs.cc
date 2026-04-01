@@ -271,3 +271,13 @@ JNIEXPORT jstring JNICALL Java_org_jetbrains_skiko_AngleApi_glGetString(
     return 0;
 }
 #endif
+
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nWrapMetalTexture
+        (JNIEnv* env, jclass jclass, jlong texturePtr, jint width, jint height) {
+    return reinterpret_cast<jlong>(nullptr);
+}
+
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nGraphiteMakeMetal
+        (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
+    return reinterpret_cast<jlong>(nullptr);
+}
