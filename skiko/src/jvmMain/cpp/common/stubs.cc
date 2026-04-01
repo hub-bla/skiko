@@ -288,5 +288,5 @@ JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_Ba
 
 JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nGraphiteMakeMetal
         (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
-    return reinterpret_cast<jlong>(nullptr);
+    skikoUnimplemented("Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nWrapMetalTexture");
 }
