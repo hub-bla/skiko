@@ -15,7 +15,7 @@ class SkikoProjectContext(
     val skiko: SkikoProperties,
     val kotlin: KotlinMultiplatformExtension,
     val windowsSdkPathProvider: () -> WindowsSdkPaths,
-    val createChecksumsTask: (OS, Arch, Provider<File>) -> TaskProvider<*>,
+    val createChecksumsTask: (OS, Arch, Provider<File>, String) -> TaskProvider<*>,
     val additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
 ) {
 
@@ -25,7 +25,7 @@ class SkikoProjectContext(
         windowsSdkPathProvider()
     }
 
-    val allJvmRuntimeJars = mutableMapOf<Pair<OS, Arch>, TaskProvider<Jar>>()
+    val allJvmRuntimeJars = mutableMapOf<Triple<OS, Arch, RequestedSkiaGpuBackend>, TaskProvider<Jar>>()
 }
 
 fun SkikoProjectContext.declareSkiaTasks() {
