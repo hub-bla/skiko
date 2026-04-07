@@ -10,6 +10,7 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.nativeplatform.MachineArchitecture
 import org.gradle.nativeplatform.OperatingSystemFamily
@@ -17,6 +18,13 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 import org.gradle.api.Named
 import org.gradle.api.attributes.Attribute
+import org.gradle.api.tasks.bundling.Zip
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.plugin.attributes.KlibPackaging
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinUsages
+import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
+import tasks.configuration.isUikitSimulator
 
 /**
  * Custom Gradle attribute used to disambiguate JVM runtime JAR variants by GPU backend.
@@ -78,6 +86,7 @@ fun SkikoProjectContext.declarePublications() {
     ctx.configurePublishingRepositories()
     ctx.configurePublicationDefaults()
     ctx.configureAllJvmRuntimeJarPublications()
+    ctx.configureNativeCinteropPublications()
     ctx.configureAwtRuntimeJarPublication()
     ctx.configureAwtPublicationConstraints()
     ctx.configureAdditionalRuntimeLibrariesPublication()
@@ -416,4 +425,122 @@ private fun SkikoPublishingContext.configurePomNames() = publications {
         this as MavenPublication
         pom.name.set(pomNameForPublication[name]!!)
     }
+}
+
+private fun SkikoPublishingContext.configureNativeCinteropPublications() {
+    val nativeTargetAttribute = Attribute.of("org.jetbrains.kotlin.native.target", String::class.java)
+    kotlin.targets
+        .filterIsInstance<KotlinNativeTarget>()
+        .forEach { target ->
+            val os = target.resolveOs() ?: return@forEach
+            val arch = target.resolveArch() ?: return@forEach
+
+            val isUikitSim = target.isUikitSimulator()
+            val nativeArtifactId = SkikoArtifacts.nativeArtifactIdFor(os, arch, isUikitSim)
+            val cinteropArtifactId = "$nativeArtifactId-cinterop"
+            val publicationName = "skikoNativeCinterop${target.name.replaceFirstChar { it.uppercase() }}"
+
+            pomNameForPublication[publicationName] = "Skiko Native Cinterop ${target.name}"
+            project.afterEvaluate {
+                val component = project.serviceOf<SoftwareComponentFactory>()
+                    .adhoc(publicationName)
+
+                skiko.requestedGpuBackends.forEach { requestedGpuBackend ->
+                    val cinteropTask = project.tasks
+                        .withType(CInteropProcess::class.java)
+                        .firstOrNull {
+                            it.konanTarget == target.konanTarget &&
+                                    it.interopName.endsWith(requestedGpuBackend.id, ignoreCase = true)
+                        } ?: return@forEach
+                    // Workaround as cinteropTask needs to be unpacked during compilation
+                    val zipTaskName = "zip${cinteropTask.name.replaceFirstChar { it.uppercase() }}ForPublication"
+                    val zipTask = project.tasks.register<Zip>(zipTaskName) {
+                        dependsOn(cinteropTask)
+                        from(cinteropTask.klibDirectory)
+                        destinationDirectory.set(project.layout.buildDirectory.dir("cinterop-publications"))
+                        archiveBaseName.set("${target.name}-cinterop-${requestedGpuBackend.id}")
+                        archiveExtension.set("klib")
+                    }
+
+                    val configName =
+                        "skikoNativeCinteropElements${target.name.replaceFirstChar { it.uppercase() }}${requestedGpuBackend.id.replaceFirstChar { it.uppercase() }}"
+
+                    val variantElements = project.configurations.create(configName) {
+                        isCanBeResolved = false
+                        isCanBeConsumed = true
+                        attributes {
+                            // By default consumers look for kotlin-api not kotlin-cinterop
+                            attribute(Usage.USAGE_ATTRIBUTE, objects.named(KotlinUsages.KOTLIN_API))
+                            attribute(
+                                Category.CATEGORY_ATTRIBUTE,
+                                project.objects.named(Category::class.java, Category.LIBRARY)
+                            )
+                            attribute(KotlinPlatformType.attribute, KotlinPlatformType.native)
+                            attribute(nativeTargetAttribute, target.konanTarget.name)
+                            @OptIn(ExperimentalKotlinGradlePluginApi::class)
+                            attribute(
+                                KlibPackaging.ATTRIBUTE,
+                                project.objects.named(KlibPackaging::class.java, KlibPackaging.PACKED)
+                            )
+                            attribute(
+                                SkikoGpuBackendAttribute.ATTRIBUTE,
+                                project.objects.named(
+                                    SkikoGpuBackendAttribute::class.java,
+                                    requestedGpuBackend.id.lowercase()
+                                )
+                            )
+                        }
+                        outgoing.artifact(zipTask) {
+                            extension = "klib"
+                            classifier = requestedGpuBackend.id.lowercase()
+                        }
+                    }
+
+                    component.addVariantsFromConfiguration(variantElements) {
+                        mapToMavenScope("compile")
+                    }
+                }
+
+                project.extensions.getByType(PublishingExtension::class.java)
+                    .publications.apply {
+                        create(publicationName, MavenPublication::class.java) {
+                            from(component)
+                            groupId = SkikoArtifacts.groupId
+                            artifactId = cinteropArtifactId
+                            version = skiko.deployVersion
+                            artifact(emptySourcesJar)
+                            pom.withXml {
+                                val deps = asElement().getElementsByTagName("dependencies")
+                                for (i in 0 until deps.length) deps.item(i).parentNode.removeChild(deps.item(i))
+                            }
+                        }
+                    }
+
+                project.configurations
+                    .findByName("${target.name}ApiElements")
+                    ?.dependencies
+                    ?.add(
+                        project.dependencies.create(
+                            SkikoArtifacts.groupId,
+                            cinteropArtifactId,
+                            skiko.deployVersion
+                        )
+                    )
+            }
+        }
+}
+
+fun KotlinNativeTarget.resolveOs() = when {
+    name.startsWith("macos") -> OS.MacOS
+    name.contains("Simulator", ignoreCase = true) -> OS.IOS
+    name.startsWith("ios") -> OS.IOS
+    name.startsWith("tvos") -> OS.TVOS
+    name.startsWith("linux") -> OS.Linux
+    else -> null
+}
+
+fun KotlinNativeTarget.resolveArch() = when {
+    name.contains("Arm64", ignoreCase = true) -> Arch.Arm64
+    name.contains("X64", ignoreCase = true) -> Arch.X64
+    else -> null
 }
