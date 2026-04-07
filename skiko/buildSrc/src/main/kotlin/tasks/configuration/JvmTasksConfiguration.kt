@@ -40,7 +40,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     skiaJvmBindingsDir: Provider<File>,
     concreteBackends: List<SkiaGpuBackend>,
     backendId: String,
-) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings${joinToTitleCamelCase(backendId)}", targetOs, targetArch) {
+) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings", targetOs, targetArch, backendId) {
     // Prefer 'java.home' system property to simplify overriding from Intellij.
     // When used from command-line, it is effectively equal to JAVA_HOME.
     if (JavaVersion.current() < JavaVersion.VERSION_17) {
@@ -190,7 +190,7 @@ fun SkikoProjectContext.createObjcCompileTask(
     skiaJvmBindingsDir: Provider<File>,
     concreteBackends: List<SkiaGpuBackend>,
     backendId: String,
-) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile${joinToTitleCamelCase(backendId)}", os, arch) {
+) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch, backendId) {
     dependsOn(skiaJvmBindingsDir)
 
     val srcDirs = projectDirs(
@@ -235,7 +235,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
     backends: List<SkiaGpuBackend>,
     // Public id ("ganesh", "graphite", "all") used for task names — hides the dawn/native split.
     backendId: String,
-) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings${joinToTitleCamelCase(backendId)}", targetOs, targetArch) {
+) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings", targetOs, targetArch, backendId) {
     val target = targetId(targetOs, targetArch)
     val skiaBinSubdir = "out/${buildType.id}-$target"
     val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
@@ -408,7 +408,7 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     targetArch: Arch,
     linkJvmBindings: Provider<LinkSkikoTask>,
     backendId: String,
-) = project.registerSkikoTask<SealAndSignSharedLibraryTask>("maybeSign${joinToTitleCamelCase(backendId)}", targetOs, targetArch) {
+) = project.registerSkikoTask<SealAndSignSharedLibraryTask>("maybeSign", targetOs, targetArch, backendId) {
     dependsOn(linkJvmBindings)
 
     if (targetOs.isMacOs) {
@@ -448,7 +448,7 @@ fun SkikoProjectContext.skikoJvmRuntimeJarTask(
     awtJar: TaskProvider<Jar>,
     nativeFiles: List<Provider<File>>,
     backendId: String,
-) = project.registerSkikoTask<Jar>("skikoJvmRuntimeJar${joinToTitleCamelCase(backendId)}", targetOs, targetArch) {
+) = project.registerSkikoTask<Jar>("skikoJvmRuntimeJar", targetOs, targetArch, backendId) {
     dependsOn(awtJar)
     archiveBaseName.set("skiko")
     archiveClassifier.set("${targetId(targetOs, targetArch)}-$backendId")
