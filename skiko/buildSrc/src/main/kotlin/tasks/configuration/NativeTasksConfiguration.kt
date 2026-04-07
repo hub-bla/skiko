@@ -25,7 +25,6 @@ import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
-import resolveForTarget
 import java.io.File
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
@@ -54,7 +53,7 @@ fun SkikoProjectContext.compileNativeBridgesTask(
 ): TaskProvider<CompileSkikoCppTask> = with(this.project) {
     val skiaNativeDir = registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
     val actionName = "compileNativeBridges".withSuffix(isUikitSim = isUikitSim)
-    val resolvedBackends = listOf(backend).resolveForTarget(os, isNative = true)
+    val resolvedBackends = backend.resolveForTarget(os, isNative = true)
     return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch, backend.id) {
         dependsOn(skiaNativeDir)
         val unpackedSkia = skiaNativeDir.get()
@@ -293,7 +292,7 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
         }
     }
     skiko.requestedGpuBackends.forEach { requestedBackend ->
-        val resolvedBackends = listOf(requestedBackend).resolveForTarget(os, isNative = true)
+        val resolvedBackends = requestedBackend.resolveForTarget(os, isNative = true)
         val resolvedBackendsStaticLibs = resolvedBackends.flatMap { it.staticLibraries(os) }.distinct()
             .map { "$skiaBinDir/$it" }
 

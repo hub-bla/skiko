@@ -25,21 +25,24 @@ enum class RequestedSkiaGpuBackend(val id: String) {
             }.distinct()
         }
     }
+
+    fun resolveForTarget(os: OS, isNative: Boolean = false): List<SkiaGpuBackend> {
+        fun graphiteFor(os: OS, isNative: Boolean): SkiaGpuBackend = when {
+            os == OS.Wasm -> SkiaGpuBackend.GRAPHITE_DAWN
+            !isNative || os == OS.Linux -> SkiaGpuBackend.GRAPHITE_DAWN
+            else -> SkiaGpuBackend.GRAPHITE_NATIVE
+        }
+        return when (this) {
+            GANESH -> listOf(SkiaGpuBackend.GANESH)
+            GRAPHITE -> listOf(graphiteFor(os, isNative))
+            ALL -> listOf(SkiaGpuBackend.GANESH, graphiteFor(os, isNative))
+        }
+    }
 }
 
 fun List<RequestedSkiaGpuBackend>.resolveForTarget(os: OS, isNative: Boolean = false): List<SkiaGpuBackend> {
-    fun graphiteFor(os: OS, isNative: Boolean): SkiaGpuBackend = when {
-        os == OS.Wasm -> SkiaGpuBackend.GRAPHITE_DAWN
-        !isNative || os == OS.Linux -> SkiaGpuBackend.GRAPHITE_DAWN
-        else -> SkiaGpuBackend.GRAPHITE_NATIVE
-    }
-
     return this
         .flatMap { requested ->
-            when (requested) {
-                RequestedSkiaGpuBackend.GANESH -> listOf(SkiaGpuBackend.GANESH)
-                RequestedSkiaGpuBackend.GRAPHITE -> listOf(graphiteFor(os, isNative))
-                RequestedSkiaGpuBackend.ALL -> listOf(SkiaGpuBackend.GANESH, graphiteFor(os, isNative))
-            }
+            requested.resolveForTarget(os, isNative)
         }
 }

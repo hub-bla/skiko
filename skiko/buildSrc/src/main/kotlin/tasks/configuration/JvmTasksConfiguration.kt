@@ -29,7 +29,6 @@ import org.gradle.kotlin.dsl.withType
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
-import resolveForTarget
 import runPkgConfig
 import targetId
 import java.io.File
@@ -490,7 +489,7 @@ fun SkikoProjectContext.createSkikoJvmJarTask(os: OS, arch: Arch, commonJar: Tas
 
 
     skiko.requestedGpuBackends.forEach { requested ->
-        val concreteBackend = listOf(requested).resolveForTarget(os, isNative = false)
+        val concreteBackend = requested.resolveForTarget(os, isNative = false)
         val publicId = requested.id
 
         val nativeFiles = buildNativeFilesPipeline(os, arch, skiaBindingsDir, concreteBackend, publicId)
