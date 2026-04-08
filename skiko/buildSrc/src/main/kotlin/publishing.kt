@@ -215,7 +215,9 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
                         project.objects.named(SkikoGpuBackendAttribute::class.java, variantId)
                     )
 
-                    outgoing.artifact(jarTask.flatMap { it.archiveFile })
+                    outgoing.artifact(jarTask.flatMap { it.archiveFile }) {
+                        classifier = variantId
+                    }
                     outgoing.artifact(emptySourcesJar.flatMap { it.archiveFile }) {
                         classifier = "sources"
                     }
@@ -229,20 +231,11 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
                     )
                 }
                 component.addVariantsFromConfiguration(attributedConfig) {
-                    mapToMavenScope("runtime")
+                    mapToMavenScope("compile")
                 }
             }
 
             from(component)
-
-            /*
-            The entire machinery only works with Gradle attributes;
-            therefore, we do not add any dependencies to the maven pom file
-             */
-            pom.withXml {
-                val deps = asElement().getElementsByTagName("dependencies")
-                for (i in 0 until deps.length) deps.item(i).parentNode.removeChild(deps.item(i))
-            }
         }
     }
 }
