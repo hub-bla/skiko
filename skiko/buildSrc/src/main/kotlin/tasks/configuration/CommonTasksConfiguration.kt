@@ -3,6 +3,7 @@ package tasks.configuration
 import Arch
 import OS
 import SkiaBuildType
+import SkiaGpuBackend
 import SkikoProperties
 import org.gradle.api.DefaultTask
 import org.gradle.api.Project
@@ -39,41 +40,49 @@ fun Project.appleMacOsSdkFlags(): List<String> =
         ?.let { listOf("-isysroot", it) }
         ?: emptyList()
 
-fun skiaHeadersDirs(skiaDir: File): List<File> =
-    listOf(
-        skiaDir,
-        skiaDir.resolve("include"),
-        skiaDir.resolve("include/core"),
-        skiaDir.resolve("include/gpu"),
-        skiaDir.resolve("include/effects"),
-        skiaDir.resolve("include/pathops"),
-        skiaDir.resolve("include/utils"),
-        skiaDir.resolve("include/codec"),
-        skiaDir.resolve("include/svg"),
-        skiaDir.resolve("modules/jsonreader"),
-        skiaDir.resolve("modules/skottie/include"),
-        skiaDir.resolve("modules/skparagraph/include"),
-        skiaDir.resolve("modules/skshaper/include"),
-        skiaDir.resolve("modules/skunicode/include"),
-        skiaDir.resolve("modules/sksg/include"),
-        skiaDir.resolve("modules/svg/include"),
-        skiaDir.resolve("third_party/externals/harfbuzz/src"),
-        skiaDir.resolve("third_party/icu"),
-        skiaDir.resolve("third_party/externals/icu/source/common"),
-    )
+fun skiaHeadersDirs(
+    targetOs: OS,
+    targetArch: Arch,
+    buildType: SkiaBuildType,
+    skiaDir: File
+): List<File> = buildList {
+    add(skiaDir)
+    add(skiaDir.resolve("include"))
+    add(skiaDir.resolve("include/core"))
+    add(skiaDir.resolve("include/gpu"))
+    add(skiaDir.resolve("include/effects"))
+    add(skiaDir.resolve("include/pathops"))
+    add(skiaDir.resolve("include/utils"))
+    add(skiaDir.resolve("include/codec"))
+    add(skiaDir.resolve("include/svg"))
+    add(skiaDir.resolve("modules/jsonreader"))
+    add(skiaDir.resolve("modules/skottie/include"))
+    add(skiaDir.resolve("modules/skparagraph/include"))
+    add(skiaDir.resolve("modules/skshaper/include"))
+    add(skiaDir.resolve("modules/skunicode/include"))
+    add(skiaDir.resolve("modules/sksg/include"))
+    add(skiaDir.resolve("modules/svg/include"))
+    add(skiaDir.resolve("third_party/externals/harfbuzz/src"))
+    add(skiaDir.resolve("third_party/icu"))
+    add(skiaDir.resolve("third_party/externals/icu/source/common"))
+
+    val dawnDir = skiaDir.resolve("out/${buildType.id}-${targetOs.id}-${targetArch.id}/gen/third_party/dawn/include")
+    if (dawnDir.exists()) {
+        add(dawnDir)
+    }
+}
 
 fun includeHeadersFlags(headersDirs: List<File>) =
     headersDirs.map { "-I${it.absolutePath}" }.toTypedArray()
 
-fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType): Array<String> {
-    val base = listOf(
+fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType, backends: List<SkiaGpuBackend>): Array<String> {
+    val base = mutableListOf(
         "-DSK_ALLOW_STATIC_GLOBAL_INITIALIZERS=1",
         "-DSK_FORCE_DISTANCE_FIELD_TEXT=0",
         "-DSK_GAMMA_APPLY_TO_A8",
         "-DSK_GAMMA_SRGB",
         "-DSK_SCALAR_TO_FLOAT_EXCLUDED",
         "-DSK_SUPPORT_GPU=1",
-        "-DSK_GANESH",
         "-DSK_GL",
         "-DSK_SHAPER_HARFBUZZ_AVAILABLE",
         "-DSK_UNICODE_AVAILABLE",
@@ -92,23 +101,35 @@ fun skiaPreprocessorFlags(os: OS, buildType: SkiaBuildType): Array<String> {
         *buildType.flags
     )
 
+    base.addAll(
+        backends.flatMap { it.preprocessorFlags(os) }.distinct()
+    )
+
+    val hasMetalBackend = backends.any { it.hasMetal() }
+
     val perOs = when (os) {
-        OS.MacOS -> listOf(
-            "-DSK_SHAPER_CORETEXT_AVAILABLE",
-            "-DSK_BUILD_FOR_MAC",
-            "-DSK_METAL"
-        )
-        OS.IOS -> listOf(
-            "-DSK_BUILD_FOR_IOS",
-            "-DSK_SHAPER_CORETEXT_AVAILABLE",
-            "-DSK_METAL"
-        )
-        OS.TVOS -> listOf(
-            "-DSK_BUILD_FOR_IOS",
-            "-DSK_BUILD_FOR_TVOS",
-            "-DSK_SHAPER_CORETEXT_AVAILABLE",
-            "-DSK_METAL"
-        )
+        OS.MacOS -> buildList {
+            add("-DSK_SHAPER_CORETEXT_AVAILABLE")
+            add("-DSK_BUILD_FOR_MAC")
+            if (hasMetalBackend) {
+                add("-DSK_METAL")
+            }
+        }
+        OS.IOS -> buildList {
+            add("-DSK_BUILD_FOR_IOS")
+            add("-DSK_SHAPER_CORETEXT_AVAILABLE")
+            if (hasMetalBackend) {
+                add("-DSK_METAL")
+            }
+        }
+        OS.TVOS -> buildList {
+            add("-DSK_BUILD_FOR_IOS")
+            add("-DSK_BUILD_FOR_TVOS")
+            add("-DSK_SHAPER_CORETEXT_AVAILABLE")
+            if (hasMetalBackend) {
+                add("-DSK_METAL")
+            }
+        }
         OS.Windows -> listOf(
             "-DSK_BUILD_FOR_WIN",
             "-D_CRT_SECURE_NO_WARNINGS",

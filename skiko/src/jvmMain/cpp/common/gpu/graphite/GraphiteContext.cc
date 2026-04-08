@@ -1,3 +1,4 @@
+#ifdef SK_GRAPHITE
 #include <jni.h>
 #include "../../interop.hh"
 #include "include/core/SkImage.h"
@@ -10,11 +11,6 @@
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/ImageProvider.h"
 #include "include/gpu/graphite/Image.h"
-
-#ifdef SK_METAL
-#include "gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
-#include "include/gpu/graphite/mtl/MtlBackendContext.h"
-#endif
 
 // https://github.com/google/skia/blob/c16d0e9f30b1a1613401c0db3c93a3c2aa37c8ba/tools/graphite/GraphiteToolUtils.cpp#L26
 // or
@@ -110,21 +106,6 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_Graphite
     return reinterpret_cast<jlong>(graphiteRecorder.release());
 }
 
-
-#ifdef SK_METAL
-extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nGraphiteMakeMetal
-        (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
-    skgpu::graphite::MtlBackendContext backendContext = {};
-    backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
-    backendContext.fQueue.retain(reinterpret_cast<CFTypeRef>(queuePtr));
-
-    skgpu::graphite::ContextOptions options;
-    options.fRequireOrderedRecordings = true;
-
-    return reinterpret_cast<jlong>(skgpu::graphite::ContextFactory::MakeMetal(backendContext, options).release());
-}
-#endif
-
 extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nInsertRecording
         (JNIEnv* env, jclass jclass, jlong contextPtr, jlong recordingPtr) {
     skgpu::graphite::Context *context = reinterpret_cast<skgpu::graphite::Context*>(contextPtr);
@@ -146,3 +127,4 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteC
 
     context->submit(syncToCpuFromBool(syncCpu));
 }
+#endif

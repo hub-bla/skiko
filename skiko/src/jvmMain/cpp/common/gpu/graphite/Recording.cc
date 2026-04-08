@@ -1,3 +1,4 @@
+#ifdef SK_GRAPHITE
 #include <jni.h>
 #include "../../interop.hh"
 #include "gpu/graphite/Recorder.h"
@@ -10,3 +11,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_Recordin
         (JNIEnv* env, jclass jclass) {
     return static_cast<jlong>(reinterpret_cast<uintptr_t>(&deleteRecording));
 }
+#endif

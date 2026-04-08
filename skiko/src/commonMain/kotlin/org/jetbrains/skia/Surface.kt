@@ -354,6 +354,13 @@ class Surface : RefCnt {
          * @see [https://fiddle.skia.org/c/@Surface_MakeRasterN32Premul](https://fiddle.skia.org/c/@Surface_MakeRasterN32Premul)
          */
         fun makeRasterN32Premul(width: Int, height: Int): Surface {
+            if (_nIsGaneshEnabled()) {
+                println("Hello ganesh")
+            }
+
+            if (_nIsGraphiteEnabled()) {
+                println("Hello graphite")
+            }
             Stats.onNativeCall()
             val ptr = _nMakeRasterN32Premul(width, height)
             require(ptr != NullPointer) { "Failed Surface.makeRasterN32Premul($width, $height)" }
@@ -1155,3 +1162,10 @@ private external fun _nWritePixelsFromPixmap(ptr: NativePointer, pixmapPtr: Nati
 
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nUnique")
 private external fun _nUnique(ptr: NativePointer): Boolean
+
+@ExternalSymbolName("org_jetbrains_skia_Surface__1nIsGraphiteEnabled")
+private external fun _nIsGraphiteEnabled() : Boolean
+
+@ExternalSymbolName("org_jetbrains_skia_Surface__1nIsGaneshEnabled")
+private external fun _nIsGaneshEnabled() : Boolean
+

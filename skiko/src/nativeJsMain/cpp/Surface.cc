@@ -196,3 +196,22 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_Surface__1nGetRecordingContext
     SkSurface* surface = reinterpret_cast<SkSurface*>((ptr));
     return reinterpret_cast<KNativePointer>(surface->recordingContext());
 }
+
+
+SKIKO_EXPORT KBoolean org_jetbrains_skia_Surface__1nIsGraphiteEnabled
+        () {
+#ifdef SK_GRAPHITE
+    return true;
+#else
+    return false;
+#endif
+}
+
+SKIKO_EXPORT KBoolean org_jetbrains_skia_Surface__1nIsGaneshEnabled
+        () {
+#ifdef SK_GANESH
+    return true;
+#else
+    return false;
+#endif
+}

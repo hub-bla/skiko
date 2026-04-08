@@ -10,11 +10,49 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.nativeplatform.MachineArchitecture
 import org.gradle.nativeplatform.OperatingSystemFamily
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
+import org.gradle.api.Named
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.tasks.bundling.Zip
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.plugin.attributes.KlibPackaging
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinUsages
+import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
+import tasks.configuration.isUikitSimulator
+
+/**
+ * Custom Gradle attribute used to disambiguate JVM runtime JAR variants by GPU backend.
+ *
+ * Published variant ids:
+ *   - "ganesh"   → Ganesh backend
+ *   - "graphite" → Graphite backend (Dawn or native — resolved internally per target OS)
+ *   - "all"      → Fat variant bundling all enabled backends
+ *
+ * The internal split between graphite-dawn and graphite-native is a build detail
+ * and is never exposed at this level.
+ *
+ * Consumers select a variant:
+ * ```kotlin
+ * configurations.runtimeClasspath {
+ *     attributes {
+ *         attribute(SkikoGpuBackendAttribute.ATTRIBUTE, objects.named("ganesh"))
+ *     }
+ * }
+ * ```
+ */
+interface SkikoGpuBackendAttribute : Named {
+    companion object {
+        @JvmField
+        val ATTRIBUTE: Attribute<SkikoGpuBackendAttribute> =
+            Attribute.of("org.jetbrains.skiko.gpu-backend", SkikoGpuBackendAttribute::class.java)
+    }
+}
 
 private val SkikoProjectContext.publishing get() = project.extensions.getByType(PublishingExtension::class.java)
 
@@ -48,6 +86,7 @@ fun SkikoProjectContext.declarePublications() {
     ctx.configurePublishingRepositories()
     ctx.configurePublicationDefaults()
     ctx.configureAllJvmRuntimeJarPublications()
+    ctx.configureNativeCinteropPublications()
     ctx.configureAwtRuntimeJarPublication()
     ctx.configureAwtPublicationConstraints()
     ctx.configureAdditionalRuntimeLibrariesPublication()
@@ -136,25 +175,67 @@ private fun SkikoPublishingContext.configurePublicationDefaults() {
 }
 
 private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = publications {
-    projectContext.allJvmRuntimeJars.forEach { entry ->
-        val os = entry.key.first
-        val arch = entry.key.second
+    val byPlatform =
+        projectContext.allJvmRuntimeJars
+            .entries
+            .groupBy { (triple, _) -> triple.first to triple.second }
+            .mapValues { (_, entries) -> entries.associate { (triple, jar) -> triple.third to jar } }
+
+    byPlatform.forEach { (platform, variantJars) ->
+        val (os, arch) = platform
+
         create("skikoJvmRuntime${toTitleCase(os.id)}${toTitleCase(arch.id)}", MavenPublication::class.java) {
             pomNameForPublication[name] = "Skiko JVM Runtime for ${os.name} ${arch.name}"
             artifactId = SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch)
-            project.afterEvaluate {
-                artifact(entry.value.map { it.archiveFile.get() })
-                artifact(emptySourcesJar)
-            }
-            pom.withXml {
-                asNode().appendNode("dependencies")
-                    .appendNode("dependency").apply {
-                        appendNode("groupId", SkikoArtifacts.groupId)
-                        appendNode("artifactId", SkikoArtifacts.jvmArtifactId)
-                        appendNode("version", "[${skiko.deployVersion}]")
-                        appendNode("scope", "compile")
+
+            val component = project.serviceOf<SoftwareComponentFactory>().adhoc(
+                "skikoJvmRuntime${toTitleCase(os.id)}${toTitleCase(arch.id)}Component"
+            )
+
+            variantJars.forEach { (backend, jarTask) ->
+                val variantId = backend.id
+
+                // Attributed variant — for consumers who explicitly request a backend.
+                val attributedConfig = project.configurations.create("skikoJvmRuntimeElements-${targetId(os, arch)}-$variantId").apply {
+                    isCanBeResolved = false
+                    isCanBeConsumed = true
+
+                    attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
+                    attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+                    attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+                    attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR))
+                    attributes.attribute(KotlinPlatformType.attribute, KotlinPlatformType.jvm)
+                    attributes.attribute(
+                        TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                        project.objects.named(TargetJvmEnvironment.STANDARD_JVM)
+                    )
+
+                    attributes.attribute(
+                        SkikoGpuBackendAttribute.ATTRIBUTE,
+                        project.objects.named(SkikoGpuBackendAttribute::class.java, variantId)
+                    )
+
+                    outgoing.artifact(jarTask.flatMap { it.archiveFile }) {
+                        classifier = variantId
                     }
+                    outgoing.artifact(emptySourcesJar.flatMap { it.archiveFile }) {
+                        classifier = "sources"
+                    }
+
+                    dependencies.add(
+                        project.dependencies.create(
+                            SkikoArtifacts.groupId,
+                            SkikoArtifacts.jvmArtifactId,
+                            "[${skiko.deployVersion}]"
+                        )
+                    )
+                }
+                component.addVariantsFromConfiguration(attributedConfig) {
+                    mapToMavenScope("compile")
+                }
             }
+
+            from(component)
         }
     }
 }
@@ -190,62 +271,68 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
  * which resolves the correct artifact for the current platform.
  */
 private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
-    val allJvmRuntimeVariants = awtRuntimeTargets.map { (os, arch) ->
-        project.configurations.create("awtRuntimeElements-${targetId(os, arch)}").apply {
+    val allVariantConfigs = awtRuntimeTargets.flatMap { (os, arch) ->
+        projectContext.skiko.requestedGpuBackends.map { backend ->
+            val variantId = backend.id
 
             /* Setup default attributes */
-            attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
-            attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
-            attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
-            attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR))
-            attributes.attribute(KotlinPlatformType.attribute, KotlinPlatformType.jvm)
-            attributes.attribute(
-                TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
-                project.objects.named(TargetJvmEnvironment.STANDARD_JVM)
-            )
-
-            /*
-            Add OS and architecture attributes to the exposed configuration.
-             */
-            attributes.attribute(
-                OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE,
-                project.objects.named(
-                    when (os) {
-                        OS.Linux -> OperatingSystemFamily.LINUX
-                        OS.Windows -> OperatingSystemFamily.WINDOWS
-                        OS.MacOS -> OperatingSystemFamily.MACOS
-                        else -> error("Unsupported OS for awtRuntimeElements: $os")
-                    }
+            project.configurations.create("awtRuntimeElements-${targetId(os, arch)}-$variantId").apply {
+                attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
+                attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
+                attributes.attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling.EXTERNAL))
+                attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, project.objects.named(LibraryElements.JAR))
+                attributes.attribute(KotlinPlatformType.attribute, KotlinPlatformType.jvm)
+                attributes.attribute(
+                    TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                    project.objects.named(TargetJvmEnvironment.STANDARD_JVM)
                 )
-            )
 
-            attributes.attribute(
-                MachineArchitecture.ARCHITECTURE_ATTRIBUTE,
-                project.objects.named(
-                    when (arch) {
-                        Arch.X64 -> MachineArchitecture.X86_64
-                        Arch.Arm64 -> MachineArchitecture.ARM64
-                        else -> error("Unsupported arch for awtRuntimeElements: $arch")
-                    }
+                /*
+                Add OS and architecture attributes to the exposed configuration.
+                 */
+                attributes.attribute(
+                    OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE,
+                    project.objects.named(
+                        when (os) {
+                            OS.Linux -> OperatingSystemFamily.LINUX
+                            OS.Windows -> OperatingSystemFamily.WINDOWS
+                            OS.MacOS -> OperatingSystemFamily.MACOS
+                            else -> error("Unsupported OS for awtRuntimeElements: $os")
+                        }
+                    )
                 )
-            )
+                attributes.attribute(
+                    MachineArchitecture.ARCHITECTURE_ATTRIBUTE,
+                    project.objects.named(
+                        when (arch) {
+                            Arch.X64 -> MachineArchitecture.X86_64
+                            Arch.Arm64 -> MachineArchitecture.ARM64
+                            else -> error("Unsupported arch for awtRuntimeElements: $arch")
+                        }
+                    )
+                )
+                attributes.attribute(
+                    SkikoGpuBackendAttribute.ATTRIBUTE,
+                    project.objects.named(SkikoGpuBackendAttribute::class.java, variantId)
+                )
 
-            /*
-            Add the dependency to the actual JVM runtime artifact.
-             */
-            dependencies.add(
-                project.dependencies.create(
-                    SkikoArtifacts.groupId,
-                    SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch),
-                    skiko.deployVersion
+                /*
+                Add the dependency to the actual JVM runtime artifact.
+                */
+                dependencies.add(
+                    project.dependencies.create(
+                        SkikoArtifacts.groupId,
+                        SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch),
+                        skiko.deployVersion
+                    )
                 )
-            )
+            }
         }
     }
 
     /* Create a new software component and add all variants */
     val component = project.serviceOf<SoftwareComponentFactory>().adhoc("awtRuntimeElements")
-    allJvmRuntimeVariants.forEach { variant ->
+    allVariantConfigs.forEach { variant ->
         component.addVariantsFromConfiguration(variant) {
             mapToMavenScope("runtime")
         }
@@ -279,7 +366,7 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
 /**
  * Adds dependency constraints from the skiko-awt (Kotlin) publication to all skiko-awt-runtime-* (JNI) artifacts.
  * This ensures compatibility between the Kotlin and native runtime artifacts.
- * 
+ *
  * Constraints are added to the awt target's configurations, which automatically propagates them to both:
  * - Maven POM (via dependencyManagement section)
  * - Gradle Module Metadata (via dependencyConstraints in variants)
@@ -298,7 +385,7 @@ private fun SkikoPublishingContext.configureAwtPublicationConstraints() {
                     "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactId}:${skiko.deployVersion}!!"
                 )
             )
-            
+
             // Add constraints for platform-specific runtime artifacts
             awtRuntimeTargets.forEach { (os, arch) ->
                 config.dependencyConstraints.add(
@@ -341,4 +428,122 @@ private fun SkikoPublishingContext.configurePomNames() = publications {
         this as MavenPublication
         pom.name.set(pomNameForPublication[name]!!)
     }
+}
+
+private fun SkikoPublishingContext.configureNativeCinteropPublications() {
+    val nativeTargetAttribute = Attribute.of("org.jetbrains.kotlin.native.target", String::class.java)
+    kotlin.targets
+        .filterIsInstance<KotlinNativeTarget>()
+        .forEach { target ->
+            val os = target.resolveOs() ?: return@forEach
+            val arch = target.resolveArch() ?: return@forEach
+
+            val isUikitSim = target.isUikitSimulator()
+            val nativeArtifactId = SkikoArtifacts.nativeArtifactIdFor(os, arch, isUikitSim)
+            val cinteropArtifactId = "$nativeArtifactId-cinterop"
+            val publicationName = "skikoNativeCinterop${target.name.replaceFirstChar { it.uppercase() }}"
+
+            pomNameForPublication[publicationName] = "Skiko Native Cinterop ${target.name}"
+            project.afterEvaluate {
+                val component = project.serviceOf<SoftwareComponentFactory>()
+                    .adhoc(publicationName)
+
+                skiko.requestedGpuBackends.forEach { requestedGpuBackend ->
+                    val cinteropTask = project.tasks
+                        .withType(CInteropProcess::class.java)
+                        .firstOrNull {
+                            it.konanTarget == target.konanTarget &&
+                                    it.interopName.endsWith(requestedGpuBackend.id, ignoreCase = true)
+                        } ?: return@forEach
+                    // Workaround as cinteropTask needs to be unpacked during compilation
+                    val zipTaskName = "zip${cinteropTask.name.replaceFirstChar { it.uppercase() }}ForPublication"
+                    val zipTask = project.tasks.register<Zip>(zipTaskName) {
+                        dependsOn(cinteropTask)
+                        from(cinteropTask.klibDirectory)
+                        destinationDirectory.set(project.layout.buildDirectory.dir("cinterop-publications"))
+                        archiveBaseName.set("${target.name}-cinterop-${requestedGpuBackend.id}")
+                        archiveExtension.set("klib")
+                    }
+
+                    val configName =
+                        "skikoNativeCinteropElements${target.name.replaceFirstChar { it.uppercase() }}${requestedGpuBackend.id.replaceFirstChar { it.uppercase() }}"
+
+                    val variantElements = project.configurations.create(configName) {
+                        isCanBeResolved = false
+                        isCanBeConsumed = true
+                        attributes {
+                            // By default consumers look for kotlin-api not kotlin-cinterop
+                            attribute(Usage.USAGE_ATTRIBUTE, objects.named(KotlinUsages.KOTLIN_API))
+                            attribute(
+                                Category.CATEGORY_ATTRIBUTE,
+                                project.objects.named(Category::class.java, Category.LIBRARY)
+                            )
+                            attribute(KotlinPlatformType.attribute, KotlinPlatformType.native)
+                            attribute(nativeTargetAttribute, target.konanTarget.name)
+                            @OptIn(ExperimentalKotlinGradlePluginApi::class)
+                            attribute(
+                                KlibPackaging.ATTRIBUTE,
+                                project.objects.named(KlibPackaging::class.java, KlibPackaging.PACKED)
+                            )
+                            attribute(
+                                SkikoGpuBackendAttribute.ATTRIBUTE,
+                                project.objects.named(
+                                    SkikoGpuBackendAttribute::class.java,
+                                    requestedGpuBackend.id.lowercase()
+                                )
+                            )
+                        }
+                        outgoing.artifact(zipTask) {
+                            extension = "klib"
+                            classifier = requestedGpuBackend.id.lowercase()
+                        }
+                    }
+
+                    component.addVariantsFromConfiguration(variantElements) {
+                        mapToMavenScope("compile")
+                    }
+                }
+
+                project.extensions.getByType(PublishingExtension::class.java)
+                    .publications.apply {
+                        create(publicationName, MavenPublication::class.java) {
+                            from(component)
+                            groupId = SkikoArtifacts.groupId
+                            artifactId = cinteropArtifactId
+                            version = skiko.deployVersion
+                            artifact(emptySourcesJar)
+                            pom.withXml {
+                                val deps = asElement().getElementsByTagName("dependencies")
+                                for (i in 0 until deps.length) deps.item(i).parentNode.removeChild(deps.item(i))
+                            }
+                        }
+                    }
+
+                project.configurations
+                    .findByName("${target.name}ApiElements")
+                    ?.dependencies
+                    ?.add(
+                        project.dependencies.create(
+                            SkikoArtifacts.groupId,
+                            cinteropArtifactId,
+                            skiko.deployVersion
+                        )
+                    )
+            }
+        }
+}
+
+fun KotlinNativeTarget.resolveOs() = when {
+    name.startsWith("macos") -> OS.MacOS
+    name.contains("Simulator", ignoreCase = true) -> OS.IOS
+    name.startsWith("ios") -> OS.IOS
+    name.startsWith("tvos") -> OS.TVOS
+    name.startsWith("linux") -> OS.Linux
+    else -> null
+}
+
+fun KotlinNativeTarget.resolveArch() = when {
+    name.contains("Arm64", ignoreCase = true) -> Arch.Arm64
+    name.contains("X64", ignoreCase = true) -> Arch.X64
+    else -> null
 }

@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <iostream>
 #include <jni.h>
 #include "ganesh/GrBackendSurface.h"
@@ -43,3 +44,4 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_BackendTextureKt__1nGL
     GrBackendTexture* backendTexture = reinterpret_cast<GrBackendTexture*>(static_cast<uintptr_t>(backendTexturePtr));
     GrBackendTextures::GLTextureParametersModified(backendTexture);
 }
+#endif

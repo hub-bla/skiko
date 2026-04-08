@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <iostream>
 #include <jni.h>
 #include "ganesh/GrDirectContext.h"
@@ -103,3 +104,4 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_DirectContextKt__1nAba
     GrDirectContext* context = reinterpret_cast<GrDirectContext*>(static_cast<uintptr_t>(ptr));
     context->abandonContext();
 }
+#endif

@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsTargetDsl
 import projectDirs
 import registerOrGetSkiaDirProvider
+import resolveForTarget
 import supportWeb
 import wasmImport
 import java.io.File
@@ -54,11 +55,13 @@ fun SkikoProjectContext.declareWasmTasks() {
         includeHeadersNonRecursive(project.projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/webMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/commonMain/cpp/common/include"))
-        includeHeadersNonRecursive(skiaHeadersDirs(skiaWasmDir.get()))
+        includeHeadersNonRecursive(skiaHeadersDirs(OS.Wasm, Arch.Wasm, buildType, skiaWasmDir.get()))
+
+        val backends = skiko.requestedGpuBackends.resolveForTarget(OS.Wasm)
 
         flags.set(
             buildList {
-                addAll(skiaPreprocessorFlags(OS.Wasm, buildType))
+                addAll(skiaPreprocessorFlags(OS.Wasm, buildType, backends))
                 addAll(buildType.clangFlags)
                 add("-fno-rtti")
                 add("-fno-exceptions")
@@ -75,7 +78,7 @@ fun SkikoProjectContext.declareWasmTasks() {
         buildTargetOS.set(OS.Wasm)
         buildTargetArch.set(Arch.Wasm)
         buildVariant.set(buildType)
-
+        // TODO: exclude unused libs
         libFiles = project.fileTree(skiaWasmDir.get()) { include("**/*.a") }
         objectFiles = project.fileTree(compileWasm.map { it.outDir.get() }) {
             include("**/*.o")

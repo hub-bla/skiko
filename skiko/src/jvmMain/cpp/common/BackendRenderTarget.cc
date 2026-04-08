@@ -1,3 +1,4 @@
+#ifdef SK_GANESH
 #include <iostream>
 #include <jni.h>
 #include <ganesh/gl/GrGLBackendSurface.h>
@@ -53,3 +54,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_BackendRenderTargetKt
     return reinterpret_cast<jlong>(instance);
 }
 #endif //SK_DIRECT3D
+#endif

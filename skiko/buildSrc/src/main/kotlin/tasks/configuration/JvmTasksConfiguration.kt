@@ -8,6 +8,7 @@ import LinkSkikoTask
 import OS
 import SealAndSignSharedLibraryTask
 import SkiaBuildType
+import SkiaGpuBackend
 import SkikoProjectContext
 import compilerForTarget
 import dynamicLibExt
@@ -35,8 +36,10 @@ import java.io.File
 fun SkikoProjectContext.createCompileJvmBindingsTask(
     targetOs: OS,
     targetArch: Arch,
-    skiaJvmBindingsDir: Provider<File>
-) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings", targetOs, targetArch) {
+    skiaJvmBindingsDir: Provider<File>,
+    concreteBackends: List<SkiaGpuBackend>,
+    backendId: String,
+) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings", targetOs, targetArch, backendId) {
     // Prefer 'java.home' system property to simplify overriding from Intellij.
     // When used from command-line, it is effectively equal to JAVA_HOME.
     if (JavaVersion.current() < JavaVersion.VERSION_17) {
@@ -47,7 +50,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     dependsOn(skiaJvmBindingsDir)
     buildTargetOS.set(targetOs)
     buildTargetArch.set(targetArch)
-    buildSuffix.set("jvm")
+    buildSuffix.set("jvm-$backendId")
     buildVariant.set(buildType)
 
     val srcDirs = projectDirs(
@@ -60,7 +63,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     sourceRoots.set(srcDirs)
     if (targetOs != OS.Android) includeHeadersNonRecursive(jdkHome.resolve("include"))
     val skiaDir = skiaJvmBindingsDir.get()
-    includeHeadersNonRecursive(skiaHeadersDirs(skiaDir))
+    includeHeadersNonRecursive(skiaHeadersDirs(targetOs, targetArch, buildType, skiaJvmBindingsDir.get()))
     val projectDir = project.projectDir
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/common"))
@@ -134,7 +137,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
 
     flags.set(
         listOf(
-            *skiaPreprocessorFlags(targetOs, buildType),
+            *skiaPreprocessorFlags(targetOs, buildType, concreteBackends),
             *osFlags
         )
     )
@@ -183,8 +186,10 @@ fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<
 fun SkikoProjectContext.createObjcCompileTask(
     os: OS,
     arch: Arch,
-    skiaJvmBindingsDir: Provider<File>
-) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch) {
+    skiaJvmBindingsDir: Provider<File>,
+    concreteBackends: List<SkiaGpuBackend>,
+    backendId: String,
+) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch, backendId) {
     dependsOn(skiaJvmBindingsDir)
 
     val srcDirs = projectDirs(
@@ -195,7 +200,7 @@ fun SkikoProjectContext.createObjcCompileTask(
 
     includeHeadersNonRecursive(jdkHome.resolve("include"))
     includeHeadersNonRecursive(jdkHome.resolve("include/darwin"))
-    includeHeadersNonRecursive(skiaHeadersDirs(skiaJvmBindingsDir.get()))
+    includeHeadersNonRecursive(skiaHeadersDirs(os, arch, buildType, skiaJvmBindingsDir.get()))
     val projectDir = project.projectDir
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
@@ -205,6 +210,7 @@ fun SkikoProjectContext.createObjcCompileTask(
     buildVariant.set(buildType)
     buildTargetOS.set(os)
     buildTargetArch.set(arch)
+    buildSuffix.set("jvm-objc-$backendId")
     flags.set(
         listOf(
             "-fobjc-arc",
@@ -212,7 +218,7 @@ fun SkikoProjectContext.createObjcCompileTask(
             *project.appleMacOsSdkFlags().toTypedArray(),
             *os.clangFlags,
             *buildType.clangFlags,
-            *skiaPreprocessorFlags(os, buildType),
+            *skiaPreprocessorFlags(os, buildType, concreteBackends),
             "-fPIC"
         )
     )
@@ -224,15 +230,30 @@ fun SkikoProjectContext.createLinkJvmBindings(
     targetArch: Arch,
     skiaJvmBindingsDir: Provider<File>,
     compileTask: TaskProvider<CompileSkikoCppTask>,
-    objcCompileTask: TaskProvider<CompileSkikoObjCTask>?
-) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings", targetOs, targetArch) {
+    objcCompileTask: TaskProvider<CompileSkikoObjCTask>?,
+    backends: List<SkiaGpuBackend>,
+    // Public id ("ganesh", "graphite", "all") used for task names — hides the dawn/native split.
+    backendId: String,
+) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings", targetOs, targetArch, backendId) {
     val target = targetId(targetOs, targetArch)
     val skiaBinSubdir = "out/${buildType.id}-$target"
     val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
     val osFlags: Array<String>
+    val enabledSkiaBackends = backends
 
+    val disabledSkiaBackends = SkiaGpuBackend.values().toSet() - enabledSkiaBackends.toSet()
+    val libsToExclude = disabledSkiaBackends.flatMap { skiaBackend ->
+        val libs = skiaBackend.staticLibraries(targetOs)
+
+        if (targetOs.isWindows) {
+            libs.map { it.replace(".a", ".lib") }
+        } else {
+            libs
+        }
+    }
     libFiles = project.fileTree(skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }) {
         include(if (targetOs.isWindows) "*.lib" else "*.a")
+        exclude(libsToExclude)
     }
 
     dependsOn(compileTask)
@@ -242,7 +263,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
     val libNamePrefix = if (targetOs.isWindows) "skiko" else "libskiko"
     libOutputFileName.set("$libNamePrefix-${targetOs.id}-${targetArch.id}${targetOs.dynamicLibExt}")
     buildTargetOS.set(targetOs)
-    buildSuffix.set("jvm")
+    buildSuffix.set("jvm-$backendId")
     buildTargetArch.set(targetArch)
     buildVariant.set(buildType)
     linker.set(linkerForTarget(targetOs, targetArch))
@@ -268,6 +289,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-framework", "CoreText",
                 "-framework", "Foundation",
                 "-framework", "IOKit",
+                "-framework", "IOSurface",
                 "-framework", "Metal",
                 "-framework", "OpenGL",
                 "-framework", "QuartzCore" // for CoreAnimation
@@ -295,6 +317,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "$skiaBinDir/libskshaper.a",
                         "$skiaBinDir/libjsonreader.a"
                     )
+                )
+                addAll(
+                    enabledSkiaBackends.flatMap { it.staticLibraries(OS.Linux) }.map { "$skiaBinDir/$it" }
                 )
                 if (targetArch == Arch.Arm64) {
                     add("-lEGL")
@@ -340,6 +365,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-latomic",
                 // Hack to fix problem with linker not always finding certain declarations.
                 "$skiaBinDir/libskia.a",
+                *enabledSkiaBackends.flatMap { it.staticLibraries(OS.Android) }.map { "$skiaBinDir/$it" }.toTypedArray()
             )
             linker.set(project.androidClangFor(targetArch))
         }
@@ -372,15 +398,16 @@ fun SkikoProjectContext.createDownloadCodeSignClientDarwinTask(
 
     doLast {
         val downloadedFile = project.layout.buildDirectory.get().asFile.resolve(hostArch.darwinSignClientName)
-         downloadedFile.setExecutable(true)
+        downloadedFile.setExecutable(true)
     }
 }
 
 fun SkikoProjectContext.maybeSignOrSealTask(
     targetOs: OS,
     targetArch: Arch,
-    linkJvmBindings: Provider<LinkSkikoTask>
-) = project.registerSkikoTask<SealAndSignSharedLibraryTask>("maybeSign", targetOs, targetArch) {
+    linkJvmBindings: Provider<LinkSkikoTask>,
+    backendId: String,
+) = project.registerSkikoTask<SealAndSignSharedLibraryTask>("maybeSign", targetOs, targetArch, backendId) {
     dependsOn(linkJvmBindings)
 
     if (targetOs.isMacOs) {
@@ -393,7 +420,7 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     }
     libFile.set(project.layout.file(linkOutputFile))
     val target = targetId(targetOs, targetArch)
-    outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target"))
+    outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target-$backendId"))
 
     val toolsDir = project.layout.projectDirectory.dir("tools")
     if (targetOs == OS.Linux) {
@@ -418,54 +445,71 @@ fun SkikoProjectContext.skikoJvmRuntimeJarTask(
     targetOs: OS,
     targetArch: Arch,
     awtJar: TaskProvider<Jar>,
-    nativeFiles: List<Provider<File>>
-) = project.registerSkikoTask<Jar>("skikoJvmRuntimeJar", targetOs, targetArch) {
+    nativeFiles: List<Provider<File>>,
+    backendId: String,
+) = project.registerSkikoTask<Jar>("skikoJvmRuntimeJar", targetOs, targetArch, backendId) {
     dependsOn(awtJar)
-    val target = targetId(targetOs, targetArch)
     archiveBaseName.set("skiko")
-    archiveClassifier.set(target)
-    nativeFiles.forEach { provider -> from(provider) }
+    archiveClassifier.set("${targetId(targetOs, targetArch)}-$backendId")
+    nativeFiles.forEach { provider -> from(project.files(provider)) }
 }
 
 fun SkikoProjectContext.createSkikoJvmJarTask(os: OS, arch: Arch, commonJar: TaskProvider<Jar>): TaskProvider<Jar> = with(this.project) {
     val skiaBindingsDir = registerOrGetSkiaDirProvider(os, arch)
-    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaBindingsDir)
-    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaBindingsDir) else null
-    val linkBindings =
-        createLinkJvmBindings(os, arch, skiaBindingsDir, compileBindings, objcCompile)
-    if (os.isMacOs) {
-        createDownloadCodeSignClientDarwinTask(os, hostArch)
+
+    if (os.isMacOs) createDownloadCodeSignClientDarwinTask(os, hostArch)
+
+    val isMacArm = os == OS.MacOS && arch == Arch.Arm64
+    val altArch = Arch.X64
+
+    fun buildNativeFilesPipeline(
+        pipelineOs: OS,
+        pipelineArch: Arch,
+        bindingsDir: Provider<File>,
+        concreteBackends: List<SkiaGpuBackend>,
+        publicId: String
+    ): MutableList<Provider<File>> {
+        val compile = createCompileJvmBindingsTask(pipelineOs, pipelineArch, bindingsDir, concreteBackends, publicId)
+        val objc = if (pipelineOs == OS.MacOS) createObjcCompileTask(pipelineOs, pipelineArch, bindingsDir, concreteBackends, publicId) else null
+        val link = createLinkJvmBindings(pipelineOs, pipelineArch, bindingsDir, compile, objc, concreteBackends, publicId)
+        val sign = maybeSignOrSealTask(pipelineOs, pipelineArch, link, publicId)
+
+        val nativeLib = sign.map { it.outputFiles.get().single() }
+        val checksums = createChecksumsTask(pipelineOs, pipelineArch, nativeLib, publicId)
+
+        val files = mutableListOf(nativeLib, checksums.map { it.outputs.files.singleFile })
+
+        if (pipelineOs == OS.Windows) {
+            val target = targetId(pipelineOs, pipelineArch)
+            // Add ICU data files.
+            files.add(bindingsDir.map { file(it.resolve("out/${buildType.id}-$target/icudtl.dat")) })
+        }
+        return files
     }
-    val maybeSign = maybeSignOrSealTask(os, arch, linkBindings)
-    val nativeLib = maybeSign.map { it.outputFiles.get().single() }
-    val createChecksums = createChecksumsTask(os, arch, nativeLib)
-    val nativeFiles = mutableListOf(
-        nativeLib,
-        createChecksums.map { it.outputs.files.singleFile }
-    )
-    if (os == OS.Windows) {
-        val target = targetId(os, arch)
-        // Add ICU data files.
-        nativeFiles.add(skiaBindingsDir.map { file(it.resolve("out/${buildType.id}-$target/icudtl.dat")) })
+
+
+    skiko.requestedGpuBackends.forEach { requested ->
+        val concreteBackend = requested.resolveForTarget(os, isNative = false)
+        val publicId = requested.id
+
+        val nativeFiles = buildNativeFilesPipeline(os, arch, skiaBindingsDir, concreteBackend, publicId)
+
+        if (isMacArm) {
+            val skiaBindingsDirAlt = registerOrGetSkiaDirProvider(os, altArch)
+            val altNativeFiles = buildNativeFilesPipeline(os, altArch, skiaBindingsDirAlt, concreteBackend, publicId)
+            nativeFiles.addAll(altNativeFiles)
+
+            allJvmRuntimeJars[Triple(os, altArch, requested)] =
+                skikoJvmRuntimeJarTask(os, altArch, commonJar, nativeFiles, publicId)
+        }
+
+        allJvmRuntimeJars[Triple(os, arch, requested)] =
+            skikoJvmRuntimeJarTask(os, arch, commonJar, nativeFiles, publicId)
     }
-    // For ARM macOS add x86 native code for compatibility.
-    if (os == OS.MacOS && arch == Arch.Arm64) {
-        val altArch = Arch.X64
-        val skiaBindingsDir2 = registerOrGetSkiaDirProvider(os, altArch)
-        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaBindingsDir2)
-        val objcCompile2 = createObjcCompileTask(os, altArch, skiaBindingsDir2)
-        val linkBindings2 =
-            createLinkJvmBindings(os, altArch, skiaBindingsDir2, compileBindings2, objcCompile2)
-        val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
-        val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
-        val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)
-        nativeFiles.add(nativeLib2)
-        nativeFiles.add(createChecksums2.map { it.outputs.files.singleFile })
-        allJvmRuntimeJars[os to altArch] = skikoJvmRuntimeJarTask(os, altArch, commonJar, nativeFiles)
-    }
-    val skikoJvmRuntimeJar = skikoJvmRuntimeJarTask(os, arch, commonJar, nativeFiles)
-    allJvmRuntimeJars[os to arch] = skikoJvmRuntimeJar
-    return skikoJvmRuntimeJar
+
+    val fallbackRequested = skiko.requestedGpuBackends.firstOrNull() ?: RequestedSkiaGpuBackend.ALL
+    return allJvmRuntimeJars[Triple(os, arch, fallbackRequested)]
+        ?: error("No GPU backends resolved for $os/$arch — check skia.gpu.backend property")
 }
 
 fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
@@ -481,7 +525,7 @@ fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
     additionalRuntimeLibraries.forEach { lib ->
         from(project.zipTree(lib.jarTask.flatMap { it.archiveFile }))
     }
-    
+
     duplicatesStrategy = DuplicatesStrategy.WARN
     destinationDir = project.layout.buildDirectory.dir("skiko-runtime-for-tests").get().asFile
 }

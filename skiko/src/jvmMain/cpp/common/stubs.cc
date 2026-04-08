@@ -271,3 +271,22 @@ JNIEXPORT jstring JNICALL Java_org_jetbrains_skiko_AngleApi_glGetString(
     return 0;
 }
 #endif
+
+#ifndef SK_GRAPHITE
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nGetFinalizer
+        (JNIEnv *env, jclass jclass) {
+    skikoUnimplemented("Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nGetFinalizer");
+}
+
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nWrapMetalTexture
+        (JNIEnv* env, jclass jclass, jlong texturePtr, jint width, jint height) {
+    skikoUnimplemented("Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nWrapMetalTexture");
+}
+#endif
+
+
+
+JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nGraphiteMakeMetal
+        (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
+    skikoUnimplemented("Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt_BackendTexture_1nWrapMetalTexture");
+}

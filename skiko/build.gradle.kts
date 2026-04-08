@@ -42,8 +42,8 @@ val skikoProjectContext = SkikoProjectContext(
     windowsSdkPathProvider = {
         findWindowsSdkPaths(gradle, targetArch)
     },
-    createChecksumsTask = { targetOs: OS, targetArch: Arch, fileToChecksum: Provider<File> ->
-        createChecksumsTask(targetOs, targetArch, fileToChecksum)
+    createChecksumsTask = { targetOs: OS, targetArch: Arch, fileToChecksum: Provider<File>, backendId: String ->
+        createChecksumsTask(targetOs, targetArch, fileToChecksum, backendId)
     },
     additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko)
 )
@@ -288,12 +288,13 @@ if (supportAndroid) {
 fun createChecksumsTask(
     targetOs: OS,
     targetArch: Arch,
-    fileToChecksum: Provider<File>
-) = project.registerSkikoTask<Checksum>("createChecksums", targetOs, targetArch) {
+    fileToChecksum: Provider<File>,
+    backendId: String,
+) = project.registerSkikoTask<Checksum>("createChecksums${joinToTitleCamelCase(backendId)}", targetOs, targetArch) {
 
     inputFiles = project.files(fileToChecksum)
     checksumAlgorithm = Checksum.Algorithm.SHA256
-    outputDirectory = layout.buildDirectory.dir("checksums-${targetId(targetOs, targetArch)}")
+    outputDirectory = layout.buildDirectory.dir("checksums-${targetId(targetOs, targetArch)}-$backendId")
 }
 
 

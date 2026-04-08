@@ -1,3 +1,4 @@
+#ifdef SK_GRAPHITE
 #include <jni.h>
 #include "../../interop.hh"
 #include "include/gpu/graphite/Context.h"
@@ -20,3 +21,4 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_Recorder
 
     return reinterpret_cast<jlong>(recording.release());
 }
+#endif
