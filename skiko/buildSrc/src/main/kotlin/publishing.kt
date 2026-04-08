@@ -274,6 +274,8 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
     val allVariantConfigs = awtRuntimeTargets.flatMap { (os, arch) ->
         projectContext.skiko.requestedGpuBackends.map { backend ->
             val variantId = backend.id
+
+            /* Setup default attributes */
             project.configurations.create("awtRuntimeElements-${targetId(os, arch)}-$variantId").apply {
                 attributes.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
                 attributes.attribute(Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY))
@@ -284,6 +286,10 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
                     TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
                     project.objects.named(TargetJvmEnvironment.STANDARD_JVM)
                 )
+
+                /*
+                Add OS and architecture attributes to the exposed configuration.
+                 */
                 attributes.attribute(
                     OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE,
                     project.objects.named(
@@ -309,6 +315,10 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
                     SkikoGpuBackendAttribute.ATTRIBUTE,
                     project.objects.named(SkikoGpuBackendAttribute::class.java, variantId)
                 )
+
+                /*
+                Add the dependency to the actual JVM runtime artifact.
+                */
                 dependencies.add(
                     project.dependencies.create(
                         SkikoArtifacts.groupId,
