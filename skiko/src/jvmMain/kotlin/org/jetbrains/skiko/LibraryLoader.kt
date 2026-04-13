@@ -7,23 +7,24 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-internal class LibraryLoader(
+@OptIn(InternalSkikoApi::class)
+class LibraryLoader(
     /**
      * Short library name without platform suffix and extension. For example "skiko" or "skiko-angle-libEGL"
      */
-    private val name: String,
+    val name: String,
 
     /**
      * Additional file to check or unpack after loading the library. For example, "icudtl.dat".
      *
      * Currently only one file is supported, but it can be extended to support multiple ones.
      */
-    private val additionalFile: String? = null,
+    val additionalFile: String? = null,
 
     /**
      * The lock file which shall be acquired if modifications on disk shall be synchronized across processes.
      */
-    private val lockFile: LockFile,
+    val lockFile: LockFile,
 
     /**
      * Additional code that is called after successfully loading

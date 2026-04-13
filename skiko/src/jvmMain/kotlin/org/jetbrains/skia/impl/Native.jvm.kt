@@ -3,7 +3,7 @@ package org.jetbrains.skia.impl
 import java.lang.ref.Reference
 
 actual abstract class Native actual constructor(ptr: NativePointer) {
-    internal actual var _ptr: NativePointer
+    actual var _ptr: NativePointer
 
     actual companion object {
         actual val NullPointer: NativePointer
@@ -42,21 +42,21 @@ actual abstract class Native actual constructor(ptr: NativePointer) {
     }
 }
 
-internal actual fun reachabilityBarrier(obj: Any?) {
+actual fun reachabilityBarrier(obj: Any?) {
     Reference.reachabilityFence(obj)
 }
 
 actual typealias NativePointer = Long
 
-internal actual typealias InteropPointer = java.lang.Object
+actual typealias InteropPointer = java.lang.Object
 
 internal object theScope: InteropScope()
-internal actual inline fun <T> interopScope(block: InteropScope.() -> T): T {
+actual inline fun <T> interopScope(block: InteropScope.() -> T): T {
     return theScope.block()
 }
 
 @Suppress("RETURN_TYPE_MISMATCH") // Hack to pass nulls as InteropPointer
-internal actual open class InteropScope actual constructor() {
+actual open class InteropScope actual constructor() {
     actual fun toInterop(string: String?): InteropPointer = string
 
     actual fun toInterop(array: ByteArray?): InteropPointer = array
