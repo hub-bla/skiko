@@ -50,16 +50,14 @@ fun Project.findXcodeSdkRoot(): String {
 }
 
 fun SkikoProjectContext.compileNativeBridgesTask(
-    os: OS, arch: Arch, isUikitSim: Boolean,  skiaDirProvider: Provider<File>? = null  // ← add this
+    os: OS, arch: Arch, isUikitSim: Boolean
 ): TaskProvider<CompileSkikoCppTask> = with (this.project) {
-    val skiaNativeDir = skiaDirProvider ?: registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
+    val skiaNativeDir = registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
 
     val actionName = "compileNativeBridges".withSuffix(isUikitSim = isUikitSim)
 
     return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch) {
-        if (skiaDirProvider == null) {
-            dependsOn(skiaNativeDir)
-        }
+        dependsOn(skiaNativeDir)
         val unpackedSkia = skiaNativeDir.get()
 
         compiler.set(compilerForTarget(os, arch))
@@ -289,7 +287,7 @@ fun SkikoProjectContext.configureGraphiteNativeTarget(os: OS, arch: Arch, target
         }
     }
 
-    val crossCompileTask = compileNativeBridgesTask(os, arch, isUikitSim = isUikitSim, skiaDirProvider = unzipper)
+    val crossCompileTask = compileNativeBridgesTask(os, arch, isUikitSim = isUikitSim)
 
     val actionName = "linkNativeBridges".withSuffix(isUikitSim = isUikitSim)
     val linkTask = project.registerSkikoTask<Exec>(actionName, os, arch) {

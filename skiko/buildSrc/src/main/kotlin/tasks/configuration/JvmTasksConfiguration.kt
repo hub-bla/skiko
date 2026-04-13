@@ -187,11 +187,8 @@ fun SkikoProjectContext.createObjcCompileTask(
     os: OS,
     arch: Arch,
     skiaJvmBindingsDir: Provider<File>,
-    isExternalDir: Boolean = false
 ) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch) {
-    if (!isExternalDir) {
-        dependsOn(skiaJvmBindingsDir)
-    }
+    dependsOn(skiaJvmBindingsDir)
     val srcDirs = projectDirs(
         "src/awtMain/objectiveC/${os.id}"
     )
@@ -371,7 +368,7 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     val libBaseName = "skiko-graphite"
     val skiaDir = registerOrGetSkiaDirProvider(os, arch)
     val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDir, true)
-    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDir, true) else null
+    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDir) else null
     val linkBindings = createLinkJvmBindings(os, arch, skiaDir, compileBindings, objcCompile, libBaseName)
     if (os.isMacOs) {
         createDownloadCodeSignClientDarwinTask(os, hostArch)
@@ -386,7 +383,7 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     if (os == OS.MacOS && arch == Arch.Arm64) {
         val altArch = Arch.X64
         val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDir, true)
-        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDir, true)
+        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDir)
         val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDir, compileBindings2, objcCompile2, libBaseName)
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
         val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
