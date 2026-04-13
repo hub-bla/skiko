@@ -240,12 +240,14 @@ if (supportAndroid) {
         from(kotlin.androidTarget("android").compilations["release"].output.allOutputs)
     }
     for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
-        skikoGraphiteContext.createSkikoJvmJarTask(os, arch, skikoGraphiteAndroidJar)
+        skikoGraphiteContext.createGraphiteSkikoJvmJarTask(os, arch, skikoGraphiteAndroidJar)
     }
     tasks.matching { name == "publishAndroidReleasePublicationToMavenLocal" }.configureEach {
+        // It needs to be compatible with Gradle 8.1
         dependsOn(skikoGraphiteAndroidJar)
     }
     tasks.matching { name == "generateMetadataFileForAndroidReleasePublication" }.configureEach {
+        // It needs to be compatible with Gradle 8.1
         dependsOn(skikoGraphiteAndroidJar)
     }
 }
@@ -282,6 +284,10 @@ fun createChecksumsTask(
 afterEvaluate {
     tasks.configureEach {
         if (group == "publishing") {
+            // There are many intermediate tasks in 'publishing' group.
+            // There are a lot of them and they have verbose names.
+            // To decrease noise in './gradlew tasks' output and Intellij Gradle tool window,
+            // group verbose tasks in a separate group 'other publishing'.
             val allRepositories = publishing.repositories.map { it.name } + "MavenLocal"
             val publishToTasks = allRepositories.map { "publishTo$it" }
             if (name != "publish" && name !in publishToTasks) {
