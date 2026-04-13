@@ -272,27 +272,31 @@ object SkikoGradleProperties {
 
 object SkikoArtifacts {
     val groupId = "org.jetbrains.skiko"
+
+    fun artifactPrefix(moduleSuffix: String? = null) =
+        if (moduleSuffix != null) "skiko-$moduleSuffix" else "skiko"
     // names are also used in samples, e.g. samples/SkijaInjectSample/build.gradle
-    val commonArtifactId = "skiko"
-    val jvmArtifactId = "skiko-awt"
-    val jvmRuntimeArtifactId = "skiko-awt-runtime"
+    fun commonArtifactId(moduleSuffix: String? = null) = artifactPrefix(moduleSuffix)
+    fun jvmArtifactId(moduleSuffix: String? = null) = "${artifactPrefix(moduleSuffix)}-awt"
+    fun jvmRuntimeArtifactId(moduleSuffix: String? = null) = "${artifactPrefix(moduleSuffix)}-awt-runtime"
     // an artifact (klib) for k/js targets
-    val jsArtifactId = "skiko-js"
+    fun jsArtifactId(moduleSuffix: String? = null) = "${artifactPrefix(moduleSuffix)}-js"
     // an artifact (klib) for k/wasm targets
-    val wasmArtifactId = "skiko-wasm-js"
+    fun wasmArtifactId(moduleSuffix: String? = null) = "${artifactPrefix(moduleSuffix)}-wasm-js"
     // an artifact with skiko.wasm and supporting js code - jar
-    val jsWasmArtifactId = "skiko-js-wasm-runtime"
-    fun jvmRuntimeArtifactIdFor(os: OS, arch: Arch) =
+    fun jsWasmArtifactId(moduleSuffix: String? = null) = "${artifactPrefix(moduleSuffix)}-js-wasm-runtime"
+    fun jvmRuntimeArtifactIdFor(os: OS, arch: Arch, moduleSuffix: String? = null) =
         if (os == OS.Android)
-            "skiko-android-runtime-${arch.id}"
+            "${artifactPrefix(moduleSuffix)}-android-runtime-${arch.id}"
         else
-            "skiko-awt-runtime-${targetId(os, arch)}"
-    fun jvmAdditionalRuntimeArtifactIdFor(name: String, os: OS, arch: Arch) =
-        "skiko-awt-runtime-$name-${os.id}-${arch.id}"
+            "${artifactPrefix(moduleSuffix)}-awt-runtime-${targetId(os, arch)}"
+
+    fun jvmAdditionalRuntimeArtifactIdFor(name: String, os: OS, arch: Arch, moduleSuffix: String? = null) =
+        "${artifactPrefix(moduleSuffix)}-awt-runtime-$name-${os.id}-${arch.id}"
     // Using custom name like skiko-<Os>-<Arch> (with a dash)
     // does not seem possible (at least without adding a dash to a target's tasks),
     // so we're using the default naming pattern instead.
     // See https://youtrack.jetbrains.com/issue/KT-50001.
-    fun nativeArtifactIdFor(os: OS, arch: Arch, isUikitSim: Boolean = false) =
-        "skiko-${os.id + if (isUikitSim) "simulator" else ""}${arch.id}"
+    fun nativeArtifactIdFor(os: OS, arch: Arch, isUikitSim: Boolean = false, moduleSuffix: String? = null) =
+        "${artifactPrefix(moduleSuffix)}-${os.id + if (isUikitSim) "simulator" else ""}${arch.id}"
 }
