@@ -35,8 +35,7 @@ import java.io.File
 fun SkikoProjectContext.createCompileJvmBindingsTask(
     targetOs: OS,
     targetArch: Arch,
-    skiaJvmBindingsDir: Provider<File>,
-    isExternalDir: Boolean = false
+    skiaJvmBindingsDir: Provider<File>
 ) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings", targetOs, targetArch) {
     // Prefer 'java.home' system property to simplify overriding from Intellij.
     // When used from command-line, it is effectively equal to JAVA_HOME.
@@ -45,9 +44,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "Check JAVA_HOME (CLI) or Gradle settings (Intellij).")
     }
     val jdkHome = File(System.getProperty("java.home") ?: error("'java.home' is null"))
-    if (!isExternalDir) {
-        dependsOn(skiaJvmBindingsDir)
-    }
+    dependsOn(skiaJvmBindingsDir)
     buildTargetOS.set(targetOs)
     buildTargetArch.set(targetArch)
     buildSuffix.set("jvm")
@@ -367,7 +364,7 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     val project = this.project
     val libBaseName = "skiko-graphite"
     val skiaDir = registerOrGetSkiaDirProvider(os, arch)
-    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDir, true)
+    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDir)
     val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDir) else null
     val linkBindings = createLinkJvmBindings(os, arch, skiaDir, compileBindings, objcCompile, libBaseName)
     if (os.isMacOs) {
@@ -382,7 +379,7 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     )
     if (os == OS.MacOS && arch == Arch.Arm64) {
         val altArch = Arch.X64
-        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDir, true)
+        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDir)
         val objcCompile2 = createObjcCompileTask(os, altArch, skiaDir)
         val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDir, compileBindings2, objcCompile2, libBaseName)
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
