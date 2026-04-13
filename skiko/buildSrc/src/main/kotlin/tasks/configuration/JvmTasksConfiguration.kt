@@ -365,13 +365,14 @@ private val Arch.darwinSignClientName: String
 fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     os: OS,
     arch: Arch,
-    commonJar: TaskProvider<Jar>,
-    skiaDirProvider: Provider<File>
-): TaskProvider<Jar> = with(this.project) {
+    commonJar: TaskProvider<Jar>
+): TaskProvider<Jar> {
+    val project = this.project
     val libBaseName = "skiko-graphite"
-    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDirProvider, true)
-    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDirProvider, true) else null
-    val linkBindings = createLinkJvmBindings(os, arch, skiaDirProvider, compileBindings, objcCompile, libBaseName)
+    val skiaDir = registerOrGetSkiaDirProvider(os, arch)
+    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDir, true)
+    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDir, true) else null
+    val linkBindings = createLinkJvmBindings(os, arch, skiaDir, compileBindings, objcCompile, libBaseName)
     if (os.isMacOs) {
         createDownloadCodeSignClientDarwinTask(os, hostArch)
     }
@@ -384,9 +385,9 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
     )
     if (os == OS.MacOS && arch == Arch.Arm64) {
         val altArch = Arch.X64
-        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDirProvider, true)
-        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDirProvider, true)
-        val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDirProvider, compileBindings2, objcCompile2, libBaseName)
+        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDir, true)
+        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDir, true)
+        val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDir, compileBindings2, objcCompile2, libBaseName)
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
         val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
         val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)

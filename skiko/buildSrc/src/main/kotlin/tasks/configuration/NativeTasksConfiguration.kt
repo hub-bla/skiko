@@ -238,15 +238,7 @@ fun SkikoProjectContext.configureGraphiteNativeTarget(os: OS, arch: Arch, target
     val isUikitSim = target.isUikitSimulator()
     val targetString = "${os.idWithSuffix(isUikitSim = isUikitSim)}-${arch.id}"
 
-    val unzipper = if (skiko.skiaDir != null) {
-        registerOrGetSkiaDirProvider(os, arch, isUikitSim)
-    } else {
-        val skiaReleaseTag = project.skiaVersion("${os.idWithSuffix(isUikitSim = isUikitSim)}-${arch.id}")
-        val artifactId = "Skia-${skiaReleaseTag}-${os.idWithSuffix(isUikitSim = isUikitSim)}-${buildType.id}-${arch.id}"
-        val skiaDir = skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId")
-        project.provider { skiaDir.absoluteFile }
-    }
-
+    val unzipper = registerOrGetSkiaDirProvider(os, arch, isUikitSim)
     val unpackedSkia = unzipper.get()
     val skiaDir = unpackedSkia.absolutePath
 

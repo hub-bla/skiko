@@ -56,6 +56,7 @@ kotlin {
     }
 
     applyHierarchyTemplate(skikoSourceSetHierarchyTemplate)
+    skikoGraphiteContext.declareSkiaTasks()
 
     if (supportAwt) {
         jvm("awt") {
@@ -86,16 +87,7 @@ kotlin {
     }
 
     if (supportWeb) {
-        val wasmSkiaDir: Provider<File> = if (skiko.skiaDir != null) {
-            project.provider { skiko.skiaDir!!.absoluteFile }
-        } else {
-            val skiaReleaseTag = project.skiaVersion("wasm-wasm")
-            val artifactId = "Skia-${skiaReleaseTag}-wasm-${buildType.id}-wasm"
-            project.provider {
-                skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId").absoluteFile
-            }
-        }
-        skikoGraphiteContext.declareWasmTasks(wasmSkiaDir)
+        skikoGraphiteContext.declareWasmTasks()
 
         js {
             outputModuleName.set("skiko-graphite-kjs") // override the name to avoid name collision with a different skiko.js file
@@ -255,17 +247,7 @@ if (supportAwt) {
         archiveBaseName.set("skiko-graphite-awt")
         from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
     }
-    val skiaDir: Provider<File> = if (skiko.skiaDir != null) {
-        project.provider { skiko.skiaDir!!.absoluteFile }
-    } else {
-        val targetString = "${targetOs.idWithSuffix()}-${targetArch.id}"
-        val skiaReleaseTag = project.skiaVersion(targetString)
-        val artifactId = "Skia-${skiaReleaseTag}-${targetOs.id}-${buildType.id}-${targetArch.id}"
-        project.provider {
-            skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId").absoluteFile
-        }
-    }
-    skikoGraphiteContext.createGraphiteSkikoJvmJarTask(targetOs, targetArch, skikoGraphiteAwtJar, skiaDir)
+    skikoGraphiteContext.createGraphiteSkikoJvmJarTask(targetOs, targetArch, skikoGraphiteAwtJar)
     afterEvaluate {
         tasks.matching { it.name == "publishAwtPublicationToMavenLocal" }.configureEach {
             dependsOn(skikoGraphiteAwtJar)
