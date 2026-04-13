@@ -356,43 +356,7 @@ private val Arch.darwinSignClientName: String
         Arch.Arm64 -> "codesign-client-darwin-arm64"
         else -> error("Unexpected Arch = $this for codesign-client")
     }
-fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
-    os: OS,
-    arch: Arch,
-    commonJar: TaskProvider<Jar>
-): TaskProvider<Jar> {
-    val project = this.project
-    val libBaseName = "skiko-graphite"
-    val skiaDir = registerOrGetSkiaDirProvider(os, arch)
-    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDir)
-    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDir) else null
-    val linkBindings = createLinkJvmBindings(os, arch, skiaDir, compileBindings, objcCompile, libBaseName)
-    if (os.isMacOs) {
-        createDownloadCodeSignClientDarwinTask(os, hostArch)
-    }
-    val maybeSign = maybeSignOrSealTask(os, arch, linkBindings)
-    val nativeLib = maybeSign.map { it.outputFiles.get().single() }
-    val createChecksums = createChecksumsTask(os, arch, nativeLib)
-    val nativeFiles = mutableListOf(
-        nativeLib,
-        createChecksums.map { it.outputs.files.singleFile }
-    )
-    if (os == OS.MacOS && arch == Arch.Arm64) {
-        val altArch = Arch.X64
-        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDir)
-        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDir)
-        val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDir, compileBindings2, objcCompile2, libBaseName)
-        val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
-        val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
-        val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)
-        nativeFiles.add(nativeLib2)
-        nativeFiles.add(createChecksums2.map { it.outputs.files.singleFile })
-        allJvmRuntimeJars[os to altArch] = skikoJvmRuntimeJarTask(os, altArch, commonJar, nativeFiles, libBaseName)
-    }
-    val skikoJvmRuntimeJar = skikoJvmRuntimeJarTask(os, arch, commonJar, nativeFiles, libBaseName)
-    allJvmRuntimeJars[os to arch] = skikoJvmRuntimeJar
-    return skikoJvmRuntimeJar
-}
+
 fun SkikoProjectContext.createDownloadCodeSignClientDarwinTask(
     targetOs: OS,
     hostArch: Arch
@@ -464,12 +428,25 @@ fun SkikoProjectContext.skikoJvmRuntimeJarTask(
     nativeFiles.forEach { provider -> from(provider) }
 }
 
-fun SkikoProjectContext.createSkikoJvmJarTask(os: OS, arch: Arch, commonJar: TaskProvider<Jar>): TaskProvider<Jar> = with(this.project) {
+private fun SkikoProjectContext.createJvmJarInternal(
+    os: OS,
+    arch: Arch,
+    commonJar: TaskProvider<Jar>,
+    libBaseName: String,
+    includeIcu: Boolean
+): TaskProvider<Jar> = with(this.project) {
     val skiaBindingsDir = registerOrGetSkiaDirProvider(os, arch)
     val compileBindings = createCompileJvmBindingsTask(os, arch, skiaBindingsDir)
     val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaBindingsDir) else null
-    val linkBindings =
-        createLinkJvmBindings(os, arch, skiaBindingsDir, compileBindings, objcCompile)
+    val linkBindings = createLinkJvmBindings(
+        os,
+        arch,
+        skiaBindingsDir,
+        compileBindings,
+        objcCompile,
+        libBaseName
+    )
+
     if (os.isMacOs) {
         createDownloadCodeSignClientDarwinTask(os, hostArch)
     }
@@ -480,7 +457,7 @@ fun SkikoProjectContext.createSkikoJvmJarTask(os: OS, arch: Arch, commonJar: Tas
         nativeLib,
         createChecksums.map { it.outputs.files.singleFile }
     )
-    if (os == OS.Windows) {
+    if (includeIcu && os == OS.Windows) {
         val target = targetId(os, arch)
         // Add ICU data files.
         nativeFiles.add(skiaBindingsDir.map { file(it.resolve("out/${buildType.id}-$target/icudtl.dat")) })
@@ -491,19 +468,65 @@ fun SkikoProjectContext.createSkikoJvmJarTask(os: OS, arch: Arch, commonJar: Tas
         val skiaBindingsDir2 = registerOrGetSkiaDirProvider(os, altArch)
         val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaBindingsDir2)
         val objcCompile2 = createObjcCompileTask(os, altArch, skiaBindingsDir2)
-        val linkBindings2 =
-            createLinkJvmBindings(os, altArch, skiaBindingsDir2, compileBindings2, objcCompile2)
+        val linkBindings2 = createLinkJvmBindings(
+            os,
+            altArch,
+            skiaBindingsDir2,
+            compileBindings2,
+            objcCompile2,
+            libBaseName
+        )
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
         val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
         val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)
         nativeFiles.add(nativeLib2)
         nativeFiles.add(createChecksums2.map { it.outputs.files.singleFile })
-        allJvmRuntimeJars[os to altArch] = skikoJvmRuntimeJarTask(os, altArch, commonJar, nativeFiles)
+        allJvmRuntimeJars[os to altArch] = skikoJvmRuntimeJarTask(
+            os,
+            altArch,
+            commonJar,
+            nativeFiles,
+            libBaseName
+        )
     }
-    val skikoJvmRuntimeJar = skikoJvmRuntimeJarTask(os, arch, commonJar, nativeFiles)
+
+    val skikoJvmRuntimeJar = skikoJvmRuntimeJarTask(
+        os,
+        arch,
+        commonJar,
+        nativeFiles,
+        libBaseName
+    )
+
     allJvmRuntimeJars[os to arch] = skikoJvmRuntimeJar
     return skikoJvmRuntimeJar
 }
+
+fun SkikoProjectContext.createSkikoJvmJarTask(
+    os: OS,
+    arch: Arch,
+    commonJar: TaskProvider<Jar>
+): TaskProvider<Jar> =
+    createJvmJarInternal(
+        os,
+        arch,
+        commonJar,
+        libBaseName = "skiko",
+        includeIcu = true
+    )
+
+fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
+    os: OS,
+    arch: Arch,
+    commonJar: TaskProvider<Jar>
+): TaskProvider<Jar> =
+    createJvmJarInternal(
+        os,
+        arch,
+        commonJar,
+        libBaseName = "skiko-graphite",
+        includeIcu = false
+    )
 
 fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
     targetOs: OS,
