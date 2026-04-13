@@ -183,7 +183,7 @@ fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<
 fun SkikoProjectContext.createObjcCompileTask(
     os: OS,
     arch: Arch,
-    skiaJvmBindingsDir: Provider<File>,
+    skiaJvmBindingsDir: Provider<File>
 ) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch) {
     dependsOn(skiaJvmBindingsDir)
     val srcDirs = projectDirs(
