@@ -14,6 +14,7 @@ import listOfFrameworks
 import mutableListOfLinkerOptions
 import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.getByName
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
+import skiaVersion
 import java.io.File
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
@@ -48,14 +50,16 @@ fun Project.findXcodeSdkRoot(): String {
 }
 
 fun SkikoProjectContext.compileNativeBridgesTask(
-    os: OS, arch: Arch, isUikitSim: Boolean
+    os: OS, arch: Arch, isUikitSim: Boolean,  skiaDirProvider: Provider<File>? = null  // ← add this
 ): TaskProvider<CompileSkikoCppTask> = with (this.project) {
-    val skiaNativeDir = registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
+    val skiaNativeDir = skiaDirProvider ?: registerOrGetSkiaDirProvider(os, arch, isUikitSim = isUikitSim)
 
     val actionName = "compileNativeBridges".withSuffix(isUikitSim = isUikitSim)
 
     return project.registerSkikoTask<CompileSkikoCppTask>(actionName, os, arch) {
-        dependsOn(skiaNativeDir)
+        if (skiaDirProvider == null) {
+            dependsOn(skiaNativeDir)
+        }
         val unpackedSkia = skiaNativeDir.get()
 
         compiler.set(compilerForTarget(os, arch))
@@ -189,6 +193,16 @@ fun configureCinterop(
     }
 }
 
+fun skiaGraphiteStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
+    val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
+    return buildList {
+        add("$skiaBinSubdir/libskia_graphite_ext.a")
+        if (File("$skiaBinSubdir/libdawn.a").exists()) {
+            add("$skiaBinSubdir/libdawn.a")
+        }
+    }
+}
+
 fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
     return listOf(
@@ -214,6 +228,106 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskshaper.a"
     ).map {
         "$skiaBinSubdir/$it"
+    }
+}
+
+fun SkikoProjectContext.configureGraphiteNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) = with(this.project) {
+    if (!os.isCompatibleWithHost) return
+
+    target.generateVersion(os, arch, skiko)
+    val isUikitSim = target.isUikitSimulator()
+    val targetString = "${os.idWithSuffix(isUikitSim = isUikitSim)}-${arch.id}"
+
+    val unzipper = if (skiko.skiaDir != null) {
+        registerOrGetSkiaDirProvider(os, arch, isUikitSim)
+    } else {
+        val skiaReleaseTag = project.skiaVersion("${os.idWithSuffix(isUikitSim = isUikitSim)}-${arch.id}")
+        val artifactId = "Skia-${skiaReleaseTag}-${os.idWithSuffix(isUikitSim = isUikitSim)}-${buildType.id}-${arch.id}"
+        val skiaDir = skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId")
+        project.provider { skiaDir.absoluteFile }
+    }
+
+    val unpackedSkia = unzipper.get()
+    val skiaDir = unpackedSkia.absolutePath
+
+    val bridgesLibrary = layout.buildDirectory.file("nativeBridges/static/$targetString/skiko-graphite-native-bridges-$targetString.a")
+    val bridgesLibraryPath = bridgesLibrary.get().asFile.absolutePath
+    val allLibraries = skiaGraphiteStaticLibraries(skiaDir, targetString, buildType) + bridgesLibraryPath
+
+    val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
+    val linkerFlags = when (os) {
+        OS.MacOS -> {
+            val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
+            configureCinterop("skiko-graphite", os, arch, target, targetString, macFrameworks)
+            mutableListOfLinkerOptions(macFrameworks)
+        }
+        OS.IOS -> {
+            val iosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
+            configureCinterop("skiko-graphite", os, arch, target, targetString, iosFrameworks)
+            mutableListOfLinkerOptions(iosFrameworks)
+        }
+        OS.TVOS -> {
+            val tvosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
+            configureCinterop("skiko-graphite", os, arch, target, targetString, tvosFrameworks)
+            mutableListOfLinkerOptions(tvosFrameworks)
+        }
+        OS.Linux -> {
+            val options = mutableListOf(
+                "-L/usr/lib64",
+                "-L/usr/lib/${if (arch == Arch.Arm64) "aarch64" else "x86_64"}-linux-gnu",
+                "-lfontconfig",
+                "-lGL",
+                "$skiaBinDir/libskia_graphite_dawn_ext.a"
+            )
+            if (arch == Arch.Arm64) options.add("-lEGL")
+            mutableListOfLinkerOptions(options)
+        }
+        else -> mutableListOf()
+    }
+
+    target.binaries.all {
+        freeCompilerArgs += allLibraries.map { listOf("-include-binary", it) }.flatten() + linkerFlags
+    }
+
+    target.compilations.all {
+        compilerOptions.configure {
+            freeCompilerArgs.addAll(
+                allLibraries.flatMap { listOf("-include-binary", it) } + linkerFlags
+            )
+        }
+    }
+
+    val crossCompileTask = compileNativeBridgesTask(os, arch, isUikitSim = isUikitSim, skiaDirProvider = unzipper)
+
+    val actionName = "linkNativeBridges".withSuffix(isUikitSim = isUikitSim)
+    val linkTask = project.registerSkikoTask<Exec>(actionName, os, arch) {
+        dependsOn(crossCompileTask)
+        val objectFilesDir = crossCompileTask.map { it.outDir.get() }
+        val objectFiles = project.fileTree(objectFilesDir) { include("**/*.o") }
+        inputs.files(objectFiles)
+        val outDir = layout.buildDirectory.dir("nativeBridges/static/$targetString").get().asFile
+        val staticLib = "skiko-graphite-native-bridges-$targetString.a"
+        workingDir = outDir
+        when (os) {
+            OS.Linux -> {
+                executable = if (arch == Arch.Arm64 && hostArch != Arch.Arm64) "aarch64-linux-gnu-ar" else "ar"
+                argumentProviders.add { listOf("-crs", staticLib) }
+            }
+            OS.MacOS, OS.IOS, OS.TVOS -> {
+                executable = "libtool"
+                argumentProviders.add { listOf("-static", "-o", staticLib) }
+            }
+            else -> error("Unexpected OS for native bridges linking: $os")
+        }
+        argumentProviders.add { objectFiles.files.map { it.absolutePath } }
+        file(outDir).mkdirs()
+        outputs.dir(outDir)
+    }
+
+    target.compilations.all {
+        compileTaskProvider.configure {
+            dependsOn(linkTask)
+        }
     }
 }
 

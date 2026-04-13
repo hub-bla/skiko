@@ -33,12 +33,12 @@ private val Project.setupReexportMjs
 private val Project.skikoTestMjs
     get() = wasmImport("skiko-test.mjs")
 
-fun SkikoProjectContext.declareWasmTasks() {
+fun SkikoProjectContext.declareWasmTasks(skiaDirProvider: Provider<File>? = null) {
     if (!project.supportWeb) {
         return
     }
 
-    val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+    val skiaWasmDir = skiaDirProvider ?: registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
     val compileWasm by project.tasks.registering(CompileSkikoCppTask::class) {
         dependsOn(skiaWasmDir)
 

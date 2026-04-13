@@ -26,6 +26,7 @@ private val awtRuntimeTargets = listOf(
 
 private class SkikoPublishingContext(
     val projectContext: SkikoProjectContext,
+    val moduleSuffix: String? = null,
 ) {
     val project = projectContext.project
     val kotlin = projectContext.kotlin
@@ -43,8 +44,8 @@ private class SkikoPublishingContext(
     }
 }
 
-fun SkikoProjectContext.declarePublications() {
-    val ctx = SkikoPublishingContext(this)
+fun SkikoProjectContext.declarePublications(moduleSuffix: String? = null) {
+    val ctx = SkikoPublishingContext(this, moduleSuffix)
     ctx.configurePublishingRepositories()
     ctx.configurePublicationDefaults()
     ctx.configureAllJvmRuntimeJarPublications()
@@ -141,7 +142,7 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
         val arch = entry.key.second
         create("skikoJvmRuntime${toTitleCase(os.id)}${toTitleCase(arch.id)}", MavenPublication::class.java) {
             pomNameForPublication[name] = "Skiko JVM Runtime for ${os.name} ${arch.name}"
-            artifactId = SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch)
+            artifactId = SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix)
             project.afterEvaluate {
                 artifact(entry.value.map { it.archiveFile.get() })
                 artifact(emptySourcesJar)
@@ -150,7 +151,7 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
                 asNode().appendNode("dependencies")
                     .appendNode("dependency").apply {
                         appendNode("groupId", SkikoArtifacts.groupId)
-                        appendNode("artifactId", SkikoArtifacts.jvmArtifactId)
+                        appendNode("artifactId", SkikoArtifacts.jvmArtifactId(moduleSuffix))
                         appendNode("version", "[${skiko.deployVersion}]")
                         appendNode("scope", "compile")
                     }
@@ -236,7 +237,7 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
             dependencies.add(
                 project.dependencies.create(
                     SkikoArtifacts.groupId,
-                    SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch),
+                    SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix),
                     skiko.deployVersion
                 )
             )
@@ -257,7 +258,7 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
             from(component)
             pomNameForPublication[name] = "Skiko JVM Runtime"
             groupId = SkikoArtifacts.groupId
-            artifactId = SkikoArtifacts.jvmRuntimeArtifactId
+            artifactId = SkikoArtifacts.jvmRuntimeArtifactId(moduleSuffix)
             version = skiko.deployVersion
 
             /*
@@ -295,7 +296,7 @@ private fun SkikoPublishingContext.configureAwtPublicationConstraints() {
             // Add constraint for the uber runtime artifact
             config.dependencyConstraints.add(
                 project.dependencies.constraints.create(
-                    "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactId}:${skiko.deployVersion}!!"
+                    "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactId(moduleSuffix)}:${skiko.deployVersion}!!"
                 )
             )
             
@@ -303,7 +304,7 @@ private fun SkikoPublishingContext.configureAwtPublicationConstraints() {
             awtRuntimeTargets.forEach { (os, arch) ->
                 config.dependencyConstraints.add(
                     project.dependencies.constraints.create(
-                        "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch)}:${skiko.deployVersion}!!"
+                        "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix)}:${skiko.deployVersion}!!"
                     )
                 )
             }
@@ -321,7 +322,7 @@ private fun SkikoPublishingContext.configureWebPublication() = publications {
     if (!project.supportWeb) return@publications
     create("skikoWasmRuntime", MavenPublication::class.java) {
         pomNameForPublication[name] = "Skiko WASM Runtime"
-        artifactId = SkikoArtifacts.jsWasmArtifactId
+        artifactId = SkikoArtifacts.jsWasmArtifactId(moduleSuffix)
         artifact(project.tasks.named("skikoWasmJar").get())
         artifact(emptySourcesJar)
     }

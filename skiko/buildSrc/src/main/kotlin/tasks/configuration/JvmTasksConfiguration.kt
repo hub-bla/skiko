@@ -35,7 +35,8 @@ import java.io.File
 fun SkikoProjectContext.createCompileJvmBindingsTask(
     targetOs: OS,
     targetArch: Arch,
-    skiaJvmBindingsDir: Provider<File>
+    skiaJvmBindingsDir: Provider<File>,
+    isExternalDir: Boolean = false
 ) = project.registerSkikoTask<CompileSkikoCppTask>("compileJvmBindings", targetOs, targetArch) {
     // Prefer 'java.home' system property to simplify overriding from Intellij.
     // When used from command-line, it is effectively equal to JAVA_HOME.
@@ -44,7 +45,9 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "Check JAVA_HOME (CLI) or Gradle settings (Intellij).")
     }
     val jdkHome = File(System.getProperty("java.home") ?: error("'java.home' is null"))
-    dependsOn(skiaJvmBindingsDir)
+    if (!isExternalDir) {
+        dependsOn(skiaJvmBindingsDir)
+    }
     buildTargetOS.set(targetOs)
     buildTargetArch.set(targetArch)
     buildSuffix.set("jvm")
@@ -183,10 +186,12 @@ fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<
 fun SkikoProjectContext.createObjcCompileTask(
     os: OS,
     arch: Arch,
-    skiaJvmBindingsDir: Provider<File>
+    skiaJvmBindingsDir: Provider<File>,
+    isExternalDir: Boolean = false
 ) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch) {
-    dependsOn(skiaJvmBindingsDir)
-
+    if (!isExternalDir) {
+        dependsOn(skiaJvmBindingsDir)
+    }
     val srcDirs = projectDirs(
         "src/awtMain/objectiveC/${os.id}"
     )
@@ -224,7 +229,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
     targetArch: Arch,
     skiaJvmBindingsDir: Provider<File>,
     compileTask: TaskProvider<CompileSkikoCppTask>,
-    objcCompileTask: TaskProvider<CompileSkikoObjCTask>?
+    objcCompileTask: TaskProvider<CompileSkikoObjCTask>?,
+    libBaseName: String = "skiko"
 ) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings", targetOs, targetArch) {
     val target = targetId(targetOs, targetArch)
     val skiaBinSubdir = "out/${buildType.id}-$target"
@@ -239,7 +245,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
     objectFiles = project.fileTree(compileTask.map { it.outDir.get() }) {
         include("**/*.o")
     }
-    val libNamePrefix = if (targetOs.isWindows) "skiko" else "libskiko"
+    val libNamePrefix = if (targetOs.isWindows) libBaseName else "lib$libBaseName"
     libOutputFileName.set("$libNamePrefix-${targetOs.id}-${targetArch.id}${targetOs.dynamicLibExt}")
     buildTargetOS.set(targetOs)
     buildSuffix.set("jvm")
@@ -356,7 +362,42 @@ private val Arch.darwinSignClientName: String
         Arch.Arm64 -> "codesign-client-darwin-arm64"
         else -> error("Unexpected Arch = $this for codesign-client")
     }
-
+fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
+    os: OS,
+    arch: Arch,
+    commonJar: TaskProvider<Jar>,
+    skiaDirProvider: Provider<File>
+): TaskProvider<Jar> = with(this.project) {
+    val libBaseName = "skiko-graphite"
+    val compileBindings = createCompileJvmBindingsTask(os, arch, skiaDirProvider, true)
+    val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaDirProvider, true) else null
+    val linkBindings = createLinkJvmBindings(os, arch, skiaDirProvider, compileBindings, objcCompile, libBaseName)
+    if (os.isMacOs) {
+        createDownloadCodeSignClientDarwinTask(os, hostArch)
+    }
+    val maybeSign = maybeSignOrSealTask(os, arch, linkBindings)
+    val nativeLib = maybeSign.map { it.outputFiles.get().single() }
+    val createChecksums = createChecksumsTask(os, arch, nativeLib)
+    val nativeFiles = mutableListOf(
+        nativeLib,
+        createChecksums.map { it.outputs.files.singleFile }
+    )
+    if (os == OS.MacOS && arch == Arch.Arm64) {
+        val altArch = Arch.X64
+        val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaDirProvider, true)
+        val objcCompile2 = createObjcCompileTask(os, altArch, skiaDirProvider, true)
+        val linkBindings2 = createLinkJvmBindings(os, altArch, skiaDirProvider, compileBindings2, objcCompile2, libBaseName)
+        val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
+        val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
+        val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)
+        nativeFiles.add(nativeLib2)
+        nativeFiles.add(createChecksums2.map { it.outputs.files.singleFile })
+        allJvmRuntimeJars[os to altArch] = skikoJvmRuntimeJarTask(os, altArch, commonJar, nativeFiles, libBaseName)
+    }
+    val skikoJvmRuntimeJar = skikoJvmRuntimeJarTask(os, arch, commonJar, nativeFiles, libBaseName)
+    allJvmRuntimeJars[os to arch] = skikoJvmRuntimeJar
+    return skikoJvmRuntimeJar
+}
 fun SkikoProjectContext.createDownloadCodeSignClientDarwinTask(
     targetOs: OS,
     hostArch: Arch
@@ -418,11 +459,12 @@ fun SkikoProjectContext.skikoJvmRuntimeJarTask(
     targetOs: OS,
     targetArch: Arch,
     awtJar: TaskProvider<Jar>,
-    nativeFiles: List<Provider<File>>
+    nativeFiles: List<Provider<File>>,
+    libBaseName: String = "skiko"
 ) = project.registerSkikoTask<Jar>("skikoJvmRuntimeJar", targetOs, targetArch) {
     dependsOn(awtJar)
     val target = targetId(targetOs, targetArch)
-    archiveBaseName.set("skiko")
+    archiveBaseName.set(libBaseName)
     archiveClassifier.set(target)
     nativeFiles.forEach { provider -> from(provider) }
 }
