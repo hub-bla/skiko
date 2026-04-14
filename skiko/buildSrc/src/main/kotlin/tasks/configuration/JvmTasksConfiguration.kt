@@ -66,7 +66,10 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/common"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
-
+    if (project.path != ":") {
+        includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/jvmMain/cpp/common"))
+        includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/commonMain/cpp/common/include"))
+    }
     compiler.set(compilerForTarget(targetOs, targetArch))
 
     val osFlags: Array<String>
@@ -261,6 +264,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-lobjc",
                 "-install_name", "./${libOutputFileName.get()}",
                 "-current_version", skiko.planeDeployVersion,
+                // Instead of linking core dll for skiko-graphite, we're gonna resolve symbols at runtime
+                "-undefined", "dynamic_lookup",
                 "-framework", "AppKit",
                 "-framework", "CoreFoundation",
                 "-framework", "CoreGraphics",

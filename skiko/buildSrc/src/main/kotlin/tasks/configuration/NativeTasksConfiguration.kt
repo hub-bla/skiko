@@ -159,6 +159,10 @@ fun SkikoProjectContext.compileNativeBridgesTask(
         sourceRoots.set(srcDirs)
 
         includeHeadersNonRecursive(projectDir.resolve("src/nativeJsMain/cpp"))
+        if (project.path != ":") {
+            includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/nativeJsMain/cpp"))
+            includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/commonMain/cpp/common/include"))
+        }
         includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
         includeHeadersNonRecursive(skiaHeadersDirs(unpackedSkia))
     }
