@@ -110,7 +110,7 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_gpu_graphite_GraphiteContext__1nM
 
 
 #ifdef SK_METAL
-SKIKO_EXPORT KNativePointer org_jetbrains_skia_gpu_graphite_GraphiteContext__1nGraphiteMakeMetal
+SKIKO_EXPORT KNativePointer org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeMetal
         (KNativePointer devicePtr, KNativePointer queuePtr) {
     skgpu::graphite::MtlBackendContext backendContext = {};
     backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));

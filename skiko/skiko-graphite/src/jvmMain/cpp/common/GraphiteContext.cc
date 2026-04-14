@@ -112,7 +112,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_Graphite
 
 
 #ifdef SK_METAL
-extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nGraphiteMakeMetal
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nMakeMetal
         (JNIEnv* env, jclass jclass, jlong devicePtr, jlong queuePtr) {
     skgpu::graphite::MtlBackendContext backendContext = {};
     backendContext.fDevice.retain(reinterpret_cast<CFTypeRef>(devicePtr));
