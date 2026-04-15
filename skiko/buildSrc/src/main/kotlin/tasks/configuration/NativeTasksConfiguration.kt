@@ -267,7 +267,7 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
                 "$skiaBinDir/libskshaper.a",
                 "$skiaBinDir/libskunicode_core.a",
                 "$skiaBinDir/libskunicode_icu.a",
-                "$skiaBinDir/libskia.a",
+                "$skiaBinDir/libskia.a"
             )
             if (arch == Arch.Arm64) {
                 options.add("-lEGL")
