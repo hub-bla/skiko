@@ -140,7 +140,6 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     "-fno-exceptions",
                     "-fvisibility=hidden",
                     "-fvisibility-inlines-hidden",
-                    "-include", "memory",
                     *archFlags,
                     *skiaPreprocessorFlags(OS.Linux, buildType)
                 )
