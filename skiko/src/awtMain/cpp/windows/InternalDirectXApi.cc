@@ -20,6 +20,7 @@
 #include "ganesh/d3d/GrD3DTypes.h"
 #include "ganesh/d3d/GrD3DBackendContext.h"
 #include "ganesh/d3d/GrD3DDirectContext.h"
+
 class DirectXOffscreenDevice
 {
 public:
