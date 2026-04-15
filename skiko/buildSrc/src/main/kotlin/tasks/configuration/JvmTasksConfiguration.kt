@@ -100,6 +100,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-fno-exceptions",
                 "-fvisibility=hidden",
                 "-fvisibility-inlines-hidden",
+                "-include", "memory",
                 *archFlags,
             )
         }
