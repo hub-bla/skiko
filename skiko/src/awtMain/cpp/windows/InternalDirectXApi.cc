@@ -14,6 +14,7 @@
 #include "SkColorSpace.h"
 #include "ganesh/d3d/GrD3DBackendSurface.h"
 #include "ganesh/GrDirectContext.h"
+#include "ganesh/GrBackendSurface.h"
 #include "SkSurface.h"
 
 #include "ganesh/d3d/GrD3DTypes.h"
