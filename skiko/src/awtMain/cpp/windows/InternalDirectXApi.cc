@@ -12,13 +12,13 @@
 #include "window_util.h"
 
 #include "SkColorSpace.h"
-#include "ganesh/GrBackendSurface.h"
+#include "ganesh/d3d/GrD3DBackendSurface.h"
 #include "ganesh/GrDirectContext.h"
 #include "SkSurface.h"
 
 #include "ganesh/d3d/GrD3DTypes.h"
 #include "ganesh/d3d/GrD3DBackendContext.h"
-
+#include "ganesh/d3d/GrD3DDirectContext.h"
 class DirectXOffscreenDevice
 {
 public:
@@ -270,7 +270,8 @@ extern "C"
         texResInfo.fFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
         texResInfo.fSampleCount = 1;
         texResInfo.fLevelCount = 1;
-        GrBackendRenderTarget* renderTarget = new GrBackendRenderTarget(texture->width, texture->height, texResInfo);
+        GrBackendRenderTarget obj = GrBackendRenderTargets::MakeD3D(texture->width, texture->height, texResInfo);
+        GrBackendRenderTarget* renderTarget = new GrBackendRenderTarget(obj);
         return reinterpret_cast<jlong>(renderTarget);
     }
 
@@ -279,7 +280,7 @@ extern "C"
     {
         DirectXOffscreenDevice *d3dDevice = fromJavaPointer<DirectXOffscreenDevice *>(devicePtr);
         GrD3DBackendContext backendContext = d3dDevice->backendContext;
-        return toJavaPointer(GrDirectContext::MakeDirect3D(backendContext).release());
+        return toJavaPointer(GrDirectContexts::MakeD3D(backendContext).release());
     }
 
     JNIEXPORT jlong JNICALL Java_org_jetbrains_skiko_graphicapi_InternalDirectXApi_makeDirectXTexture(
