@@ -194,6 +194,7 @@ fun SkikoProjectContext.createObjcCompileTask(
     skiaJvmBindingsDir: Provider<File>
 ) = project.registerSkikoTask<CompileSkikoObjCTask>("objcCompile", os, arch) {
     dependsOn(skiaJvmBindingsDir)
+
     val srcDirs = projectDirs(
         "src/awtMain/objectiveC/${os.id}"
     )
