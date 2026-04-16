@@ -272,8 +272,9 @@ extern "C"
         texResInfo.fFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
         texResInfo.fSampleCount = 1;
         texResInfo.fLevelCount = 1;
-        GrBackendRenderTarget obj = GrBackendRenderTargets::MakeD3D(texture->width, texture->height, texResInfo);
-        GrBackendRenderTarget* renderTarget = new GrBackendRenderTarget(obj);
+        GrBackendRenderTarget* renderTarget = new GrBackendRenderTarget(
+            GrBackendRenderTargets::MakeD3D(texture->width, texture->height, texResInfo)
+        );
         return reinterpret_cast<jlong>(renderTarget);
     }
 

@@ -421,7 +421,10 @@ extern "C"
         info.fResource = d3dDevice->buffers[index];
 
         std::unique_ptr<SkSurfaceProps> surfaceProps = skija::SurfaceProps::toSkSurfaceProps(env, surfacePropsInts);
-        GrBackendTexture backendTexture = GrBackendTextures::MakeD3D((int)d3dDevice->buffers[index]->GetDesc().Width, (int)d3dDevice->buffers[index]->GetDesc().Height, info);
+        GrBackendTexture backendTexture = GrBackendTextures::MakeD3D(
+                                 (int)d3dDevice->buffers[index]->GetDesc().Width,
+                                 (int)d3dDevice->buffers[index]->GetDesc().Height,
+                                 info);
         auto result = SkSurfaces::WrapBackendTexture(
                                  context, backendTexture, kTopLeft_GrSurfaceOrigin, 0,
                                  kRGBA_8888_SkColorType, SkColorSpace::MakeSRGB(), surfaceProps.get())

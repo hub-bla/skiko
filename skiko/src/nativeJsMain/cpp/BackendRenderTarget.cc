@@ -53,8 +53,9 @@ SKIKO_EXPORT KNativePointer BackendRenderTarget_MakeDirect3D
     texResInfo.fFormat = static_cast<DXGI_FORMAT>(format);
     texResInfo.fSampleCount = static_cast<uint32_t>(sampleCnt);
     texResInfo.fLevelCount = static_cast<uint32_t>(levelCnt);
-    GrBackendRenderTarget obj = GrBackendRenderTargets::MakeD3D(width, height, texResInfo);
-    GrBackendRenderTarget* instance = new GrBackendRenderTarget(obj);
+    GrBackendRenderTarget* instance = new GrBackendRenderTarget(
+        GrBackendRenderTargets::MakeD3D(width, height, texResInfo)
+    );
     return instance;
 #else
     return 0;
