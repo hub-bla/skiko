@@ -1,7 +1,6 @@
 #include <iostream>
 #include <jni.h>
 #include "interop.hh"
-#include "SkSurface.h"
 
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/ContextOptions.h"
