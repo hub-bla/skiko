@@ -35,6 +35,14 @@ abstract class LinkSkikoTask : AbstractSkikoNativeToolTask() {
         else super.createArgBuilder()
 
     override fun execute(mode: ToolMode, args: ArgBuilder) {
+        println("==== OBJECT FILES (resolved at execution) ====")
+        objectFiles.files.forEach { println(it) }
+
+        println("==== LIB FILES ====")
+        libFiles.files.forEach { println(it) }
+
+        println("==== LIB DIRS ====")
+        libDirs.get().forEach { println(it) }
         check(mode is ToolMode.NonIncremental) {
             "Linking is not incremental, but $mode is received"
         }
