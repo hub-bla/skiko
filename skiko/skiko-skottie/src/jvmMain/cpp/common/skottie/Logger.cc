@@ -1,5 +1,5 @@
 #include <jni.h>
-#include "interop.hh"
+#include "skottie_interop.hh"
 #include "Skottie.h"
 
 using namespace skottie;

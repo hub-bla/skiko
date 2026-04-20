@@ -213,11 +213,11 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskia.a",
         "libicu.a",
         "libjsonreader.a",
-        "libskottie.a",
+//        "libskottie.a",
         "libsvg.a",
         "libpng.a",
         "libwebp_sse41.a",
-        "libsksg.a",
+//        "libsksg.a",
         "libskunicode_core.a",
         "libskunicode_icu.a",
         "libwebp.a",
@@ -233,7 +233,7 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
     }
 }
 
-private fun SkikoProjectContext.configureNativeTargetInternal(
+fun SkikoProjectContext.configureNativeTarget(
     os: OS,
     arch: Arch,
     target: KotlinNativeTarget,
@@ -362,7 +362,7 @@ fun SkikoProjectContext.configureNativeTarget(
         }
     }
 
-    configureNativeTargetInternal(
+    configureNativeTarget(
         os,
         arch,
         target,
@@ -389,7 +389,7 @@ fun SkikoProjectContext.configureGraphiteNativeTarget(
     arch: Arch,
     target: KotlinNativeTarget
 ) {
-    configureNativeTargetInternal(
+    configureNativeTarget(
         os,
         arch,
         target,

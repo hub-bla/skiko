@@ -174,12 +174,14 @@ internal inline fun withStringResult(pointer: NativePointer): String {
  * It is caller responsibility to destroy underlying SkString. Use it if pointer
  * is received from reference (SkString&)
  */
-internal inline fun withStringReferenceResult(block: () -> NativePointer): String {
+@OptIn(InternalSkikoApi::class)
+inline fun withStringReferenceResult(block: () -> NativePointer): String {
     val string = ManagedString(block(), false)
     return string.toString()
 }
 
-internal inline fun withStringReferenceNullableResult(block: () -> NativePointer): String? {
+@OptIn(InternalSkikoApi::class)
+inline fun withStringReferenceNullableResult(block: () -> NativePointer): String? {
     val ptr = block()
     if (ptr == Native.NullPointer) return null
 

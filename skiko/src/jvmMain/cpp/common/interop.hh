@@ -316,6 +316,7 @@ namespace skija {
     }
 
     namespace SurfaceProps {
+        __attribute__((visibility("default")))
         std::unique_ptr<SkSurfaceProps> toSkSurfaceProps(JNIEnv* env, jintArray surfacePropsInts);
     }
 
