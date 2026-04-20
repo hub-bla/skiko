@@ -1,6 +1,10 @@
 package org.jetbrains.skia.skottie
 
 import org.jetbrains.skia.Point
+import org.jetbrains.skia.skottie.Animation
+import org.jetbrains.skia.skottie.AnimationBuilder
+import org.jetbrains.skia.skottie.buildFromFile
+import org.jetbrains.skia.skottie.makeFromFile
 import org.jetbrains.skiko.resourcePath
 import kotlin.test.Test
 import kotlin.test.assertEquals

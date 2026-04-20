@@ -15,7 +15,7 @@ import org.jetbrains.skia.impl.Stats
 abstract class Logger : RefCnt(_nMake()) {
     companion object {
         init {
-            staticLoad()
+            SkottieLibrary.load()
         }
     }
 

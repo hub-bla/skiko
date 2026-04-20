@@ -4,19 +4,18 @@ import org.jetbrains.skia.Data
 import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.impl.*
-import org.jetbrains.skia.impl.Library.Companion.staticLoad
 
 class AnimationBuilder internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
     companion object {
+        init {
+            SkottieLibrary.load()
+        }
         internal fun _flagsToInt(vararg builderFlags: AnimationBuilderFlag): Int {
             var flags = 0
             for (flag in builderFlags) flags = flags or flag._flag
             return flags
         }
 
-        init {
-            staticLoad()
-        }
     }
 
     private object _FinalizerHolder {

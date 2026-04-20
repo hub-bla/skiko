@@ -253,22 +253,6 @@ if (supportAndroid) {
 }
 
 
-if (supportAwt) {
-    val skikoGraphiteAwtJar by project.tasks.registering(Jar::class) {
-        archiveBaseName.set("skiko-graphite-awt")
-        from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
-    }
-    skikoGraphiteContext.createGraphiteSkikoJvmJarTask(targetOs, targetArch, skikoGraphiteAwtJar)
-    afterEvaluate {
-        tasks.matching { it.name == "publishAwtPublicationToMavenLocal" }.configureEach {
-            dependsOn(skikoGraphiteAwtJar)
-        }
-        tasks.matching { it.name == "generateMetadataFileForAwtPublication" }.configureEach {
-            dependsOn(skikoGraphiteAwtJar)
-        }
-    }
-}
-
 // TODO now it can be moved, move it if you change this
 // Can't be moved to buildSrc because of Checksum dependency
 fun createChecksumsTask(
@@ -279,6 +263,18 @@ fun createChecksumsTask(
     inputFiles = project.files(fileToChecksum)
     checksumAlgorithm = org.gradle.crypto.checksum.Checksum.Algorithm.SHA256
     outputDirectory = layout.buildDirectory.dir("checksums-${targetId(targetOs, targetArch)}")
+}
+
+if (supportAwt) {
+    val targetSuffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
+
+    val skikoSkottieAwtJarForTests by project.tasks.registering(Jar::class) {
+        archiveBaseName.set("skiko-skottie-awt-test")
+        from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
+    }
+    val rootRuntimeJar = project(":").tasks.named<Jar>("skikoJvmRuntimeJar$targetSuffix")
+
+    skikoGraphiteContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
 }
 
 afterEvaluate {

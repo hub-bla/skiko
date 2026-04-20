@@ -1,4 +1,4 @@
-package org.jetbrains.skiko.tests.org.jetbrains.skia.skottie
+package org.jetbrains.skia.skottie
 
 import org.jetbrains.skia.Data
 import org.jetbrains.skia.Point
@@ -45,7 +45,7 @@ class AnimationTestJVM {
     @Test
     fun canCreateFromData() = runTest {
         val animation = Animation.makeFromData(
-            Data.makeFromResource("./skottie/test_animation01.json")
+            Data.Companion.makeFromResource("./skottie/test_animation01.json")
         )
 
         assertEquals("1.42.0", animation.version)
@@ -59,7 +59,7 @@ class AnimationTestJVM {
     @Test
     fun canCreateFromDataWithBuilder() = runTest {
         val animation = AnimationBuilder().buildFromData(
-            Data.makeFromResource("./skottie/test_animation01.json")
+            Data.Companion.makeFromResource("./skottie/test_animation01.json")
         )
 
         assertEquals("1.42.0", animation.version)

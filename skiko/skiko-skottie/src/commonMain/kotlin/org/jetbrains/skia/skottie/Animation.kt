@@ -7,6 +7,9 @@ import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skia.impl.*
 
 class Animation internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
+    init {
+        SkottieLibrary.load()
+    }
     companion object {
         fun makeFromString(data: String): Animation {
             Stats.onNativeCall()
@@ -28,9 +31,6 @@ class Animation internal constructor(ptr: NativePointer) : Managed(ptr, _Finaliz
             return Animation(ptr)
         }
 
-        init {
-            staticLoad()
-        }
     }
 
     internal object _FinalizerHolder {

@@ -571,19 +571,22 @@ fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
 fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
     targetOs: OS,
     targetArch: Arch,
-    skikoJvmJar: Provider<Jar>,
-    skikoJvmRuntimeJar: Provider<Jar>,
+    runtimeJars: List<Provider<Jar>>,
     additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
-) = project.registerSkikoTask<Copy>("skikoRuntimeDirForTests", targetOs, targetArch) {
-    dependsOn(skikoJvmJar, skikoJvmRuntimeJar)
-    from(project.zipTree(skikoJvmJar.flatMap { it.archiveFile }))
-    from(project.zipTree(skikoJvmRuntimeJar.flatMap { it.archiveFile }))
+) = project.registerSkikoTask<Copy>("skikoRuntimeDirForTests$${project.name}", targetOs, targetArch)  {
+    dependsOn(runtimeJars)
+
+    runtimeJars.forEach { jarProvider ->
+        from(project.zipTree(jarProvider.flatMap { it.archiveFile }))
+    }
     additionalRuntimeLibraries.forEach { lib ->
         from(project.zipTree(lib.jarTask.flatMap { it.archiveFile }))
     }
-    
     duplicatesStrategy = DuplicatesStrategy.WARN
-    destinationDir = project.layout.buildDirectory.dir("skiko-runtime-for-tests").get().asFile
+    destinationDir = project.layout.buildDirectory
+        .dir("${project.name}-runtime-for-tests")
+        .get()
+        .asFile
 }
 
 fun SkikoProjectContext.skikoJarForTestsTask(
@@ -597,10 +600,14 @@ fun SkikoProjectContext.skikoJarForTestsTask(
 fun SkikoProjectContext.setupJvmTestTask(
     skikoAwtJarForTests: TaskProvider<Jar>,
     targetOs: OS,
-    targetArch: Arch
+    targetArch: Arch,
+    extraRuntimeJars: List<TaskProvider<Jar>> = emptyList(),
+    includeIcu: Boolean = true
 ) = with(project) {
-    val skikoAwtRuntimeJarForTests = createSkikoJvmJarTask(targetOs, targetArch, skikoAwtJarForTests)
-    val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(targetOs, targetArch, skikoAwtJarForTests, skikoAwtRuntimeJarForTests, additionalRuntimeLibraries)
+    val skikoAwtRuntimeJarForTests = createJvmJar(targetOs, targetArch, skikoAwtJarForTests, libBaseName = project.name,
+        includeIcu = includeIcu)
+    val jars = listOf(skikoAwtRuntimeJarForTests) + extraRuntimeJars
+    val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(targetOs, targetArch, jars, additionalRuntimeLibraries)
     val skikoJarForTests = skikoJarForTestsTask(skikoRuntimeDirForTests)
 
     tasks.withType<Test>().configureEach {
@@ -637,6 +644,12 @@ fun SkikoProjectContext.setupJvmTestTask(
 
         classpath += files(skikoAwtRuntimeJarForTests)
         jvmArgs = listOf("--add-opens", "java.desktop/sun.font=ALL-UNNAMED")
+        testLogging {
+            events("PASSED", "FAILED", "SKIPPED")
+            showStandardStreams = true
+            showExceptions = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 }
 

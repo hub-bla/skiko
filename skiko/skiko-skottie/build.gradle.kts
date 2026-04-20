@@ -264,12 +264,24 @@ kotlin {
     sourceSets.commonTest.dependencies {
         implementation(kotlin("test"))
         implementation(kotlin("test-annotations-common"))
+        implementation(project(":"))
     }
 
     skikoSkottieProjectContext.jvmMainSourceSet?.dependencies {
         implementation(kotlin("stdlib"))
     }
-
+    sourceSets.commonTest.dependencies {
+        implementation(kotlin("test"))
+        implementation(kotlin("test-annotations-common"))
+    }
+    skikoSkottieProjectContext.jvmTestSourceSet?.dependencies {
+        implementation(libs.coroutines.test)
+        implementation(kotlin("test-junit"))
+        implementation(kotlin("test"))
+    }
+    skikoSkottieProjectContext.awtTestSourceSet?.dependencies {
+        implementation(libs.kotlinx.benchmark.runtime)
+    }
     skikoSkottieProjectContext.webMainSourceSet?.dependencies {
         implementation(libs.kotlinx.browser)
     }
@@ -342,24 +354,6 @@ if (supportAndroid) {
     }
 }
 
-
-if (supportAwt) {
-    val skikoSkottieAwtJar by project.tasks.registering(Jar::class) {
-        archiveBaseName.set("skiko-skottie-awt")
-        from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
-    }
-    skikoSkottieProjectContext.createJvmJar(targetOs, targetArch, skikoSkottieAwtJar, libBaseName = "skiko-skottie",
-        includeIcu = false)
-    afterEvaluate {
-        tasks.matching { it.name == "publishAwtPublicationToMavenLocal" }.configureEach {
-            dependsOn(skikoSkottieAwtJar)
-        }
-        tasks.matching { it.name == "generateMetadataFileForAwtPublication" }.configureEach {
-            dependsOn(skikoSkottieAwtJar)
-        }
-    }
-}
-
 // TODO now it can be moved, move it if you change this
 // Can't be moved to buildSrc because of Checksum dependency
 fun createChecksumsTask(
@@ -370,6 +364,18 @@ fun createChecksumsTask(
     inputFiles = project.files(fileToChecksum)
     checksumAlgorithm = org.gradle.crypto.checksum.Checksum.Algorithm.SHA256
     outputDirectory = layout.buildDirectory.dir("checksums-${targetId(targetOs, targetArch)}")
+}
+
+if (supportAwt) {
+    val targetSuffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
+
+    val skikoSkottieAwtJarForTests by project.tasks.registering(Jar::class) {
+        archiveBaseName.set("skiko-skottie-awt-test")
+        from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
+    }
+    val rootRuntimeJar = project(":").tasks.named<Jar>("skikoJvmRuntimeJar$targetSuffix")
+
+    skikoSkottieProjectContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
 }
 
 afterEvaluate {

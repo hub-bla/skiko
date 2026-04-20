@@ -1,8 +1,8 @@
 package org.jetbrains.skia.sksg
 
-import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skia.*
 import org.jetbrains.skia.impl.*
+import org.jetbrains.skia.skottie.SkottieLibrary
 
 /**
  *
@@ -13,7 +13,7 @@ import org.jetbrains.skia.impl.*
 class InvalidationController internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
     companion object {
         init {
-            staticLoad()
+            SkottieLibrary.load()
         }
     }
 
