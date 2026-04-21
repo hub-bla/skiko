@@ -261,21 +261,22 @@ fun SkikoProjectContext.createLinkJvmBindings(
         val filePrefix = if (targetOs.isWindows) "" else "lib"
 
         if (libBaseName == "skiko") {
-            include("*$fileExtension")
-            exclude("${filePrefix}dawn$fileExtension")
-            exclude("${filePrefix}skia_graphite_ext$fileExtension")
-            exclude("${filePrefix}skia$fileExtension")
-            //lld-link: error: duplicate symbol: skcms_MaxRoundtripError
-            //>>> defined at skia.lib(skcms.skcms.obj)
-            //>>> defined at skcms.lib(skcms.skcms.obj)
-            exclude("${filePrefix}skcms$fileExtension")
-            exclude("${filePrefix}harfbuzz$fileExtension")
-            exclude("${filePrefix}spirv_cross$fileExtension")
-            exclude("${filePrefix}libwebp$fileExtension")
-            exclude("${filePrefix}svg$fileExtension")
-            exclude("${filePrefix}skottie$fileExtension")
-            exclude("${filePrefix}sksg$fileExtension")
-            exclude("${filePrefix}jsonreader$fileExtension")
+            exclude("*$fileExtension")
+            include("${filePrefix}skia_ganesh_ext$fileExtension")
+//            exclude("${filePrefix}dawn$fileExtension")
+//            exclude("${filePrefix}skia_graphite_ext$fileExtension")
+//            exclude("${filePrefix}skia$fileExtension")
+//            //lld-link: error: duplicate symbol: skcms_MaxRoundtripError
+//            //>>> defined at skia.lib(skcms.skcms.obj)
+//            //>>> defined at skcms.lib(skcms.skcms.obj)
+//            exclude("${filePrefix}skcms$fileExtension")
+//            exclude("${filePrefix}harfbuzz$fileExtension")
+//            exclude("${filePrefix}spirv_cross$fileExtension")
+//            exclude("${filePrefix}libwebp$fileExtension")
+//            exclude("${filePrefix}svg$fileExtension")
+//            exclude("${filePrefix}skottie$fileExtension")
+//            exclude("${filePrefix}sksg$fileExtension")
+//            exclude("${filePrefix}jsonreader$fileExtension")
         }
 
         if (libBaseName == "skiko-graphite") {
