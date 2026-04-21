@@ -391,7 +391,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     arrayOf(
                         "/NOLOGO",
                         "/DLL",
-                        "/WHOLEARCHIVE:skia.lib",
+                        "/WHOLEARCHIVE:$skiaBinDir/skia.lib",
                         "Advapi32.lib",
                         "gdi32.lib",
                         "Dwmapi.lib",
@@ -530,7 +530,7 @@ fun SkikoProjectContext.createJvmJar(
         createDownloadCodeSignClientDarwinTask(os, hostArch)
     }
     val maybeSign = maybeSignOrSealTask(os, arch, linkBindings)
-    val nativeLib = maybeSign.map { it -> it.outputFiles.get().single { it.name.endsWith(".dylib") } }
+    val nativeLib = maybeSign.map { it -> it.outputFiles.get().single { it.name.endsWith(os.dynamicLibExt) } }
     val createChecksums = createChecksumsTask(os, arch, nativeLib)
     val nativeFiles = mutableListOf(
         nativeLib,
