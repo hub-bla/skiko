@@ -223,10 +223,9 @@ jobs:
         with:
           image_name: linux-amd64
           command: |
-            ./gradlew --no-daemon --stacktrace \
+            cd skiko && ./gradlew --no-daemon --stacktrace \
               -Pskiko.arch=x64 \
               -Pskiko.native.linux.enabled=true \
-              :skiko:linkDebugTestLinuxArm64 \
               :skiko-skottie:linkDebugTestLinuxArm64
 
       - uses: actions/upload-artifact@v4
