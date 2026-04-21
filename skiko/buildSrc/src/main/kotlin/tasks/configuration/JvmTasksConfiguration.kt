@@ -415,7 +415,36 @@ fun SkikoProjectContext.createLinkJvmBindings(
             val coreLibDir = project.rootProject.layout.buildDirectory
                 .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
 
-            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
+            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "") {
+                val defFile = maybeSignedDir.resolve("skiko_all_exports.def")
+                val skiaLibPath = "$skiaBinDir/skia.lib"
+
+                doFirst {
+                    val out = java.io.ByteArrayOutputStream()
+                    project.exec {
+                        commandLine("dumpbin", "/SYMBOLS", skiaLibPath)
+                        standardOutput = out
+                    }
+
+                    val symbols = out.toString().lines()
+                        .filter { it.contains("External") && it.contains("|") && !it.contains("UNDEF") }
+                        .map { it.substringAfter("|").trim().substringBefore(" ") }
+                        .filter { symbol ->
+                            symbol.isNotEmpty() &&
+                                    !symbol.startsWith("__imp_") &&
+                                    !symbol.startsWith(".refptr") &&
+                                    !symbol.startsWith("__real@") &&
+                                    !symbol.startsWith("__xmm@")
+                        }
+                        .distinct()
+                        .sorted()
+
+                    logger.lifecycle("Pass 1: Exporting ${symbols.size} symbols from skia.lib...")
+                    defFile.writeText("EXPORTS\n" + symbols.joinToString("\n") { "    $it" })
+                }
+                arrayOf("/DEF:${defFile.absolutePath}")
+
+            } else if (libBaseName == "skiko" && taskSuffix == "Again") {
                 val exportedSymbols = maybeSignedDir.resolve("symbols_filtered.txt")
                 val defFile = maybeSignedDir.resolve("symbols.def")
                 doFirst {
