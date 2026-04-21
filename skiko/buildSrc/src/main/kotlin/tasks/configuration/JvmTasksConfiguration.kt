@@ -269,6 +269,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             //>>> defined at skia.lib(skcms.skcms.obj)
             //>>> defined at skcms.lib(skcms.skcms.obj)
             exclude("${filePrefix}skcms$fileExtension")
+            exclude("${filePrefix}harfbuzz$fileExtension")
             exclude("${filePrefix}spirv_cross$fileExtension")
             exclude("${filePrefix}libwebp$fileExtension")
             exclude("${filePrefix}svg$fileExtension")
