@@ -97,9 +97,9 @@ namespace skija {
         extern jmethodID ctor;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        jobject toJava(JNIEnv* env, const SkCodec::FrameInfo& i);
-        void copyToInterop(JNIEnv* env, const SkCodec::FrameInfo& info, jintArray dst);
-        void copyToInterop(JNIEnv* env, const std::vector<SkCodec::FrameInfo>& infos, jintArray dst);
+        SKIKO_EXPORT jobject toJava(JNIEnv* env, const SkCodec::FrameInfo& i);
+        SKIKO_EXPORT void copyToInterop(JNIEnv* env, const SkCodec::FrameInfo& info, jintArray dst);
+        SKIKO_EXPORT void copyToInterop(JNIEnv* env, const std::vector<SkCodec::FrameInfo>& infos, jintArray dst);
     }
 
     template <typename T>
@@ -163,7 +163,7 @@ namespace skija {
         std::vector<SkShaper::Feature> fromIntArray(JNIEnv* env, jintArray array, jint featuresCount);
 
         // caller needs to ensure the resultArr size is sufficient (every feature is encoded as 2 ints)
-        void writeToIntArray(std::vector<skia::textlayout::FontFeature> features, int* resultArr);
+        SKIKO_EXPORT void writeToIntArray(std::vector<skia::textlayout::FontFeature> features, int* resultArr);
 
         namespace FourByteTag {
             int fromString(SkString str);
@@ -175,7 +175,7 @@ namespace skija {
         extern jmethodID ctor;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        jobject toJava(JNIEnv* env, const SkFontMetrics& m);
+        SKIKO_EXPORT jobject toJava(JNIEnv* env, const SkFontMetrics& m);
     }
 
     namespace FontMgr {
@@ -186,7 +186,7 @@ namespace skija {
 
     namespace FontStyle {
         SkFontStyle fromJava(jint style);
-        jint toJava(const SkFontStyle& fs);
+        SKIKO_EXPORT jint toJava(const SkFontStyle& fs);
     }
 
     namespace FontVariation {
@@ -210,8 +210,8 @@ namespace skija {
         extern jmethodID ctor;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        jobject toJava(JNIEnv* env, const SkImageInfo& imageInfo);
-        void writeImageInfoForInterop(JNIEnv* env, SkImageInfo imageInfo, jintArray imageInfoResult, jlongArray colorSpaceResultPtr);
+        SKIKO_EXPORT jobject toJava(JNIEnv* env, const SkImageInfo& imageInfo);
+        SKIKO_EXPORT void writeImageInfoForInterop(JNIEnv* env, SkImageInfo imageInfo, jintArray imageInfoResult, jlongArray colorSpaceResultPtr);
     }
 
     namespace IPoint {
@@ -220,7 +220,7 @@ namespace skija {
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
         jobject make(JNIEnv* env, float x, float y);
-        jobject fromSkIPoint(JNIEnv* env, const SkIPoint& p);
+        SKIKO_EXPORT jobject fromSkIPoint(JNIEnv* env, const SkIPoint& p);
     }
 
     namespace IRect {
@@ -232,7 +232,7 @@ namespace skija {
         extern jfieldID bottom;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        jobject fromSkIRect(JNIEnv* env, const SkIRect& rect);
+        SKIKO_EXPORT jobject fromSkIRect(JNIEnv* env, const SkIRect& rect);
         SKIKO_EXPORT std::unique_ptr<SkIRect> toSkIRect(JNIEnv* env, jintArray obj);
     }
 
@@ -263,10 +263,10 @@ namespace skija {
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
         jobject make(JNIEnv* env, float x, float y);
-        jobject fromSkPoint(JNIEnv* env, const SkPoint& p);
-        jobjectArray fromSkPoints(JNIEnv* env, const std::vector<SkPoint>& ps);
+        SKIKO_EXPORT jobject fromSkPoint(JNIEnv* env, const SkPoint& p);
+        SKIKO_EXPORT jobjectArray fromSkPoints(JNIEnv* env, const std::vector<SkPoint>& ps);
 
-        void copyToInterop(JNIEnv* env, const SkPoint& point, jfloatArray pointer);
+        SKIKO_EXPORT void copyToInterop(JNIEnv* env, const SkPoint& point, jfloatArray pointer);
     }
 
     namespace PaintFilterCanvas {
@@ -289,9 +289,9 @@ namespace skija {
         void onUnload(JNIEnv* env);
         SKIKO_EXPORT std::unique_ptr<SkRect> toSkRect(JNIEnv* env, jobject rect);
         jobject fromLTRB(JNIEnv* env, float left, float top, float right, float bottom);
-        jobject fromSkRect(JNIEnv* env, const SkRect& rect);
+        SKIKO_EXPORT jobject fromSkRect(JNIEnv* env, const SkRect& rect);
 
-        void copyToInterop(JNIEnv* env, const SkRect& rect, jfloatArray pointer);
+        SKIKO_EXPORT void copyToInterop(JNIEnv* env, const SkRect& rect, jfloatArray pointer);
     }
 
     namespace RRect {
@@ -309,9 +309,9 @@ namespace skija {
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
         SKIKO_EXPORT SkRRect toSkRRect(JNIEnv* env, jfloat left, jfloat top, jfloat right, jfloat bottom, jfloatArray jradii);
-        jobject fromSkRRect(JNIEnv* env, const SkRRect& rect);
+        SKIKO_EXPORT jobject fromSkRRect(JNIEnv* env, const SkRRect& rect);
 
-        void copyToInterop(JNIEnv* env, const SkRRect& rect, jfloatArray pointer);
+        SKIKO_EXPORT void copyToInterop(JNIEnv* env, const SkRRect& rect, jfloatArray pointer);
     }
 
     namespace RSXform {
@@ -362,21 +362,21 @@ namespace kotlin {
 SKIKO_EXPORT std::unique_ptr<SkMatrix> skMatrix(JNIEnv* env, jfloatArray arr);
 SKIKO_EXPORT std::unique_ptr<SkM44> skM44(JNIEnv* env, jfloatArray arr);
 
-SkString skString(JNIEnv* env, jstring str);
-jstring javaString(JNIEnv* env, const SkString& str);
-jstring javaString(JNIEnv* env, const char* chars, size_t len);
-jstring javaString(JNIEnv* env, const char* chars);
+SKIKO_EXPORT SkString skString(JNIEnv* env, jstring str);
+SKIKO_EXPORT jstring javaString(JNIEnv* env, const SkString& str);
+SKIKO_EXPORT jstring javaString(JNIEnv* env, const char* chars, size_t len);
+SKIKO_EXPORT jstring javaString(JNIEnv* env, const char* chars);
 
-jobject javaFloat(JNIEnv* env, SkScalar val);
-jlong packTwoInts(int32_t a, int32_t b);
-jlong packIPoint(SkIPoint p);
-jlong packISize(SkISize s);
+SKIKO_EXPORT jobject javaFloat(JNIEnv* env, SkScalar val);
+SKIKO_EXPORT jlong packTwoInts(int32_t a, int32_t b);
+SKIKO_EXPORT jlong packIPoint(SkIPoint p);
+SKIKO_EXPORT jlong packISize(SkISize s);
 
-jbyteArray   javaByteArray  (JNIEnv* env, const std::vector<jbyte>& bytes);
-jshortArray  javaShortArray (JNIEnv* env, const std::vector<jshort>& shorts);
-jintArray    javaIntArray   (JNIEnv* env, const std::vector<jint>& ints);
-jlongArray   javaLongArray  (JNIEnv* env, const std::vector<jlong>& longs);
-jfloatArray  javaFloatArray (JNIEnv* env, const std::vector<float>& floats);
+SKIKO_EXPORT jbyteArray   javaByteArray  (JNIEnv* env, const std::vector<jbyte>& bytes);
+SKIKO_EXPORT jshortArray  javaShortArray (JNIEnv* env, const std::vector<jshort>& shorts);
+SKIKO_EXPORT jintArray    javaIntArray   (JNIEnv* env, const std::vector<jint>& ints);
+SKIKO_EXPORT jlongArray   javaLongArray  (JNIEnv* env, const std::vector<jlong>& longs);
+SKIKO_EXPORT jfloatArray  javaFloatArray (JNIEnv* env, const std::vector<float>& floats);
 
 SKIKO_EXPORT std::vector<SkString> skStringVector(JNIEnv* env, jobjectArray arr);
 SKIKO_EXPORT jobjectArray javaStringArray(JNIEnv* env, const std::vector<SkString>& strings);
