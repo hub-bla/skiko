@@ -258,24 +258,26 @@ fun SkikoProjectContext.createLinkJvmBindings(
 
     libFiles = project.fileTree(skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }) {
         val fileExtension = if (targetOs.isWindows) ".lib" else ".a"
+        val filePrefix = if (targetOs.isWindows) "" else "lib"
+
         if (libBaseName == "skiko") {
             include("*$fileExtension")
-            exclude("libdawn$fileExtension")
-            exclude("libskia_graphite_ext.a")
-            exclude("libskia.a")
-            exclude("libskottie.a")
-            exclude("libsksg.a")
-            exclude("libjsonreader.a")
+            exclude("${filePrefix}dawn$fileExtension")
+            exclude("${filePrefix}skia_graphite_ext$fileExtension")
+            exclude("${filePrefix}skia$fileExtension")
+            exclude("${filePrefix}skottie$fileExtension")
+            exclude("${filePrefix}sksg$fileExtension")
+            exclude("${filePrefix}jsonreader$fileExtension")
         }
 
         if (libBaseName == "skiko-graphite") {
-            include("libskia_graphite_ext.a")
+            include("${filePrefix}skia_graphite_ext$fileExtension")
         }
 
         if (libBaseName == "skiko-skottie") {
-            include("libskottie.a")
-            include("libsksg.a")
-            include("libjsonreader.a")
+            include("${filePrefix}skottie$fileExtension")
+            include("${filePrefix}sksg$fileExtension")
+            include("${filePrefix}jsonreader$fileExtension")
         }
     }
 
@@ -389,7 +391,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     arrayOf(
                         "/NOLOGO",
                         "/DLL",
-                        "/WHOLEARCHIVE:libskia.lib",
+                        "/WHOLEARCHIVE:skia.lib",
                         "Advapi32.lib",
                         "gdi32.lib",
                         "Dwmapi.lib",
