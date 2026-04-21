@@ -242,6 +242,19 @@ fun generateVersionScript(unexportedTxt: Path, output: Path) {
     })
 }
 
+fun generateDefFile(exportedTxt: Path, output: Path) {
+    val symbols = exportedTxt.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    output.writeText(buildString {
+        appendLine("EXPORTS")
+        symbols.forEach { symbol ->
+            appendLine("    $symbol")
+        }
+    })
+}
+
 fun SkikoProjectContext.createLinkJvmBindings(
     targetOs: OS,
     targetArch: Arch,
@@ -403,8 +416,12 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
 
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
-                val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
-                arrayOf("-Wl,/exclude-symbols:@${unexportedSymbols.absolutePath}")
+                val exportedSymbols = maybeSignedDir.resolve("symbols_filtered.txt")
+                val defFile = maybeSignedDir.resolve("symbols.def")
+                doFirst {
+                    generateDefFile(exportedSymbols.toPath(), defFile.toPath())
+                }
+                arrayOf("/DEF:${defFile.absolutePath}")
             } else arrayOf()
 
             osFlags = mutableListOf<String>().apply {
