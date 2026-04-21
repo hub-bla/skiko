@@ -310,10 +310,14 @@ fun SkikoProjectContext.createLinkJvmBindings(
             objectFiles += project.fileTree(objcCompileTask.map { it.outDir.get() }) {
                 include("**/*.o")
             }
-            val additionalFlags = if (libBaseName != "skiko") arrayOf(
-                "-L${coreLibDir.absolutePath}",
-                "-lskiko-${targetOs.id}-${targetArch.id}",
-            ) else arrayOf(
+            val additionalFlags = if (libBaseName != "skiko") {
+                val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
+                arrayOf(
+                    "-L${coreLibDir.absolutePath}",
+                    "-lskiko-${targetOs.id}-${targetArch.id}",
+                )
+            } else arrayOf(
                 "-Wl,-force_load,$skiaBinDir/libskia.a",
             )
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") arrayOf(
@@ -385,6 +389,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("$skiaBinDir/libskia.a")
                     add("-Wl,--no-whole-archive")
                 } else {
+                    val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                    dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
                     add("-L${coreLibDir.absolutePath}")
                     add("-lskiko-${targetOs.id}-${targetArch.id}")
                 }
@@ -430,9 +436,12 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
                 if (libBaseName == "skiko") {
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
+                    add("/IMPLIB:${libBaseName}-${targetOs.id}-${targetArch.id}.lib")
                 } else {
+                    val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                    dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
                     add("/LIBPATH:${coreLibDir.absolutePath}")
-                    add("skiko-${targetOs.id}-${targetArch.id}.dll")
+                    add("skiko-${targetOs.id}-${targetArch.id}.lib")
                 }
             }.toTypedArray() + exportFlags
         }
@@ -503,6 +512,14 @@ fun SkikoProjectContext.maybeSignOrSealTask(
         task.outDir.get().asFile.walk().single { it.name.endsWith(targetOs.dynamicLibExt) }.absoluteFile
     }
     libFile.set(project.layout.file(linkOutputFile))
+
+    if (targetOs.isWindows) {
+        val linkImportFile = linkJvmBindings.map { task ->
+            task.outDir.get().asFile.walk().single { it.name.endsWith(".lib") }.absoluteFile
+        }
+        libImportFile.set(project.layout.file(linkImportFile))
+    }
+
     val target = targetId(targetOs, targetArch)
     outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target"))
 
