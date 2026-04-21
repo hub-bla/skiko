@@ -485,7 +485,9 @@ if (supportAwt) {
 
         val skiaBindingsDir = skikoProjectContext.registerOrGetSkiaDirProvider(targetOs, targetArch)
         val compileTask = tasks.named("compileJvmBindings${joinToTitleCamelCase(targetOs.id, targetArch.id)}") as TaskProvider<CompileSkikoCppTask>
-        val objcTask = tasks.named("objcCompile${joinToTitleCamelCase(targetOs.id, targetArch.id)}") as TaskProvider<CompileSkikoObjCTask>
+        val objcTask = if (targetOs.isMacOs) {
+            tasks.named("objcCompile${joinToTitleCamelCase(targetOs.id, targetArch.id)}") as TaskProvider<CompileSkikoObjCTask>
+        } else null
 
         val relinkCore = skikoProjectContext.createLinkJvmBindings(
             targetOs, targetArch, skiaBindingsDir,
