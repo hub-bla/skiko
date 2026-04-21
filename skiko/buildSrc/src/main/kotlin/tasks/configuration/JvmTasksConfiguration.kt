@@ -270,6 +270,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             //>>> defined at skcms.lib(skcms.skcms.obj)
             exclude("${filePrefix}skcms$fileExtension")
             exclude("${filePrefix}spirv_cross$fileExtension")
+            exclude("${filePrefix}libwebp$fileExtension")
             exclude("${filePrefix}svg$fileExtension")
             exclude("${filePrefix}skottie$fileExtension")
             exclude("${filePrefix}sksg$fileExtension")
@@ -343,8 +344,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
         }
         OS.Linux -> {
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
+                val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
                 val versionScript = maybeSignedDir.resolve("symbols.map")
-                generateVersionScript(maybeSignedDir.resolve("symbols_unexported.txt").toPath(), versionScript.toPath())
+                doFirst {
+                    generateVersionScript(unexportedSymbols.toPath(), versionScript.toPath())
+                }
                 arrayOf("-Wl,--version-script=${versionScript.absolutePath}")
             } else arrayOf()
 
@@ -381,7 +385,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
             libDirs.set(windowsSdkPaths.libDirs)
 
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
-                arrayOf("-Wl,/exclude-symbols:@${maybeSignedDir.resolve("symbols_unexported.txt").absolutePath}")
+                val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
+                arrayOf("-Wl,/exclude-symbols:@${unexportedSymbols.absolutePath}")
             } else arrayOf()
 
             osFlags = mutableListOf<String>().apply {
