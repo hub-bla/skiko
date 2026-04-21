@@ -278,12 +278,14 @@ fun SkikoProjectContext.createLinkJvmBindings(
             exclude("${filePrefix}dawn$fileExtension")
             exclude("${filePrefix}skia_graphite_ext$fileExtension")
             exclude("${filePrefix}skia$fileExtension")
-            //lld-link: error: duplicate symbol: skcms_MaxRoundtripError
-            //>>> defined at skia.lib(skcms.skcms.obj)
-            //>>> defined at skcms.lib(skcms.skcms.obj)
             exclude("${filePrefix}skottie$fileExtension")
             exclude("${filePrefix}sksg$fileExtension")
             exclude("${filePrefix}jsonreader$fileExtension")
+            if (targetOs.isWindows) {
+                exclude("${filePrefix}skshaper$fileExtension")
+                exclude("${filePrefix}skunicode_core$fileExtension")
+                exclude("${filePrefix}skunicode_icu$fileExtension")
+            }
         }
 
         if (libBaseName == "skiko-graphite") {
@@ -417,29 +419,33 @@ fun SkikoProjectContext.createLinkJvmBindings(
 
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "") {
                 val defFile = maybeSignedDir.resolve("skiko_all_exports.def")
-                val skiaLibPath = "$skiaBinDir/skia.lib"
-
                 doFirst {
-                    val out = java.io.ByteArrayOutputStream()
-                    project.exec {
-                        commandLine("dumpbin", "/SYMBOLS", skiaLibPath)
-                        standardOutput = out
-                    }
+                    val libsToDump = listOf(
+                        "$skiaBinDir/skia.lib",
+                        "$skiaBinDir/skshaper.lib",
+                        "$skiaBinDir/skunicode_core.lib",
+                        "$skiaBinDir/skunicode_icu.lib",
+                    )
 
-                    val symbols = out.toString().lines()
-                        .filter { it.contains("External") && it.contains("|") && !it.contains("UNDEF") }
-                        .map { it.substringAfter("|").trim().substringBefore(" ") }
-                        .filter { symbol ->
-                            symbol.isNotEmpty() &&
-                                    !symbol.startsWith("__imp_") &&
-                                    !symbol.startsWith(".refptr") &&
-                                    !symbol.startsWith("__real@") &&
-                                    !symbol.startsWith("__xmm@")
+                    val symbols = libsToDump.flatMap { libPath ->
+                        val out = java.io.ByteArrayOutputStream()
+                        project.exec {
+                            commandLine("dumpbin", "/SYMBOLS", libPath)
+                            standardOutput = out
                         }
-                        .distinct()
-                        .sorted()
+                        out.toString().lines()
+                            .filter { it.contains("External") && it.contains("|") && !it.contains("UNDEF") }
+                            .map { it.substringAfter("|").trim().substringBefore(" ") }
+                            .filter { symbol ->
+                                symbol.isNotEmpty() &&
+                                        !symbol.startsWith("__imp_") &&
+                                        !symbol.startsWith(".refptr") &&
+                                        !symbol.startsWith("__real@") &&
+                                        !symbol.startsWith("__xmm@")
+                            }
+                    }.distinct().sorted()
 
-                    logger.lifecycle("Pass 1: Exporting ${symbols.size} symbols from skia.lib...")
+                    logger.lifecycle("Pass 1: Exporting ${symbols.size} symbols from skia.lib + skshaper...")
                     defFile.parentFile.mkdirs()
                     defFile.writeText("EXPORTS\n" + symbols.joinToString("\n") { "    $it" })
                 }
@@ -483,6 +489,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
                 if (libBaseName == "skiko") {
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
+                    add("/WHOLEARCHIVE:$skiaBinDir/skshaper.lib")
+                    add("/WHOLEARCHIVE:$skiaBinDir/skunicode_core.lib")
+                    add("/WHOLEARCHIVE:$skiaBinDir/skunicode_icu.lib")
                     add("/IMPLIB:${libBaseName}-${targetOs.id}-${targetArch.id}.lib")
                 } else {
                     val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
