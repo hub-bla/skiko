@@ -26,12 +26,12 @@ jobs:
       - shell: bash
         name: 'Run AWT Tests'
         run: |
-          ./gradlew --no-daemon --stacktrace \
+          cd skiko && ./gradlew --no-daemon --stacktrace \
             -Pskiko.native.enabled=true \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :skiko:awtTest \
-            :skiko:skiko-skottie:awtTest
+            :awtTest \
+            :skiko-skottie:awtTest
 
       - shell: bash
         name: 'Run macOS Tests'
@@ -188,12 +188,12 @@ jobs:
           image_name: linux-compat
           virtual-display: true
           command: |
-            ./gradlew --no-daemon --stacktrace \
+            cd skiko && ./gradlew --no-daemon --stacktrace \
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko:awtTest \
-              :skiko:skiko-skottie:awtTest
+              :awtTest \
+              :skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -326,11 +326,10 @@ jobs:
       - shell: bash
         name: 'Run AWT tests'
         run: |
-          ./gradlew --no-daemon --stacktrace \
+         cd skiko && ./gradlew --no-daemon --stacktrace \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            -Dskiko.test.ui.renderApi.ignoreAssertsFor=OPENGL \
-            :skiko:awtTest \
+            :awtTest \
             :skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
