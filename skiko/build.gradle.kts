@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import java.io.ByteArrayOutputStream
 import tasks.configuration.*
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -386,7 +387,7 @@ afterEvaluate {
 //        }
 //    }
 //}
-if (supportAwt && targetOs.isMacOs) {
+if (supportAwt) {
     afterEvaluate {
         val target = targetId(targetOs, targetArch)
         val maybeSignedDir = layout.buildDirectory.dir("maybe-signed-$target").get().asFile
@@ -399,11 +400,12 @@ if (supportAwt && targetOs.isMacOs) {
             )
 
             doLast {
-                val coreLib = maybeSignedDir.resolve("libskiko-${targetOs.id}-${targetArch.id}.dylib")
-                val extDylibs = listOf(":skiko-graphite", ":skiko-skottie").flatMap { projPath ->
+                val libExt = targetOs.dynamicLibExt
+                val coreLib = maybeSignedDir.resolve("libskiko-${targetOs.id}-${targetArch.id}$libExt")
+                val extLibs = listOf(":skiko-graphite", ":skiko-skottie").flatMap { projPath ->
                     project(projPath).layout.buildDirectory
                         .dir("maybe-signed-$target").get().asFile
-                        .listFiles { f -> f.name.endsWith(".dylib") }
+                        .listFiles { f -> f.name.endsWith(libExt) }
                         ?.toList() ?: emptyList()
                 }
 
@@ -412,29 +414,43 @@ if (supportAwt && targetOs.isMacOs) {
                 val symbolsFiltered   = maybeSignedDir.resolve("symbols_filtered.txt")
                 val symbolsUnexported = maybeSignedDir.resolve("symbols_unexported.txt")
 
-                extImports.delete()
-                symbolsFiltered.delete()
-                symbolsUnexported.delete()
-
-                // 1. core exports
-                exec { commandLine("sh", "-c", "nm -gU ${coreLib.absolutePath} | awk '{print \$NF}' > ${coreExports.absolutePath}") }
-
-                // 2. all ext imports
-                extDylibs.forEach { ext ->
-                    exec { commandLine("sh", "-c", "nm -u ${ext.absolutePath} >> ${extImports.absolutePath}") }
+                fun extractSymbols(lib: File, exported: Boolean): List<String> {
+                    val out = ByteArrayOutputStream()
+                    val flags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
+                    project.exec {
+                        commandLine("llvm-nm", *flags.toTypedArray(), lib.absolutePath)
+                        standardOutput = out
+                    }
+                    return out.toString().lines()
+                        .map { it.trim().split(" ").last() }
+                        .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
                 }
 
+                // 1. core exports
+                val coreExportedList = extractSymbols(coreLib, true)
+                coreExports.writeText(coreExportedList.sorted().joinToString("\n"))
+
+                // 2. all ext imports
+                val extImportedList = extLibs.flatMap { extractSymbols(it, false) }.toMutableList()
+
                 // also keep jvm infrastructure globals
-                exec { commandLine("sh", "-c", "nm -gU ${coreLib.absolutePath} | awk '{print \$NF}' | grep -E '^_jvm$|^_JNI|^_Java_' >> ${extImports.absolutePath}") }
+                extImportedList.addAll(coreExportedList.filter { 
+                    it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_") 
+                })
+
+                extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
 
                 // 4. initial keep list = intersection of ext imports + JNI with core exports
-                exec { commandLine("bash", "-c", "comm -12 <(sort ${extImports.absolutePath}) <(sort ${coreExports.absolutePath}) > ${symbolsFiltered.absolutePath}") }
+                val coreExportsSet = coreExportedList.toSet()
+                val keepSet = extImportedList.filter { it in coreExportsSet }.toSet()
+                symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
                 // 5. unexported = core exports minus what strip decided to keep
-                exec { commandLine("bash", "-c", "comm -23 <(sort ${coreExports.absolutePath}) <(sort ${symbolsFiltered.absolutePath}) > ${symbolsUnexported.absolutePath}") }
+                val unexportedSet = coreExportsSet - keepSet
+                symbolsUnexported.writeText(unexportedSet.sorted().joinToString("\n"))
 
                 coreLib.delete()
-                logger.lifecycle("Symbols to keep: ${symbolsFiltered.readLines().size}, to hide: ${symbolsUnexported.readLines().size}")
+                logger.lifecycle("Symbols to keep: ${keepSet.size}, to hide: ${unexportedSet.size}")
             }
         }
 
@@ -464,7 +480,7 @@ if (supportAwt && targetOs.isMacOs) {
         tasks.named("skikoJvmRuntimeJar${joinToTitleCamelCase(targetOs.id, targetArch.id)}", Jar::class) {
             dependsOn(remaybeSign)
             val relinkedLib = remaybeSign.map { task ->
-                task.outputFiles.get().single { it.name.endsWith(".dylib") }
+                task.outputFiles.get().single { it.name.endsWith(targetOs.dynamicLibExt) }
             }
             from(relinkedLib)
         }

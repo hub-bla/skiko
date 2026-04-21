@@ -31,6 +31,9 @@ import registerSkikoTask
 import runPkgConfig
 import targetId
 import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.readLines
+import kotlin.io.path.writeText
 
 fun SkikoProjectContext.createCompileJvmBindingsTask(
     targetOs: OS,
@@ -222,6 +225,21 @@ fun SkikoProjectContext.createObjcCompileTask(
     )
 }
 
+fun generateVersionScript(unexportedTxt: Path, output: Path) {
+    val symbols = unexportedTxt.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    output.writeText(buildString {
+        appendLine("{")
+        appendLine(" local:")
+        symbols.forEach { symbol ->
+            appendLine("    $symbol;")
+        }
+        appendLine(" global: *;")
+        appendLine("};")
+    })
+}
 
 fun SkikoProjectContext.createLinkJvmBindings(
     targetOs: OS,
@@ -288,6 +306,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-Wl,-force_load,$skiaBinDir/libskia.a",
             )
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") arrayOf(
+                // windows - "-Wl,/exclude-symbols:@file.txt"
+                // linux - "-Wl, --version-script=symbols.map"
                 "-Wl,-unexported_symbols_list,${maybeSignedDir.resolve("symbols_unexported.txt").absolutePath}",
             ) else arrayOf()
 
@@ -313,6 +333,12 @@ fun SkikoProjectContext.createLinkJvmBindings(
             )  + exportFlags + additionalFlags
         }
         OS.Linux -> {
+            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
+                val versionScript = maybeSignedDir.resolve("symbols.map")
+                generateVersionScript(maybeSignedDir.resolve("symbols_unexported.txt").toPath(), versionScript.toPath())
+                arrayOf("-Wl,--version-script=${versionScript.absolutePath}")
+            } else arrayOf()
+
             osFlags = mutableListOf<String>().apply {
                 addAll(
                     arrayOf(
@@ -328,20 +354,27 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "-Wl,-z,relro,-z,now",
                         // Hack to fix problem with linker not always finding certain declarations.
                         "$skiaBinDir/libsksg.a",
+                        "-Wl,--whole-archive",
                         "$skiaBinDir/libskia.a",
+                        "-Wl,--no-whole-archive",
                         "$skiaBinDir/libskunicode_core.a",
                         "$skiaBinDir/libskunicode_icu.a",
                         "$skiaBinDir/libskshaper.a",
-                        "$skiaBinDir/libjsonreader.a"
+                        "$skiaBinDir/libjsonreader.a",
                     )
                 )
                 if (targetArch == Arch.Arm64) {
                     add("-lEGL")
                 }
-            }.toTypedArray()
+            }.toTypedArray() + exportFlags
         }
         OS.Windows -> {
             libDirs.set(windowsSdkPaths.libDirs)
+
+            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
+                arrayOf("-Wl,/exclude-symbols:@${maybeSignedDir.resolve("symbols_unexported.txt").absolutePath}")
+            } else arrayOf()
+
             osFlags = mutableListOf<String>().apply {
                 addAll(buildType.winLinkerFlags)
                 addAll(
@@ -355,6 +388,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     arrayOf(
                         "/NOLOGO",
                         "/DLL",
+                        "/WHOLEARCHIVE:libskia.lib",
                         "Advapi32.lib",
                         "gdi32.lib",
                         "Dwmapi.lib",
@@ -366,7 +400,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     )
                 )
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
-            }.toTypedArray()
+            }.toTypedArray() + exportFlags
         }
         OS.Android -> {
             osFlags = arrayOf(
@@ -378,7 +412,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-landroid",
                 "-latomic",
                 // Hack to fix problem with linker not always finding certain declarations.
+                "-Wl,--whole-archive",
                 "$skiaBinDir/libskia.a",
+                "-Wl,--no-whole-archive"
             )
             linker.set(project.androidClangFor(targetArch))
         }
