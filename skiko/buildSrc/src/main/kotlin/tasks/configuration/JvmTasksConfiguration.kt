@@ -283,8 +283,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
             exclude("${filePrefix}jsonreader$fileExtension")
             if (targetOs.isWindows) {
                 exclude("${filePrefix}skshaper$fileExtension")
-                exclude("${filePrefix}skunicode_core$fileExtension")
-                exclude("${filePrefix}skunicode_icu$fileExtension")
             }
         }
 
@@ -423,8 +421,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     val libsToDump = listOf(
                         "$skiaBinDir/skia.lib",
                         "$skiaBinDir/skshaper.lib",
-                        "$skiaBinDir/skunicode_core.lib",
-                        "$skiaBinDir/skunicode_icu.lib",
                     )
 
                     val symbols = libsToDump.flatMap { libPath ->
@@ -490,8 +486,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (libBaseName == "skiko") {
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
                     add("/WHOLEARCHIVE:$skiaBinDir/skshaper.lib")
-                    add("/WHOLEARCHIVE:$skiaBinDir/skunicode_core.lib")
-                    add("/WHOLEARCHIVE:$skiaBinDir/skunicode_icu.lib")
                     add("/IMPLIB:${libBaseName}-${targetOs.id}-${targetArch.id}.lib")
                 } else {
                     val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
