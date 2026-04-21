@@ -274,7 +274,12 @@ fun SkikoProjectContext.createLinkJvmBindings(
         }
 
         if (libBaseName == "skiko-graphite") {
-            include("${filePrefix}skia_graphite_ext$fileExtension")
+            if (targetOs.isWindows) {
+                include("${filePrefix}skia_graphite_dawn_ext$fileExtension")
+                include("${filePrefix}dawn$fileExtension")
+            } else {
+                include("${filePrefix}skia_graphite_ext$fileExtension")
+            }
         }
 
         if (libBaseName == "skiko-skottie") {
@@ -363,9 +368,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "-Wl,-z,relro,-z,now",
                         // Hack to fix problem with linker not always finding certain declarations.
                         "$skiaBinDir/libsksg.a",
-                        "-Wl,--whole-archive",
-                        "$skiaBinDir/libskia.a",
-                        "-Wl,--no-whole-archive",
                         "$skiaBinDir/libskunicode_core.a",
                         "$skiaBinDir/libskunicode_icu.a",
                         "$skiaBinDir/libskshaper.a",
@@ -374,6 +376,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 )
                 if (targetArch == Arch.Arm64) {
                     add("-lEGL")
+                }
+                if (libBaseName == "skiko") {
+                    add("-Wl,--whole-archive")
+                    add("$skiaBinDir/libskia.a")
+                    add("-Wl,--no-whole-archive")
                 }
             }.toTypedArray() + exportFlags
         }
@@ -399,7 +406,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "/FORCE:MULTIPLE",
                         "/NOLOGO",
                         "/DLL",
-                        "/WHOLEARCHIVE:$skiaBinDir/skia.lib",
                         "Advapi32.lib",
                         "gdi32.lib",
                         "Dwmapi.lib",
@@ -413,23 +419,27 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     )
                 )
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
+                if (libBaseName == "skiko") {
+                    add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
+                }
             }.toTypedArray() + exportFlags
         }
         OS.Android -> {
-            osFlags = arrayOf(
+            val androidFlags = mutableListOf(
                 "-shared",
                 "-static-libstdc++",
-                "-lGLESv3",
                 "-lEGL",
                 "-llog",
-                "-landroid",
-                "-latomic",
-                // Hack to fix problem with linker not always finding certain declarations.
-                "-Wl,--whole-archive",
-                "$skiaBinDir/libskia.a",
-                "-Wl,--no-whole-archive"
             )
             linker.set(project.androidClangFor(targetArch))
+            if (libBaseName == "skiko") {
+                androidFlags += arrayOf(
+                    "-Wl,--whole-archive",
+                    "$skiaBinDir/libskia.a",
+                    "-Wl,--no-whole-archive"
+                )
+            }
+            osFlags = androidFlags.toTypedArray()
         }
         OS.Wasm, OS.IOS, OS.TVOS -> {
             throw GradleException("This task shalln't be used with $targetOs")
