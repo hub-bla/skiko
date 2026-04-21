@@ -444,14 +444,18 @@ if (supportAwt) {
                                 commandLine("dumpbin", mode, lib.absolutePath)
                                 standardOutput = out
                             }
-                            return out.toString().lines()
-                                .map { it.trim() }
-                                .filter { line ->
-                                    if (exported) line.matches(Regex("\\d+\\s+[0-9A-Fa-f]+\\s+[0-9A-Fa-f]+\\s+.*"))
-                                    else line.isNotEmpty() && !line.startsWith("Microsoft") && !line.startsWith("Dump") && !line.startsWith("File") && !line.startsWith("Section") && !line.startsWith("Summary")
-                                }
-                                .map { if (exported) it.trim().split(Regex("\\s+")).last() else it.trim() }
-                                .filter { it.isNotEmpty() }
+                            return if (exported) {
+                                out.toString().lines()
+                                    .filter { it.trim().matches(Regex("\\d+\\s+[0-9A-Fa-f]+\\s+[0-9A-Fa-f]+\\s+.*")) }
+                                    .map { it.trim().split(Regex("\\s+")).getOrNull(3) ?: "" }
+                                    .filter { it.isNotEmpty() }
+                            } else {
+                                out.toString().lines()
+                                    .map { it.trim() }
+                                    .filter { it.matches(Regex("[0-9A-Fa-f]+\\s+\\S.*")) }
+                                    .map { it.split(Regex("\\s+"), limit = 2).last().trim() }
+                                    .filter { it.isNotEmpty() }
+                            }
                         }
                     }
                 }
