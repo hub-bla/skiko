@@ -401,7 +401,8 @@ if (supportAwt) {
 
             doLast {
                 val libExt = targetOs.dynamicLibExt
-                val coreLib = maybeSignedDir.resolve("libskiko-${targetOs.id}-${targetArch.id}$libExt")
+                val libPrefix = if (targetOs.isWindows) "" else "lib"
+                val coreLib = maybeSignedDir.resolve("${libPrefix}skiko-${targetOs.id}-${targetArch.id}$libExt")
                 val extLibs = listOf(":skiko-graphite", ":skiko-skottie").flatMap { projPath ->
                     project(projPath).layout.buildDirectory
                         .dir("maybe-signed-$target").get().asFile
