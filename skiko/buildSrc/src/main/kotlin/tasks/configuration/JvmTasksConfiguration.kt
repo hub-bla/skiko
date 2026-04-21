@@ -265,6 +265,10 @@ fun SkikoProjectContext.createLinkJvmBindings(
             exclude("${filePrefix}dawn$fileExtension")
             exclude("${filePrefix}skia_graphite_ext$fileExtension")
             exclude("${filePrefix}skia$fileExtension")
+            //lld-link: error: duplicate symbol: skcms_MaxRoundtripError
+            //>>> defined at skia.lib(skcms.skcms.obj)
+            //>>> defined at skcms.lib(skcms.skcms.obj)
+            exclude("${filePrefix}skcms$fileExtension")
             exclude("${filePrefix}skottie$fileExtension")
             exclude("${filePrefix}sksg$fileExtension")
             exclude("${filePrefix}jsonreader$fileExtension")
