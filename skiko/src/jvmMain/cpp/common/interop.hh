@@ -21,6 +21,12 @@
 #include "TextStyle.h"
 #include "mppinterop.h"
 
+#ifdef SK_BUILD_FOR_WIN
+    #define SKIKO_EXPORT __declspec(dllexport)
+#else
+    #define SKIKO_EXPORT __attribute__((visibility("default")))
+#endif
+
 namespace java {
     namespace io {
         namespace OutputStream {
@@ -227,7 +233,7 @@ namespace skija {
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
         jobject fromSkIRect(JNIEnv* env, const SkIRect& rect);
-        std::unique_ptr<SkIRect> toSkIRect(JNIEnv* env, jintArray obj);
+        SKIKO_EXPORT std::unique_ptr<SkIRect> toSkIRect(JNIEnv* env, jintArray obj);
     }
 
     namespace Path {
@@ -281,7 +287,7 @@ namespace skija {
         extern jfieldID bottom;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        std::unique_ptr<SkRect> toSkRect(JNIEnv* env, jobject rect);
+        SKIKO_EXPORT std::unique_ptr<SkRect> toSkRect(JNIEnv* env, jobject rect);
         jobject fromLTRB(JNIEnv* env, float left, float top, float right, float bottom);
         jobject fromSkRect(JNIEnv* env, const SkRect& rect);
 
@@ -302,7 +308,7 @@ namespace skija {
         extern jfieldID radii;
         void onLoad(JNIEnv* env);
         void onUnload(JNIEnv* env);
-        SkRRect toSkRRect(JNIEnv* env, jfloat left, jfloat top, jfloat right, jfloat bottom, jfloatArray jradii);
+        SKIKO_EXPORT SkRRect toSkRRect(JNIEnv* env, jfloat left, jfloat top, jfloat right, jfloat bottom, jfloatArray jradii);
         jobject fromSkRRect(JNIEnv* env, const SkRRect& rect);
 
         void copyToInterop(JNIEnv* env, const SkRRect& rect, jfloatArray pointer);
@@ -316,8 +322,7 @@ namespace skija {
     }
 
     namespace SurfaceProps {
-        __attribute__((visibility("default")))
-        std::unique_ptr<SkSurfaceProps> toSkSurfaceProps(JNIEnv* env, jintArray surfacePropsInts);
+        SKIKO_EXPORT std::unique_ptr<SkSurfaceProps> toSkSurfaceProps(JNIEnv* env, jintArray surfacePropsInts);
     }
 
     namespace SamplingMode {
@@ -354,8 +359,8 @@ namespace kotlin {
     void onUnload(JNIEnv* env);
 }
 
-std::unique_ptr<SkMatrix> skMatrix(JNIEnv* env, jfloatArray arr);
-std::unique_ptr<SkM44> skM44(JNIEnv* env, jfloatArray arr);
+SKIKO_EXPORT std::unique_ptr<SkMatrix> skMatrix(JNIEnv* env, jfloatArray arr);
+SKIKO_EXPORT std::unique_ptr<SkM44> skM44(JNIEnv* env, jfloatArray arr);
 
 SkString skString(JNIEnv* env, jstring str);
 jstring javaString(JNIEnv* env, const SkString& str);
@@ -373,8 +378,8 @@ jintArray    javaIntArray   (JNIEnv* env, const std::vector<jint>& ints);
 jlongArray   javaLongArray  (JNIEnv* env, const std::vector<jlong>& longs);
 jfloatArray  javaFloatArray (JNIEnv* env, const std::vector<float>& floats);
 
-std::vector<SkString> skStringVector(JNIEnv* env, jobjectArray arr);
-jobjectArray javaStringArray(JNIEnv* env, const std::vector<SkString>& strings);
+SKIKO_EXPORT std::vector<SkString> skStringVector(JNIEnv* env, jobjectArray arr);
+SKIKO_EXPORT jobjectArray javaStringArray(JNIEnv* env, const std::vector<SkString>& strings);
 
 template <typename T>
 jlong ptrToJlong(T* ptr) {
@@ -447,7 +452,7 @@ public:
     JCallback(const JCallback&) = delete;
     JCallback& operator=(const JCallback&) = delete;
 
-    JCallback(JCallback&& other) noexcept {
+    JCallback(JCallback&& other) {
         std::swap(env, other.env);
         std::swap(javaVM, other.javaVM);
         std::swap(callback, other.callback);
@@ -456,7 +461,7 @@ public:
         std::swap(env, other.env);
         std::swap(javaVM, other.javaVM);
         std::swap(callback, other.callback);
-        return this;
+        return *this;
     }
 
     T operator()() {
