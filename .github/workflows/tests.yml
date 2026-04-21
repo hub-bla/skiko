@@ -30,7 +30,8 @@ jobs:
             -Pskiko.native.enabled=true \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :skiko:awtTest
+            :skiko:awtTest \
+            :skiko-skottie:awtTest
 
       - shell: bash
         name: 'Run macOS Tests'
@@ -39,7 +40,8 @@ jobs:
             -Pskiko.native.enabled=true \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :skiko:macosArm64Test
+            :skiko:macosArm64Test \
+            :skiko-skottie:macosArm64Test
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -176,7 +178,8 @@ jobs:
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko:linuxX64Test
+              :skiko:linuxX64Test \
+              :skiko-skottie:linuxX64Test
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
@@ -189,7 +192,8 @@ jobs:
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko:awtTest
+              :skiko:awtTest \
+              :skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -225,13 +229,16 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.arch=x64 \
               -Pskiko.native.linux.enabled=true \
-              :skiko:linkDebugTestLinuxArm64
+              :skiko:linkDebugTestLinuxArm64 \
+              :skiko-skottie:linkDebugTestLinuxArm64
 
       - uses: actions/upload-artifact@v4
         name: 'Upload linuxArm64 test binary as artifact'
         with:
           name: test-binary-linuxArm64
-          path: ./skiko/build/bin/linuxArm64
+          path: |
+            ./skiko/build/bin/linuxArm64
+            ./skiko/skiko-skottie/build/bin/linuxArm64
           if-no-files-found: error
           retention-days: 5
 
@@ -250,7 +257,7 @@ jobs:
         name: 'Download precompiled linuxArm64 test binary'
         with:
           name: test-binary-linuxArm64
-          path: ./skiko/build/bin/linuxArm64
+          path: ./precompiled
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run Linux (arm64) Tests'
@@ -259,8 +266,10 @@ jobs:
           working_directory: skiko
           virtual-display: true
           command: |
-            chmod +x ./build/bin/linuxArm64/debugTest/test.kexe
-            ./build/bin/linuxArm64/debugTest/test.kexe
+            chmod +x ../precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
+            ../precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
+            chmod +x ../precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
+            ../precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
@@ -273,7 +282,8 @@ jobs:
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko:awtTest
+              :skiko:awtTest \
+              :skiko-skottie:awtTest
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -320,7 +330,8 @@ jobs:
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
             -Dskiko.test.ui.renderApi.ignoreAssertsFor=OPENGL \
-            :skiko:awtTest
+            :skiko:awtTest \
+            :skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -388,7 +399,8 @@ jobs:
             -Pskiko.wasm.enabled=true \
             -Pskiko.js.enabled=true \
             -Pskiko.test.onci=true \
-            wasmJsTest
+            :skiko:wasmJsTest \
+            :skiko-skottie:wasmJsTest
 
       - shell: bash
         name: 'Run JS Tests'
@@ -399,7 +411,8 @@ jobs:
             -Pskiko.wasm.enabled=true \
             -Pskiko.js.enabled=true \
             -Pskiko.test.onci=true \
-            jsTest
+            :skiko:jsTest \
+            :skiko-skottie:jsTest
 
       - uses: actions/upload-artifact@v4
         if: failure()
