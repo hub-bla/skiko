@@ -416,14 +416,43 @@ if (supportAwt) {
 
                 fun extractSymbols(lib: File, exported: Boolean): List<String> {
                     val out = ByteArrayOutputStream()
-                    val flags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
-                    project.exec {
-                        commandLine("llvm-nm", *flags.toTypedArray(), lib.absolutePath)
-                        standardOutput = out
+                    when {
+                        targetOs.isMacOs -> {
+                            val flags = if (exported) listOf("-g", "-U") else listOf("-u")
+                            project.exec {
+                                commandLine("nm", *flags.toTypedArray(), lib.absolutePath)
+                                standardOutput = out
+                            }
+                            return out.toString().lines()
+                                .map { it.trim().split(" ").last() }
+                                .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
+                        }
+                        targetOs.isLinux -> {
+                            val flags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
+                            project.exec {
+                                commandLine("nm", *flags.toTypedArray(), lib.absolutePath)
+                                standardOutput = out
+                            }
+                            return out.toString().lines()
+                                .map { it.trim().split(" ").last() }
+                                .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
+                        }
+                        else -> { // Windows
+                            val mode = if (exported) "/EXPORTS" else "/IMPORTS"
+                            project.exec {
+                                commandLine("dumpbin", mode, lib.absolutePath)
+                                standardOutput = out
+                            }
+                            return out.toString().lines()
+                                .map { it.trim() }
+                                .filter { line ->
+                                    if (exported) line.matches(Regex("\\d+\\s+[0-9A-Fa-f]+\\s+[0-9A-Fa-f]+\\s+.*"))
+                                    else line.isNotEmpty() && !line.startsWith("Microsoft") && !line.startsWith("Dump") && !line.startsWith("File") && !line.startsWith("Section") && !line.startsWith("Summary")
+                                }
+                                .map { if (exported) it.trim().split(Regex("\\s+")).last() else it.trim() }
+                                .filter { it.isNotEmpty() }
+                        }
                     }
-                    return out.toString().lines()
-                        .map { it.trim().split(" ").last() }
-                        .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
                 }
 
                 // 1. core exports
