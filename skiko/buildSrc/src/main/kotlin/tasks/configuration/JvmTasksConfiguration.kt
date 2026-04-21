@@ -432,7 +432,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
                 } else {
                     add("/LIBPATH:${coreLibDir.absolutePath}")
-                    add("skiko-${targetOs.id}-${targetArch.id}.lib")
+                    add("skiko-${targetOs.id}-${targetArch.id}.dll")
                 }
             }.toTypedArray() + exportFlags
         }
