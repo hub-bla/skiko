@@ -408,6 +408,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "shcore.lib",
                         "Shlwapi.lib",
                         "user32.lib",
+                        "FontSub.lib",
+                        "Usp10.lib"
                     )
                 )
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
