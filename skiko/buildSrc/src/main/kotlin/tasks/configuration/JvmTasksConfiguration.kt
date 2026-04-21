@@ -440,6 +440,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         .sorted()
 
                     logger.lifecycle("Pass 1: Exporting ${symbols.size} symbols from skia.lib...")
+                    defFile.parentFile.mkdirs()
                     defFile.writeText("EXPORTS\n" + symbols.joinToString("\n") { "    $it" })
                 }
                 arrayOf("/DEF:${defFile.absolutePath}")
