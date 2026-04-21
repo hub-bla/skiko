@@ -344,6 +344,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
             )  + exportFlags + additionalFlags
         }
         OS.Linux -> {
+            val coreLibDir = project.rootProject.layout.buildDirectory
+                .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
+
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
                 val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
                 val versionScript = maybeSignedDir.resolve("symbols.map")
@@ -381,11 +384,17 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("-Wl,--whole-archive")
                     add("$skiaBinDir/libskia.a")
                     add("-Wl,--no-whole-archive")
+                } else {
+                    add("-L${coreLibDir.absolutePath}")
+                    add("-lskiko-${targetOs.id}-${targetArch.id}")
                 }
             }.toTypedArray() + exportFlags
         }
         OS.Windows -> {
             libDirs.set(windowsSdkPaths.libDirs)
+
+            val coreLibDir = project.rootProject.layout.buildDirectory
+                .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
 
             val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
                 val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
@@ -421,6 +430,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
                 if (libBaseName == "skiko") {
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
+                } else {
+                    add("/LIBPATH:${coreLibDir.absolutePath}")
+                    add("skiko-${targetOs.id}-${targetArch.id}.lib")
                 }
             }.toTypedArray() + exportFlags
         }
