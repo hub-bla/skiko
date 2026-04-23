@@ -26,21 +26,21 @@ jobs:
       - shell: bash
         name: 'Run AWT Tests'
         run: |
-          cd skiko && ./gradlew --no-daemon --stacktrace \
+          ./gradlew --no-daemon --stacktrace \
             -Pskiko.native.enabled=true \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :skiko-skottie:awtTest
+            :skiko:skiko-skottie:awtTest
 
       - shell: bash
         name: 'Run macOS Tests'
         run: |
-          cd skiko && ./gradlew --no-daemon --stacktrace \
+          ./gradlew --no-daemon --stacktrace \
             -Pskiko.native.enabled=true \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :macosArm64Test \
-            :skiko-skottie:macosArm64Test
+            :skiko:macosArm64Test \
+            :skiko:skiko-skottie:macosArm64Test
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -173,11 +173,11 @@ jobs:
           image_name: linux-amd64
           virtual-display: true
           command: |
-            cd skiko && ./gradlew --no-daemon --stacktrace \
+            ./gradlew --no-daemon --stacktrace \
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko-skottie:linuxX64Test
+              :skiko:skiko-skottie:linuxX64Test
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
@@ -186,11 +186,11 @@ jobs:
           image_name: linux-compat
           virtual-display: true
           command: |
-            cd skiko && ./gradlew --no-daemon --stacktrace \
+            ./gradlew --no-daemon --stacktrace \
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko-skottie:awtTest
+              :skiko:skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -223,10 +223,10 @@ jobs:
         with:
           image_name: linux-amd64
           command: |
-            cd skiko && ./gradlew --no-daemon --stacktrace \
+            ./gradlew --no-daemon --stacktrace \
               -Pskiko.arch=x64 \
               -Pskiko.native.linux.enabled=true \
-              :skiko-skottie:linkDebugTestLinuxArm64
+              :skiko:skiko-skottie:linkDebugTestLinuxArm64
 
       - uses: actions/upload-artifact@v4
         name: 'Upload linuxArm64 test binary as artifact'
@@ -259,13 +259,12 @@ jobs:
         name: 'Run Linux (arm64) Tests'
         with:
           image_name: linux-compat
-          working_directory: skiko
           virtual-display: true
           command: |
-            chmod +x ../precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
-            ../precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
-            chmod +x ../precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
-            ../precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
+            chmod +x ./precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
+            ./precompiled/skiko/build/bin/linuxArm64/debugTest/test.kexe
+            chmod +x ./precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
+            ./precompiled/skiko/skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
@@ -322,10 +321,10 @@ jobs:
       - shell: bash
         name: 'Run AWT tests'
         run: |
-         cd skiko && ./gradlew --no-daemon --stacktrace \
+          ./gradlew --no-daemon --stacktrace \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
-            :skiko-skottie:awtTest
+            :skiko:skiko-skottie:awtTest
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Test Results'
@@ -370,7 +369,6 @@ jobs:
 
       - name: 'Install Emscripten'
         shell: bash
-        working-directory: skiko
         run: |
           sudo apt-get update -y
           sudo apt-get install libdbus-1-dev
@@ -386,7 +384,6 @@ jobs:
 
       - shell: bash
         name: 'Run WASM Tests'
-        working-directory: skiko
         run: |
           source ./emsdk/emsdk_env.sh
           ./gradlew --no-daemon --stacktrace \
@@ -394,11 +391,10 @@ jobs:
             -Pskiko.js.enabled=true \
             -Pskiko.test.onci=true \
             :skiko:wasmJsTest \
-            :skiko-skottie:wasmJsTest
+            :skiko:skiko-skottie:wasmJsTest
 
       - shell: bash
         name: 'Run JS Tests'
-        working-directory: skiko
         run: |
           source ./emsdk/emsdk_env.sh
           ./gradlew --no-daemon --stacktrace \
@@ -406,7 +402,7 @@ jobs:
             -Pskiko.js.enabled=true \
             -Pskiko.test.onci=true \
             :skiko:jsTest \
-            :skiko-skottie:jsTest
+            :skiko:skiko-skottie:jsTest
 
       - uses: actions/upload-artifact@v4
         if: failure()
