@@ -43,8 +43,13 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     @TaskAction
     fun generate() {
         val os = targetOs.get()
+        val arch = targetArch.get()
         val outDir = outputDir.get().asFile
         outDir.mkdirs()
+
+        logger.lifecycle(
+            "generateSymbolsList: targetOs=${os.name}, targetArch=${arch.name}, coreObjects=${coreObjectFiles.files.size}, moduleObjects=${moduleObjectFiles.files.size}, skiaLibs=${skiaLibs.files.size}, moduleLibs=${moduleLibs.files.size}"
+        )
 
         val coreExports       = outDir.resolve("core_exports.txt")
         val extImports        = outDir.resolve("ext_imports.txt")
@@ -93,10 +98,15 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
+        val executable = if (os.isWindows) "dumpbin" else nmForTarget(os, arch)
+        logger.lifecycle(
+            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols with '$executable' from ${files.size} files"
+        )
+
         when {
             os.isMacOs -> {
                 val nmFlags = if (exported) listOf("-g", "-U") else listOf("-u")
-                runBatched(executable = nmForTarget(os, arch), args = nmFlags, files = files).lines().forEach { line ->
+                runBatched(executable = executable, args = nmFlags, files = files).lines().forEach { line ->
                     val s = line.trim().split(" ").lastOrNull().orEmpty()
                     if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
                         result.add(s)
@@ -105,7 +115,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
             }
             os.isLinux -> {
                 val nmFlags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
-                runBatched(executable = nmForTarget(os, arch), args = nmFlags, files = files).lines().forEach { line ->
+                runBatched(executable = executable, args = nmFlags, files = files).lines().forEach { line ->
                     val s = line.trim().split(" ").lastOrNull().orEmpty()
                     if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
                         result.add(s)
@@ -113,7 +123,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 }
             }
             else -> {
-                runBatched(executable = "dumpbin", args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
+                runBatched(executable = executable, args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
                     if (line.contains("External")) {
                         val isUndef = line.contains("UNDEF")
                         if (exported && !isUndef || !exported && isUndef) {
@@ -133,15 +143,28 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     private fun runBatched(executable: String, args: List<String>, files: List<File>): String {
         return files
             .chunked(200)
-            .joinToString(separator = "\n") { batch ->
+            .mapIndexed { index, batch ->
+                logger.info(
+                    "generateSymbolsList: running '$executable ${args.joinToString(" ")}' for batch ${index + 1}/${(files.size + 199) / 200} with ${batch.size} files"
+                )
                 val out = ByteArrayOutputStream()
-                execOperations.exec {
-                    this.executable = executable
-                    this.args = args + batch.map { it.absolutePath }
-                    standardOutput = out
+                try {
+                    execOperations.exec {
+                        this.executable = executable
+                        this.args = args + batch.map { it.absolutePath }
+                        standardOutput = out
+                    }
+                } catch (t: Throwable) {
+                    val firstFile = batch.firstOrNull()?.absolutePath.orEmpty()
+                    logger.error(
+                        "generateSymbolsList: failed to start '$executable' for batch ${index + 1}. args=$args, firstFile=$firstFile, PATH=${System.getenv("PATH")}",
+                        t
+                    )
+                    throw t
                 }
                 out.toString()
             }
+            .joinToString(separator = "\n")
     }
 
     private fun nmForTarget(os: OS, arch: Arch): String =
