@@ -13,6 +13,9 @@ import tasks.configuration.generateDefFile
 import tasks.configuration.generateVersionScript
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import javax.inject.Inject
 
 abstract class GenerateSymbolsListTask : DefaultTask() {
@@ -98,24 +101,15 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
-        val executable = if (os.isWindows) "dumpbin" else nmForTarget(os, arch)
+        val executableCandidates = resolveExecutableCandidates(os, arch)
         logger.lifecycle(
-            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols with '$executable' from ${files.size} files"
+            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols with '${executableCandidates.first()}' from ${files.size} files"
         )
 
         when {
-            os.isMacOs -> {
-                val nmFlags = if (exported) listOf("-g", "-U") else listOf("-u")
-                runBatched(executable = executable, args = nmFlags, files = files).lines().forEach { line ->
-                    val s = line.trim().split(" ").lastOrNull().orEmpty()
-                    if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                        result.add(s)
-                    }
-                }
-            }
-            os.isLinux -> {
-                val nmFlags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
-                runBatched(executable = executable, args = nmFlags, files = files).lines().forEach { line ->
+            os.isMacOs || os.isLinux -> {
+                val nmFlags = nmFlags(os, exported)
+                run(executables = executableCandidates, args = nmFlags, files = files).lines().forEach { line ->
                     val s = line.trim().split(" ").lastOrNull().orEmpty()
                     if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
                         result.add(s)
@@ -123,7 +117,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 }
             }
             else -> {
-                runBatched(executable = executable, args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
+                run(executables = executableCandidates, args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
                     if (line.contains("External")) {
                         val isUndef = line.contains("UNDEF")
                         if (exported && !isUndef || !exported && isUndef) {
@@ -140,44 +134,92 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         return result.toList()
     }
 
-    private fun runBatched(executable: String, args: List<String>, files: List<File>): String {
-        return files
-            .chunked(200)
-            .mapIndexed { index, batch ->
-                logger.info(
-                    "generateSymbolsList: running '$executable ${args.joinToString(" ")}' for batch ${index + 1}/${(files.size + 199) / 200} with ${batch.size} files"
-                )
-                val out = ByteArrayOutputStream()
-                try {
-                    execOperations.exec {
-                        this.executable = executable
-                        this.args = args + batch.map { it.absolutePath }
-                        standardOutput = out
-                    }
-                } catch (t: Throwable) {
-                    val firstFile = batch.firstOrNull()?.absolutePath.orEmpty()
-                    logger.error(
-                        "generateSymbolsList: failed to start '$executable' for batch ${index + 1}. args=$args, firstFile=$firstFile, PATH=${System.getenv("PATH")}",
-                        t
-                    )
-                    throw t
+    private fun run(executables: List<String>, args: List<String>, files: List<File>): String {
+        var activeExecutableIndex = 0
+        var executable = executables[activeExecutableIndex]
+        while (true) {
+            val out = ByteArrayOutputStream()
+            val command = buildCommand(executable = executable, args = args, files = files)
+            logger.lifecycle("generateSymbolsList: command: $command")
+            try {
+                execOperations.exec {
+                    this.executable = executable
+                    this.args = args + files.map { it.absolutePath }
+                    standardOutput = out
                 }
-                out.toString()
+                return out.toString()
+            } catch (t: Throwable) {
+                if (canRetryWithNextExecutable(t, executables, activeExecutableIndex)) {
+                    val previous = executable
+                    activeExecutableIndex += 1
+                    executable = executables[activeExecutableIndex]
+                    logger.warn("generateSymbolsList: failed to start '$previous'; retrying with '$executable'")
+                    continue
+                }
+
+                val firstFile = files.firstOrNull()?.absolutePath.orEmpty()
+                logger.error(
+                    "generateSymbolsList: failed to start '$executable'. args=$args, firstFile=$firstFile, PATH=${System.getenv("PATH")}",
+                    t
+                )
+                throw t
             }
-            .joinToString(separator = "\n")
+        }
     }
 
-    private fun nmForTarget(os: OS, arch: Arch): String =
-        when (os) {
-            OS.Linux -> when (arch) {
-                Arch.X64 -> "nm"
-                Arch.Arm64 -> if (hostArch == Arch.Arm64) "nm" else "aarch64-linux-gnu-nm"
-                Arch.Wasm -> "nm"
-            }
+    private fun buildCommand(executable: String, args: List<String>, files: List<File>): String {
+        return (listOf(executable) + args + files.map { it.absolutePath }).joinToString(" ")
+    }
 
-            OS.MacOS, OS.IOS, OS.TVOS -> "nm"
-            OS.Android -> "llvm-nm"
-            OS.Windows -> "nm"
-            OS.Wasm -> "llvm-nm"
+    private fun canRetryWithNextExecutable(
+        throwable: Throwable,
+        executables: List<String>,
+        activeExecutableIndex: Int
+    ): Boolean {
+        if (activeExecutableIndex >= executables.lastIndex) return false
+        return throwable.message?.contains("starting process") == true
+    }
+
+    private fun nmFlags(os: OS, exported: Boolean): List<String> {
+        return when {
+            !exported -> listOf("-u")
+            os.isMacOs -> listOf("-g", "-U")
+            else -> listOf("-g", "--defined-only")
         }
+    }
+
+    private fun executableCandidates(os: OS, arch: Arch): List<String> = when (os) {
+        OS.Windows -> listOf("dumpbin")
+        OS.Linux -> when {
+            arch == Arch.Arm64 && hostArch != Arch.Arm64 -> listOf("aarch64-linux-gnu-nm", "nm")
+            else -> listOf("nm")
+        }
+
+        OS.MacOS, OS.Android -> listOf("nm")
+        OS.IOS, OS.TVOS -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
+        OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support wasm targets")
+    }
+
+    private fun resolveExecutableCandidates(os: OS, arch: Arch): List<String> {
+        return executableCandidates(os, arch)
+            .map { candidate -> findExecutableInPath(candidate) ?: candidate }
+            .distinct()
+    }
+
+    private fun findExecutableInPath(name: String): String? {
+        val pathValue = System.getenv("PATH").orEmpty()
+        val executableNames = if (name.endsWith(".exe")) listOf(name) else listOf(name, "$name.exe")
+        return pathValue
+            .split(File.pathSeparator)
+            .asSequence()
+            .filter { it.isNotBlank() }
+            .flatMap { dir -> executableNames.asSequence().map { execName -> Paths.get(dir, execName) } }
+            .firstOrNull { candidate -> isExecutableFile(candidate) }
+            ?.toAbsolutePath()
+            ?.toString()
+    }
+
+    private fun isExecutableFile(path: Path): Boolean {
+        return Files.isRegularFile(path) && Files.isExecutable(path)
+    }
 }
