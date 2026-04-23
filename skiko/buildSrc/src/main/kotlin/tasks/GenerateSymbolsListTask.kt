@@ -103,7 +103,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         val executableCandidates = resolveExecutableCandidates(os, arch)
         logger.lifecycle(
-            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols with '${executableCandidates.first()}' from ${files.size} files"
+            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols using candidates ${executableCandidates} from ${files.size} files"
         )
 
         when {
@@ -137,47 +137,58 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     private fun run(executables: List<String>, args: List<String>, files: List<File>): String {
         var activeExecutableIndex = 0
         var executable = executables[activeExecutableIndex]
+
+        // Filter out directories immediately to prevent command failures
+        val actualFiles = files.filter { it.isFile }
+
         while (true) {
-            val out = ByteArrayOutputStream()
-            val command = buildCommand(executable = executable, args = args, files = files)
-            logger.lifecycle("generateSymbolsList: command: $command")
+            val combinedOutput = StringBuilder()
+            val errorOutputBuilder = StringBuilder()
+            var batchFailed = false
+            var thrownException: Throwable? = null
+
             try {
-                execOperations.exec {
-                    this.executable = executable
-                    this.args = args + files.map { it.absolutePath }
-                    standardOutput = out
+                actualFiles.chunked(100).forEachIndexed { index, batch ->
+                    val outStream = ByteArrayOutputStream()
+                    val errStream = ByteArrayOutputStream()
+
+                    execOperations.exec {
+                        this.executable = executable
+                        this.args = args + batch.map { it.absolutePath }
+                        this.standardOutput = outStream
+                        this.errorOutput = errStream
+                    }
+                    combinedOutput.append(outStream.toString())
+                    errorOutputBuilder.append(errStream.toString())
                 }
-                return out.toString()
             } catch (t: Throwable) {
-                if (canRetryWithNextExecutable(t, executables, activeExecutableIndex)) {
-                    val previous = executable
-                    activeExecutableIndex += 1
-                    executable = executables[activeExecutableIndex]
-                    logger.warn("generateSymbolsList: failed to start '$previous'; retrying with '$executable'")
-                    continue
-                }
-
-                val firstFile = files.firstOrNull()?.absolutePath.orEmpty()
-                logger.error(
-                    "generateSymbolsList: failed to start '$executable'. args=$args, firstFile=$firstFile, PATH=${System.getenv("PATH")}",
-                    t
-                )
-                throw t
+                batchFailed = true
+                thrownException = t
             }
+
+            if (!batchFailed) {
+                return combinedOutput.toString()
+            }
+
+            if (activeExecutableIndex < executables.lastIndex) {
+                val previous = executable
+                activeExecutableIndex += 1
+                executable = executables[activeExecutableIndex]
+                logger.warn("generateSymbolsList: failed with '$previous'; retrying with '$executable'. Error was: ${thrownException?.message}")
+                continue
+            }
+
+            val firstFile = actualFiles.firstOrNull()?.absolutePath.orEmpty()
+            logger.error(
+                "generateSymbolsList: FATAL. Exhausted all executables. Last attempt failed to run '$executable'. \n" +
+                        "Args=$args\n" +
+                        "FirstFile=$firstFile\n" +
+                        "Stderr Output=${errorOutputBuilder}\n" +
+                        "PATH=${System.getenv("PATH")}",
+                thrownException
+            )
+            throw thrownException ?: RuntimeException("Execution failed without an exception")
         }
-    }
-
-    private fun buildCommand(executable: String, args: List<String>, files: List<File>): String {
-        return (listOf(executable) + args + files.map { it.absolutePath }).joinToString(" ")
-    }
-
-    private fun canRetryWithNextExecutable(
-        throwable: Throwable,
-        executables: List<String>,
-        activeExecutableIndex: Int
-    ): Boolean {
-        if (activeExecutableIndex >= executables.lastIndex) return false
-        return throwable.message?.contains("starting process") == true
     }
 
     private fun nmFlags(os: OS, exported: Boolean): List<String> {
@@ -194,8 +205,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
             arch == Arch.Arm64 && hostArch != Arch.Arm64 -> listOf("aarch64-linux-gnu-nm", "nm")
             else -> listOf("nm")
         }
-
-        OS.MacOS, OS.Android -> listOf("nm")
+        OS.MacOS -> listOf("nm")
+        OS.Android -> listOf("llvm-nm", "nm")
         OS.IOS, OS.TVOS -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
         OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support wasm targets")
     }
