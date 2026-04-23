@@ -449,6 +449,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("-lEGL")
                 }
                 if (libBaseName == "skiko") {
+                    add("-Wl,--allow-multiple-definition")
                     add("-Wl,--whole-archive")
                     add("$skiaBinDir/libskia.a")
                     add("-Wl,--no-whole-archive")
