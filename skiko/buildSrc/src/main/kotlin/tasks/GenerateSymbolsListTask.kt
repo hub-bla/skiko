@@ -84,7 +84,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         if (os.isLinux) {
             val versionScript = outDir.resolve("symbols.map")
-            generateVersionScript(symbolsUnexported.toPath(), versionScript.toPath())
+            generateVersionScript(symbolsFiltered.toPath(), versionScript.toPath())
         }
 
         if (os.isWindows) {

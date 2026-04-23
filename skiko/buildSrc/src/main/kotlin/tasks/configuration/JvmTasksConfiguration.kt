@@ -227,18 +227,19 @@ fun SkikoProjectContext.createObjcCompileTask(
     )
 }
 
-fun generateVersionScript(unexportedTxt: Path, output: Path) {
-    val symbols = unexportedTxt.readLines()
+fun generateVersionScript(symbolsTxt: Path, output: Path) {
+    val symbols = symbolsTxt.readLines()
         .map { it.trim() }
         .filter { it.isNotEmpty() }
 
     output.writeText(buildString {
         appendLine("{")
-        appendLine(" local:")
+        appendLine("  global:")
         symbols.forEach { symbol ->
-            appendLine("    $symbol;")
+            appendLine("    \"$symbol\";")
         }
-        appendLine(" global: *;")
+        appendLine("  local:")
+        appendLine("    *;")
         appendLine("};")
     })
 }
