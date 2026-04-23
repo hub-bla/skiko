@@ -1,19 +1,29 @@
 package tasks
 
 import OS
+import Arch
+import hostArch
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
+import org.gradle.process.ExecOperations
 import tasks.configuration.generateDefFile
 import tasks.configuration.generateVersionScript
 import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.inject.Inject
 
 abstract class GenerateSymbolsListTask : DefaultTask() {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
     @get:Input
     abstract val targetOs: Property<OS>
+
+    @get:Input
+    abstract val targetArch: Property<Arch>
 
     @get:InputFiles
     abstract val coreObjectFiles: ConfigurableFileCollection
@@ -79,60 +89,72 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {
         val os = targetOs.get()
+        val arch = targetArch.get()
         val result = mutableSetOf<String>()
-        files.forEach { file ->
-            val out = ByteArrayOutputStream()
-            when {
-                os.isMacOs -> {
-                    val nmFlags = if (exported) listOf("-g", "-U") else listOf("-u")
-                    project.exec {
-                        commandLine("nm", *nmFlags.toTypedArray(), file.absolutePath)
-                        standardOutput = out
-                    }
-                    out.toString().lines().forEach { line ->
-                        val s = line.trim().split(" ").last()
-                        if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                            result.add(s)
-                        }
+        if (files.isEmpty()) return emptyList()
+
+        when {
+            os.isMacOs -> {
+                val nmFlags = if (exported) listOf("-g", "-U") else listOf("-u")
+                runBatched(executable = nmForTarget(os, arch), args = nmFlags, files = files).lines().forEach { line ->
+                    val s = line.trim().split(" ").lastOrNull().orEmpty()
+                    if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
+                        result.add(s)
                     }
                 }
-                os.isLinux -> {
-                    val nmFlags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
-                    project.exec {
-                        commandLine("nm", *nmFlags.toTypedArray(), file.absolutePath)
-                        standardOutput = out
-                    }
-                    out.toString().lines().forEach { line ->
-                        val s = line.trim().split(" ").last()
-                        if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                            result.add(s)
-                        }
+            }
+            os.isLinux -> {
+                val nmFlags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
+                runBatched(executable = nmForTarget(os, arch), args = nmFlags, files = files).lines().forEach { line ->
+                    val s = line.trim().split(" ").lastOrNull().orEmpty()
+                    if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
+                        result.add(s)
                     }
                 }
-                else -> { // Windows
-                    project.exec {
-                        commandLine("dumpbin", "/SYMBOLS", file.absolutePath)
-                        standardOutput = out
-                    }
-                    out.toString().lines().forEach { line ->
-                        if (line.contains("External")) {
-                            val isUndef = line.contains("UNDEF")
-                            if (exported && !isUndef) {
-                                val s = line.substringAfter("|").trim().substringBefore(" ")
-                                if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@")) {
-                                    result.add(s)
-                                }
-                            } else if (!exported && isUndef) {
-                                val s = line.substringAfter("|").trim().substringBefore(" ")
-                                if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@")) {
-                                    result.add(s)
-                                }
+            }
+            else -> {
+                runBatched(executable = "dumpbin", args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
+                    if (line.contains("External")) {
+                        val isUndef = line.contains("UNDEF")
+                        if (exported && !isUndef || !exported && isUndef) {
+                            val s = line.substringAfter("|").trim().substringBefore(" ")
+                            if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@")) {
+                                result.add(s)
                             }
                         }
                     }
                 }
             }
         }
+
         return result.toList()
     }
+
+    private fun runBatched(executable: String, args: List<String>, files: List<File>): String {
+        return files
+            .chunked(200)
+            .joinToString(separator = "\n") { batch ->
+                val out = ByteArrayOutputStream()
+                execOperations.exec {
+                    this.executable = executable
+                    this.args = args + batch.map { it.absolutePath }
+                    standardOutput = out
+                }
+                out.toString()
+            }
+    }
+
+    private fun nmForTarget(os: OS, arch: Arch): String =
+        when (os) {
+            OS.Linux -> when (arch) {
+                Arch.X64 -> "nm"
+                Arch.Arm64 -> if (hostArch == Arch.Arm64) "nm" else "aarch64-linux-gnu-nm"
+                Arch.Wasm -> "nm"
+            }
+
+            OS.MacOS, OS.IOS, OS.TVOS -> "nm"
+            OS.Android -> "llvm-nm"
+            OS.Windows -> "nm"
+            OS.Wasm -> "llvm-nm"
+        }
 }

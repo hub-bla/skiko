@@ -266,6 +266,7 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
     val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
     project.tasks.register<GenerateSymbolsListTask>("generateSymbolsList") {
         this.targetOs.set(targetOs)
+        this.targetArch.set(targetArch)
 
         val target = targetId(targetOs, targetArch)
         val maybeSignedDir = project.layout.buildDirectory.dir("maybe-signed-$target")
