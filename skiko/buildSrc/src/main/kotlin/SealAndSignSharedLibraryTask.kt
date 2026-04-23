@@ -26,9 +26,6 @@ abstract class SealAndSignSharedLibraryTask : DefaultTask() {
     @get:InputFile
     abstract val libFile: RegularFileProperty
 
-    @get:Optional
-    @get:InputFile
-    abstract val libImportFile: RegularFileProperty
 
     @get:OutputDirectory
     abstract val outDir: DirectoryProperty
@@ -61,11 +58,6 @@ abstract class SealAndSignSharedLibraryTask : DefaultTask() {
         val outputFile = outDir.resolve(libFile.name)
 
         libFile.copyTo(outputFile, overwrite = true)
-
-        libImportFile.orNull?.let { libImportFile ->
-            val outputImportFile = outDir.resolve(libImportFile.asFile.name)
-            libImportFile.asFile.copyTo(outputImportFile, overwrite = true)
-        }
 
         sealer.orNull?.let { sealer ->
             sealBinary(sealer.asFile, outputFile)

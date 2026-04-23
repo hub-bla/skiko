@@ -11,7 +11,10 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import java.io.ByteArrayOutputStream
+import java.io.File
+import java.nio.file.Path
+import CompileSkikoCppTask
+import CompileSkikoObjCTask
 import tasks.configuration.*
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -329,196 +332,19 @@ afterEvaluate {
     }
 }
 
-//if (supportAwt && targetOs.isMacOs) {
-//    afterEvaluate {
-//        val target = targetId(targetOs, targetArch)
-//        val maybeSignedDir = layout.buildDirectory.dir("maybe-signed-$target").get().asFile
-//
-//        val stripCoreSymbols = tasks.register("stripCoreSymbols") {
-//            dependsOn(tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}"))
-//
-//            dependsOn(
-//                project(":skiko-graphite").tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}"),
-//                project(":skiko-skottie").tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}")
-//            )
-//
-//            doLast {
-//                val coreLib = maybeSignedDir.resolve("libskiko-${targetOs.id}-${targetArch.id}.dylib")
-//
-//                val extDylibs = listOf(":skiko-graphite", ":skiko-skottie").flatMap { projPath ->
-//                    project(projPath).layout.buildDirectory
-//                        .dir("maybe-signed-$target").get().asFile
-//                        .listFiles { f -> f.name.endsWith(".dylib") }
-//                        ?.toList() ?: emptyList()
-//                }
-//
-//                val coreExports    = maybeSignedDir.resolve("core_exports.txt")
-//                val extImports     = maybeSignedDir.resolve("ext_imports.txt")
-//                val symbolsFiltered = maybeSignedDir.resolve("symbols_filtered.txt")
-//
-//                // clean from previous runs
-//                extImports.delete()
-//                symbolsFiltered.delete()
-//
-//                // 1. core exports
-//                exec { commandLine("sh", "-c", "nm -gU ${coreLib.absolutePath} | awk '{print \$NF}' > ${coreExports.absolutePath}") }
-//
-//                // 2. all ext imports
-//                extDylibs.forEach { ext ->
-//                    exec { commandLine("sh", "-c", "nm -u ${ext.absolutePath} >> ${extImports.absolutePath}") }
-//                }
-//
-//                // 3. JNI symbols
-//                exec { commandLine("sh", "-c", "grep '_Java_' ${coreExports.absolutePath} >> ${extImports.absolutePath}") }
-//
-//                // 4. intersect
-//                exec { commandLine("bash", "-c", "comm -12 <(sort ${extImports.absolutePath}) <(sort ${coreExports.absolutePath}) > ${symbolsFiltered.absolutePath}") }
-//                // 5. strip
-//                exec { commandLine("strip", "-u", "-r", "-s", symbolsFiltered.absolutePath, coreLib.absolutePath) }
-//
-//
-//                logger.lifecycle("Stripped core: ${coreLib.name} → keeping ${symbolsFiltered.readLines().size} symbols")
-//                exec { commandLine("codesign", "--force", "--sign", "-", coreLib.absolutePath) }
-//            }
-//        }
-//
-//        tasks.named("skikoJvmRuntimeJar${joinToTitleCamelCase(targetOs.id, targetArch.id)}") {
-//            dependsOn(stripCoreSymbols)
-//        }
-//    }
-//}
 if (supportAwt) {
     afterEvaluate {
-        val target = targetId(targetOs, targetArch)
-        val maybeSignedDir = layout.buildDirectory.dir("maybe-signed-$target").get().asFile
-
-        val generateSymbolsList = tasks.register("generateSymbolsList") {
-            dependsOn(tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}"))
-            dependsOn(
-                project(":skiko-graphite").tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}"),
-                project(":skiko-skottie").tasks.named("maybeSign${joinToTitleCamelCase(targetOs.id, targetArch.id)}")
-            )
-
-            doLast {
-                val libExt = targetOs.dynamicLibExt
-                val libPrefix = if (targetOs.isWindows) "" else "lib"
-                val coreLib = maybeSignedDir.resolve("${libPrefix}skiko-${targetOs.id}-${targetArch.id}$libExt")
-                val extLibs = listOf(":skiko-graphite", ":skiko-skottie").flatMap { projPath ->
-                    project(projPath).layout.buildDirectory
-                        .dir("maybe-signed-$target").get().asFile
-                        .listFiles { f -> f.name.endsWith(libExt) }
-                        ?.toList() ?: emptyList()
-                }
-
-                val coreExports       = maybeSignedDir.resolve("core_exports.txt")
-                val extImports        = maybeSignedDir.resolve("ext_imports.txt")
-                val symbolsFiltered   = maybeSignedDir.resolve("symbols_filtered.txt")
-                val symbolsUnexported = maybeSignedDir.resolve("symbols_unexported.txt")
-
-                fun extractSymbols(lib: File, exported: Boolean): List<String> {
-                    val out = ByteArrayOutputStream()
-                    when {
-                        targetOs.isMacOs -> {
-                            val flags = if (exported) listOf("-g", "-U") else listOf("-u")
-                            project.exec {
-                                commandLine("nm", *flags.toTypedArray(), lib.absolutePath)
-                                standardOutput = out
-                            }
-                            return out.toString().lines()
-                                .map { it.trim().split(" ").last() }
-                                .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
-                        }
-                        targetOs.isLinux -> {
-                            val flags = if (exported) listOf("-g", "--defined-only") else listOf("-u")
-                            project.exec {
-                                commandLine("nm", *flags.toTypedArray(), lib.absolutePath)
-                                standardOutput = out
-                            }
-                            return out.toString().lines()
-                                .map { it.trim().split(" ").last() }
-                                .filter { it.isNotEmpty() && !it.contains(":") && !it.startsWith("/") }
-                        }
-                        else -> { // Windows
-                            val mode = if (exported) "/EXPORTS" else "/IMPORTS"
-                            project.exec {
-                                commandLine("dumpbin", mode, lib.absolutePath)
-                                standardOutput = out
-                            }
-                            return if (exported) {
-                                out.toString().lines()
-                                    .filter { it.trim().matches(Regex("\\d+\\s+[0-9A-Fa-f]+\\s+[0-9A-Fa-f]+\\s+.*")) }
-                                    .map { it.trim().split(Regex("\\s+")).getOrNull(3) ?: "" }
-                                    .filter { it.isNotEmpty() }
-                            } else {
-                                out.toString().lines()
-                                    .map { it.trim() }
-                                    .filter { it.matches(Regex("[0-9A-Fa-f]+\\s+\\S.*")) }
-                                    .map { it.split(Regex("\\s+"), limit = 2).last().trim() }
-                                    .filter { it.isNotEmpty() }
-                            }
-                        }
-                    }
-                }
-
-                // 1. core exports
-                val coreExportedList = extractSymbols(coreLib, true)
-                coreExports.writeText(coreExportedList.sorted().joinToString("\n"))
-
-                // 2. all ext imports
-                val extImportedList = extLibs.flatMap { extractSymbols(it, false) }.toMutableList()
-
-                // also keep jvm infrastructure globals
-                extImportedList.addAll(coreExportedList.filter { 
-                    it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_") 
-                })
-
-                extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
-
-                // 4. initial keep list = intersection of ext imports + JNI with core exports
-                val coreExportsSet = coreExportedList.toSet()
-                val keepSet = extImportedList.filter { it in coreExportsSet }.toSet()
-                symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
-
-                // 5. unexported = core exports minus what strip decided to keep
-                val unexportedSet = coreExportsSet - keepSet
-                symbolsUnexported.writeText(unexportedSet.sorted().joinToString("\n"))
-
-                coreLib.delete()
-                logger.lifecycle("Symbols to keep: ${keepSet.size}, to hide: ${unexportedSet.size}")
-            }
-        }
-
+        val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
         val skiaBindingsDir = skikoProjectContext.registerOrGetSkiaDirProvider(targetOs, targetArch)
-        val compileTask = tasks.named("compileJvmBindings${joinToTitleCamelCase(targetOs.id, targetArch.id)}") as TaskProvider<CompileSkikoCppTask>
-        val objcTask = if (targetOs.isMacOs) {
-            tasks.named("objcCompile${joinToTitleCamelCase(targetOs.id, targetArch.id)}") as TaskProvider<CompileSkikoObjCTask>
-        } else null
+        val coreCompile = tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
+        val coreObjcCompile = if (targetOs.isMacOs) tasks.named<CompileSkikoObjCTask>("objcCompile$suffix") else null
 
-        val relinkCore = skikoProjectContext.createLinkJvmBindings(
-            targetOs, targetArch, skiaBindingsDir,
-            compileTask, objcTask,
-            libBaseName = "skiko",
-            taskSuffix = "Again"
-        ).also { linkTask ->
-            linkTask.configure {
-                dependsOn(generateSymbolsList)
-            }
-        }
-
-        val remaybeSign = skikoProjectContext.maybeSignOrSealTask(
-            targetOs, targetArch, relinkCore, taskSuffix = "Again"
+        skikoProjectContext.configureGenerateSymbolsList(
+            targetOs, targetArch, skiaBindingsDir, coreCompile, coreObjcCompile
         )
 
-        tasks.named("createChecksums${joinToTitleCamelCase(targetOs.id, targetArch.id)}") {
-            dependsOn(remaybeSign)
-        }
-
-        tasks.named("skikoJvmRuntimeJar${joinToTitleCamelCase(targetOs.id, targetArch.id)}", Jar::class) {
-            dependsOn(remaybeSign)
-            val relinkedLib = remaybeSign.map { task ->
-                task.outputFiles.get().single { it.name.endsWith(targetOs.dynamicLibExt) }
-            }
-            from(relinkedLib)
+        tasks.named("linkJvmBindings$suffix") {
+            dependsOn("generateSymbolsList")
         }
     }
 }

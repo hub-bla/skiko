@@ -24,12 +24,15 @@ import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.api.tasks.testing.Test
+import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
 import runPkgConfig
 import targetId
+import tasks.GenerateSymbolsListTask
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.readLines
@@ -75,8 +78,6 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     }
     compiler.set(compilerForTarget(targetOs, targetArch))
     val target = targetId(targetOs, targetArch)
-    val skiaBinSubdir = "out/${buildType.id}-$target"
-    val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
     val osFlags: Array<String>
     when (targetOs) {
         OS.MacOS -> {
@@ -255,6 +256,73 @@ fun generateDefFile(exportedTxt: Path, output: Path) {
     })
 }
 
+fun SkikoProjectContext.configureGenerateSymbolsList(
+    targetOs: OS,
+    targetArch: Arch,
+    skiaJvmBindingsDir: Provider<File>,
+    coreCompile: TaskProvider<CompileSkikoCppTask>,
+    coreObjcCompile: TaskProvider<CompileSkikoObjCTask>?
+) {
+    val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
+    project.tasks.register<GenerateSymbolsListTask>("generateSymbolsList") {
+        this.targetOs.set(targetOs)
+
+        val target = targetId(targetOs, targetArch)
+        val maybeSignedDir = project.layout.buildDirectory.dir("maybe-signed-$target")
+        outputDir.set(maybeSignedDir)
+
+        dependsOn(coreCompile)
+        coreObjectFiles.from(coreCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList() })
+        if (coreObjcCompile != null) {
+            dependsOn(coreObjcCompile)
+            coreObjectFiles.from(coreObjcCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
+        }
+
+        listOf(":skiko-graphite", ":skiko-skottie").forEach { projPath ->
+            val proj = project.findProject(projPath)
+            if (proj != null) {
+                val mCompileTask = proj.tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
+                dependsOn(mCompileTask)
+                moduleObjectFiles.from(mCompileTask.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList() })
+
+                if (targetOs.isMacOs) {
+                    val mObjcTask = proj.tasks.named<CompileSkikoObjCTask>("objcCompile$suffix")
+                    dependsOn(mObjcTask)
+                    moduleObjectFiles.from(mObjcTask.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
+                }
+            }
+        }
+
+        val skiaBinSubdir = "out/${buildType.id}-$target"
+        val skiaBinDirProvider = skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }
+        val fileExtension = if (targetOs.isWindows) ".lib" else ".a"
+        val filePrefix = if (targetOs.isWindows) "" else "lib"
+
+        skiaLibs.from(skiaBinDirProvider.map { dir ->
+            project.fileTree(dir) {
+                include("*$fileExtension")
+                exclude("${filePrefix}dawn$fileExtension")
+                exclude("${filePrefix}skia_graphite_ext$fileExtension")
+                exclude("${filePrefix}skia_graphite_dawn_ext$fileExtension")
+                exclude("${filePrefix}skottie$fileExtension")
+                exclude("${filePrefix}sksg$fileExtension")
+                exclude("${filePrefix}jsonreader$fileExtension")
+            }.files
+        })
+
+        moduleLibs.from(skiaBinDirProvider.map { dir ->
+            project.fileTree(dir) {
+                include("${filePrefix}skottie$fileExtension")
+                include("${filePrefix}sksg$fileExtension")
+                include("${filePrefix}jsonreader$fileExtension")
+                include("${filePrefix}skia_graphite_ext$fileExtension")
+                include("${filePrefix}skia_graphite_dawn_ext$fileExtension")
+                include("${filePrefix}dawn$fileExtension")
+            }.files
+        })
+    }
+}
+
 fun SkikoProjectContext.createLinkJvmBindings(
     targetOs: OS,
     targetArch: Arch,
@@ -316,28 +384,21 @@ fun SkikoProjectContext.createLinkJvmBindings(
     val maybeSignedDir = project.layout.buildDirectory.dir("maybe-signed-$target").get().asFile
     when (targetOs) {
         OS.MacOS -> {
-            val coreLibDir = project.rootProject.layout.buildDirectory
-                .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
-
             dependsOn(objcCompileTask!!)
             objectFiles += project.fileTree(objcCompileTask.map { it.outDir.get() }) {
                 include("**/*.o")
             }
             val additionalFlags = if (libBaseName != "skiko") {
-                val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
-                dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
+                val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
+                dependsOn(coreLinkTask)
                 arrayOf(
-                    "-L${coreLibDir.absolutePath}",
+                    "-L${coreLinkTask.get().outDir.get().asFile.absolutePath}",
                     "-lskiko-${targetOs.id}-${targetArch.id}",
                 )
             } else arrayOf(
                 "-Wl,-force_load,$skiaBinDir/libskia.a",
             )
-            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") arrayOf(
-                // windows - "-Wl,/exclude-symbols:@file.txt"
-                // linux - "-Wl, --version-script=symbols.map"
-                "-Wl,-unexported_symbols_list,${maybeSignedDir.resolve("symbols_unexported.txt").absolutePath}",
-            ) else arrayOf()
 
             osFlags = arrayOf(
                 *targetOs.clangFlags,
@@ -358,21 +419,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-framework", "Metal",
                 "-framework", "OpenGL",
                 "-framework", "QuartzCore" // for CoreAnimation
-            )  + exportFlags + additionalFlags
+            ) + additionalFlags
         }
         OS.Linux -> {
-            val coreLibDir = project.rootProject.layout.buildDirectory
-                .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
-
-            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "Again") {
-                val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
-                val versionScript = maybeSignedDir.resolve("symbols.map")
-                doFirst {
-                    generateVersionScript(unexportedSymbols.toPath(), versionScript.toPath())
-                }
-                arrayOf("-Wl,--version-script=${versionScript.absolutePath}")
-            } else arrayOf()
-
             osFlags = mutableListOf<String>().apply {
                 addAll(
                     arrayOf(
@@ -402,59 +451,16 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("$skiaBinDir/libskia.a")
                     add("-Wl,--no-whole-archive")
                 } else {
-                    val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
-                    dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
-                    add("-L${coreLibDir.absolutePath}")
+                    val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                    val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
+                    dependsOn(coreLinkTask)
+                    add("-L${coreLinkTask.get().outDir.get().asFile.absolutePath}")
                     add("-lskiko-${targetOs.id}-${targetArch.id}")
                 }
-            }.toTypedArray() + exportFlags
+            }.toTypedArray()
         }
         OS.Windows -> {
             libDirs.set(windowsSdkPaths.libDirs)
-
-            val coreLibDir = project.rootProject.layout.buildDirectory
-                .dir("maybe-signed-${targetId(targetOs, targetArch)}").get().asFile
-
-            val exportFlags = if (libBaseName == "skiko" && taskSuffix == "") {
-                val defFile = maybeSignedDir.resolve("skiko_all_exports.def")
-                doFirst {
-                    val libsToDump = listOf(
-                        "$skiaBinDir/skia.lib",
-                        "$skiaBinDir/skshaper.lib",
-                    )
-
-                    val symbols = libsToDump.flatMap { libPath ->
-                        val out = java.io.ByteArrayOutputStream()
-                        project.exec {
-                            commandLine("dumpbin", "/SYMBOLS", libPath)
-                            standardOutput = out
-                        }
-                        out.toString().lines()
-                            .filter { it.contains("External") && it.contains("|") && !it.contains("UNDEF") }
-                            .map { it.substringAfter("|").trim().substringBefore(" ") }
-                            .filter { symbol ->
-                                symbol.isNotEmpty() &&
-                                        !symbol.startsWith("__imp_") &&
-                                        !symbol.startsWith(".refptr") &&
-                                        !symbol.startsWith("__real@") &&
-                                        !symbol.startsWith("__xmm@")
-                            }
-                    }.distinct().sorted()
-
-                    logger.lifecycle("Pass 1: Exporting ${symbols.size} symbols from skia.lib + skshaper...")
-                    defFile.parentFile.mkdirs()
-                    defFile.writeText("EXPORTS\n" + symbols.joinToString("\n") { "    $it" })
-                }
-                arrayOf("/DEF:${defFile.absolutePath}")
-
-            } else if (libBaseName == "skiko" && taskSuffix == "Again") {
-                val exportedSymbols = maybeSignedDir.resolve("symbols_filtered.txt")
-                val defFile = maybeSignedDir.resolve("symbols.def")
-                doFirst {
-                    generateDefFile(exportedSymbols.toPath(), defFile.toPath())
-                }
-                arrayOf("/DEF:${defFile.absolutePath}")
-            } else arrayOf()
 
             osFlags = mutableListOf<String>().apply {
                 addAll(buildType.winLinkerFlags)
@@ -486,14 +492,14 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (libBaseName == "skiko") {
                     add("/WHOLEARCHIVE:$skiaBinDir/skia.lib")
                     add("/WHOLEARCHIVE:$skiaBinDir/skshaper.lib")
-                    add("/IMPLIB:${libBaseName}-${targetOs.id}-${targetArch.id}.lib")
                 } else {
-                    val coreMaybeSignTaskName = "maybeSign" + joinToTitleCamelCase(targetOs.id, targetArch.id)
-                    dependsOn(project.rootProject.tasks.named(coreMaybeSignTaskName))
-                    add("/LIBPATH:${coreLibDir.absolutePath}")
+                    val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                    val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
+                    dependsOn(coreLinkTask)
+                    add("/LIBPATH:${coreLinkTask.get().outDir.get().asFile.absolutePath}")
                     add("skiko-${targetOs.id}-${targetArch.id}.lib")
                 }
-            }.toTypedArray() + exportFlags
+            }.toTypedArray()
         }
         OS.Android -> {
             val androidFlags = mutableListOf(
@@ -517,6 +523,34 @@ fun SkikoProjectContext.createLinkJvmBindings(
         }
     }
     flags.set(listOf(*osFlags))
+
+    if (libBaseName == "skiko") {
+        flags.addAll(project.provider {
+            val result = mutableListOf<String>()
+            val unexportedSymbols = maybeSignedDir.resolve("symbols_unexported.txt")
+            if (unexportedSymbols.exists()) {
+                when (targetOs) {
+                    OS.MacOS -> {
+                        result.add("-Wl,-unexported_symbols_list,${unexportedSymbols.absolutePath}")
+                    }
+                    OS.Linux -> {
+                        val versionScript = maybeSignedDir.resolve("symbols.map")
+                        if (versionScript.exists()) {
+                            result.add("-Wl,--version-script=${versionScript.absolutePath}")
+                        }
+                    }
+                    OS.Windows -> {
+                        val defFile = maybeSignedDir.resolve("symbols.def")
+                        if (defFile.exists()) {
+                            result.add("/DEF:${defFile.absolutePath}")
+                        }
+                    }
+                    else -> {}
+                }
+            }
+            result
+        })
+    }
 }
 
 private val Arch.darwinSignClientName: String
@@ -562,13 +596,6 @@ fun SkikoProjectContext.maybeSignOrSealTask(
         task.outDir.get().asFile.walk().single { it.name.endsWith(targetOs.dynamicLibExt) }.absoluteFile
     }
     libFile.set(project.layout.file(linkOutputFile))
-
-    if (targetOs.isWindows) {
-        val linkImportFile = linkJvmBindings.map { task ->
-            task.outDir.get().asFile.walk().single { it.name.endsWith(".lib") }.absoluteFile
-        }
-        libImportFile.set(project.layout.file(linkImportFile))
-    }
 
     val target = targetId(targetOs, targetArch)
     outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target"))
