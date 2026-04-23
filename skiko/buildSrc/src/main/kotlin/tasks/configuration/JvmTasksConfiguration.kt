@@ -603,13 +603,18 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     val target = targetId(targetOs, targetArch)
     outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target"))
 
-    val toolsDir = project.layout.projectDirectory.dir("tools")
+    val rootProjectDir = project.rootProject.projectDir
+    val toolsDir = listOf(
+        project.projectDir.resolve("tools"),
+        rootProjectDir.resolve("tools"),
+        rootProjectDir.resolve("skiko/tools")
+    ).firstOrNull { it.isDirectory } ?: rootProjectDir.resolve("tools")
     if (targetOs == OS.Linux) {
         // Linux requires additional sealing to run on wider set of platforms.
         // See https://github.com/olonho/sealer.
         when (targetArch) {
-            Arch.X64 -> sealer.set(toolsDir.file("sealer-x64"))
-            Arch.Arm64 -> sealer.set(toolsDir.file("sealer-arm64"))
+            Arch.X64 -> sealer.fileValue(toolsDir.resolve("sealer-x64"))
+            Arch.Arm64 -> sealer.fileValue(toolsDir.resolve("sealer-arm64"))
             else -> error("Unexpected combination of '$targetArch' and '$targetOs'")
         }
     }
