@@ -682,7 +682,7 @@ fun SkikoProjectContext.createJvmJar(
             libBaseName
         )
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
-        val nativeLib2 = maybeSign2.map { it.outputFiles.get().single() }
+        val nativeLib2 = maybeSign2.map { it.outputFiles.get().single { f -> f.name.endsWith(os.dynamicLibExt) } }
         val createChecksums2 = createChecksumsTask(os, altArch, nativeLib2)
         nativeFiles.add(nativeLib2)
         nativeFiles.add(createChecksums2.map { it.outputs.files.singleFile })
