@@ -195,16 +195,6 @@ fun configureCinterop(
     }
 }
 
-fun skiaGraphiteStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
-    val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
-    return buildList {
-        add("$skiaBinSubdir/libskia_graphite_ext.a")
-        if (File("$skiaBinSubdir/libdawn.a").exists()) {
-            add("$skiaBinSubdir/libdawn.a")
-        }
-    }
-}
-
 fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
     return listOf(
@@ -381,24 +371,6 @@ fun SkikoProjectContext.configureNativeTarget(
                 "$skiaBinDir/libskunicode_icu.a",
                 "$skiaBinDir/libskia.a"
             )
-        }
-    )
-}
-
-fun SkikoProjectContext.configureGraphiteNativeTarget(
-    os: OS,
-    arch: Arch,
-    target: KotlinNativeTarget
-) {
-    configureNativeTarget(
-        os,
-        arch,
-        target,
-        libPrefix = "skiko-graphite-native-bridges",
-        cinteropNameProvider = { "skiko-graphite" },
-        librariesProvider = ::skiaGraphiteStaticLibraries,
-        extraLinuxOptions = { skiaBinDir, _ ->
-            listOf("$skiaBinDir/libskia_graphite_dawn_ext.a")
         }
     )
 }
