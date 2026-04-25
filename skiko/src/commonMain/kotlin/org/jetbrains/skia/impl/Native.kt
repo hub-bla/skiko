@@ -1,13 +1,16 @@
 package org.jetbrains.skia.impl
 
 import org.jetbrains.skia.ManagedString
+import org.jetbrains.skiko.InternalSkikoApi
 
 expect class NativePointer
 
-internal expect class InteropPointer
+@OptIn(InternalSkikoApi::class)
+expect class InteropPointer
 
 expect abstract class Native(ptr: NativePointer) {
-    internal var _ptr: NativePointer
+    @OptIn(InternalSkikoApi::class)
+    var _ptr: NativePointer
     internal open fun nativeEquals(other: Native?): Boolean
 
     companion object {
@@ -17,11 +20,14 @@ expect abstract class Native(ptr: NativePointer) {
     override fun toString(): String
 }
 
-internal expect fun reachabilityBarrier(obj: Any?)
+@OptIn(InternalSkikoApi::class)
+expect fun reachabilityBarrier(obj: Any?)
 
-internal fun getPtr(n: Native?): NativePointer = n?._ptr ?: Native.NullPointer
+@OptIn(InternalSkikoApi::class)
+fun getPtr(n: Native?): NativePointer = n?._ptr ?: Native.NullPointer
 
-internal expect class InteropScope() {
+@OptIn(InternalSkikoApi::class)
+expect class InteropScope() {
     fun toInterop(string: String?): InteropPointer
 
     fun toInterop(array: ByteArray?): InteropPointer
@@ -74,7 +80,8 @@ internal expect class InteropScope() {
     fun release()
 }
 
-internal expect inline fun <T> interopScope(block: InteropScope.() -> T): T
+@OptIn(InternalSkikoApi::class)
+expect inline fun <T> interopScope(block: InteropScope.() -> T): T
 
 internal inline fun withResult(result: ByteArray, block: InteropScope.(InteropPointer) -> Unit): ByteArray = interopScope {
     val handle = toInteropForResult(result)
@@ -167,12 +174,14 @@ internal inline fun withStringResult(pointer: NativePointer): String {
  * It is caller responsibility to destroy underlying SkString. Use it if pointer
  * is received from reference (SkString&)
  */
-internal inline fun withStringReferenceResult(block: () -> NativePointer): String {
+@OptIn(InternalSkikoApi::class)
+inline fun withStringReferenceResult(block: () -> NativePointer): String {
     val string = ManagedString(block(), false)
     return string.toString()
 }
 
-internal inline fun withStringReferenceNullableResult(block: () -> NativePointer): String? {
+@OptIn(InternalSkikoApi::class)
+inline fun withStringReferenceNullableResult(block: () -> NativePointer): String? {
     val ptr = block()
     if (ptr == Native.NullPointer) return null
 
@@ -180,8 +189,8 @@ internal inline fun withStringReferenceNullableResult(block: () -> NativePointer
     return string.toString()
 }
 
-
-internal interface ArrayInteropDecoder<T> {
+@OptIn(InternalSkikoApi::class)
+interface ArrayInteropDecoder<T> {
     fun getArrayElement(array: InteropPointer, index: Int): T
     fun getArraySize(array: InteropPointer): Int
     fun disposeArray(array: InteropPointer)

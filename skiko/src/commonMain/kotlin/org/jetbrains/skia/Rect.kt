@@ -4,6 +4,7 @@ import org.jetbrains.skia.impl.InteropPointer
 import org.jetbrains.skia.impl.InteropScope
 import org.jetbrains.skia.impl.getPtr
 import org.jetbrains.skia.impl.withResult
+import org.jetbrains.skiko.InternalSkikoApi
 import kotlin.jvm.JvmStatic
 
 open class Rect constructor(val left: Float, val top: Float, val right: Float, val bottom: Float) {
@@ -106,7 +107,8 @@ open class Rect constructor(val left: Float, val top: Float, val right: Float, v
             return Rect(l, t, l + w, t + h)
         }
 
-        internal fun fromInteropPointer(block: InteropScope.(InteropPointer) -> Unit): Rect {
+        @OptIn(InternalSkikoApi::class)
+        fun fromInteropPointer(block: InteropScope.(InteropPointer) -> Unit): Rect {
             val result = withResult(FloatArray(4), block)
             return Rect(result[0], result[1], result[2], result[3])
         }

@@ -8,8 +8,10 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.paragraph.LineMetrics
 import org.jetbrains.skia.paragraph.Shadow
 import org.jetbrains.skia.paragraph.TextBox
+import org.jetbrains.skiko.InternalSkikoApi
 import org.jetbrains.skiko.KotlinBackend
 import org.jetbrains.skiko.kotlinBackend
+import kotlin.contracts.ExperimentalContracts
 import kotlin.math.abs
 import kotlin.test.assertTrue
 
@@ -74,7 +76,8 @@ private inline fun TextBox.isCloseEnoughTo(textBox: TextBox, epsilon: Float = EP
     return (direction == textBox.direction) && rect.isCloseEnoughTo(textBox.rect, epsilon)
 }
 
-internal fun assertCloseEnough(expected: Float, actual: Float, epsilon: Float = EPSILON) {
+@OptIn(InternalSkikoApi::class)
+fun assertCloseEnough(expected: Float, actual: Float, epsilon: Float = EPSILON) {
     assertTrue(expected.isCloseEnoughTo(actual, epsilon), message = "expected=$expected, actual=$actual, eps=$epsilon")
 }
 

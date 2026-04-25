@@ -1,7 +1,7 @@
 #include <jni.h>
 #include "../interop.hh"
 #include "../shaper/interop.hh"
-#include "../skottie/interop.hh"
+//#include "../skottie/interop.hh"
 #include "../paragraph/interop.hh"
 #include "../svg/interop.hh"
 
@@ -25,7 +25,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_impl_Library__1nAfterL
     kotlin::onLoad(env);
     skija::onLoad(env);
     skija::shaper::onLoad(env);
-    skija::skottie::onLoad(env);
+//    skija::skottie::onLoad(env);
     skija::paragraph::onLoad(env);
     skija::svg::onLoad(env);
 }
@@ -37,7 +37,7 @@ JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {
 
     skija::svg::onUnload(env);
     skija::paragraph::onUnload(env);
-    skija::skottie::onUnload(env);
+//    skija::skottie::onUnload(env);
     skija::shaper::onUnload(env);
     skija::onUnload(env);
     kotlin::onUnload(env);

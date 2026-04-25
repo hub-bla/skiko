@@ -17,7 +17,8 @@ import kotlin.use
  * Note2: We're relying on String literals and String interning to share a monitor for the entire VM,
  * this shall allow proper locking, even when skiko is loaded in entire isolation, in different ClassLoaders
  */
-internal class LockFile private constructor(private val lockfile: Path, private val monitor: Any) {
+@OptIn(InternalSkikoApi::class)
+class LockFile private constructor(val lockfile: Path, val monitor: Any) {
     val name: String = lockfile.name
 
     inline fun <T> withLock(action: () -> T): T = withLockFile(monitor, lockfile, action)
@@ -41,7 +42,7 @@ internal class LockFile private constructor(private val lockfile: Path, private 
  * Note: The provided [monitor] should is used to synchronize the lock within the current process.
  * It is advisable to use a globally available object.
  */
-private inline fun <T> withLockFile(monitor: Any, lockfile: Path, action: () -> T): T {
+inline fun <T> withLockFile(monitor: Any, lockfile: Path, action: () -> T): T {
     /**
      * If we acquired the mutex, then we can be sure that we also have acquired the lockfile, which won't
      * allow to re-enter, therefore, we can just return early
