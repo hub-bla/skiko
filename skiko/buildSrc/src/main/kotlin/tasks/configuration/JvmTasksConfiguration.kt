@@ -90,8 +90,8 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-arch", if (targetArch == Arch.Arm64) "arm64" else "x86_64",
                 "-fPIC",
                 "-stdlib=libc++",
-//                "-fvisibility=hidden",
-//                "-fvisibility-inlines-hidden"
+                "-fvisibility=hidden",
+                "-fvisibility-inlines-hidden"
             )
         }
         OS.Linux -> {
