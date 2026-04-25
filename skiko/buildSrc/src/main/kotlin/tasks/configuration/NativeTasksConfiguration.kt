@@ -14,6 +14,7 @@ import listOfFrameworks
 import mutableListOfLinkerOptions
 import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.getByName
@@ -24,6 +25,7 @@ import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
 import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
+import skiaVersion
 import java.io.File
 
 fun String.withSuffix(isUikitSim: Boolean = false) =
@@ -157,6 +159,10 @@ fun SkikoProjectContext.compileNativeBridgesTask(
         sourceRoots.set(srcDirs)
 
         includeHeadersNonRecursive(projectDir.resolve("src/nativeJsMain/cpp"))
+        if (project.path != ":") {
+            includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/nativeJsMain/cpp"))
+            includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/commonMain/cpp/common/include"))
+        }
         includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
         includeHeadersNonRecursive(skiaHeadersDirs(unpackedSkia))
     }
@@ -189,6 +195,16 @@ fun configureCinterop(
     }
 }
 
+fun skiaGraphiteStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
+    val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
+    return buildList {
+        add("$skiaBinSubdir/libskia_graphite_ext.a")
+        if (File("$skiaBinSubdir/libdawn.a").exists()) {
+            add("$skiaBinSubdir/libdawn.a")
+        }
+    }
+}
+
 fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
     return listOf(
@@ -197,11 +213,12 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskia.a",
         "libicu.a",
         "libjsonreader.a",
-        "libskottie.a",
+        "libskia_ganesh_ext.a",
+//        "libskottie.a",
         "libsvg.a",
         "libpng.a",
         "libwebp_sse41.a",
-        "libsksg.a",
+//        "libsksg.a",
         "libskunicode_core.a",
         "libskunicode_icu.a",
         "libwebp.a",
@@ -217,7 +234,15 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
     }
 }
 
-fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) = with(this.project) {
+fun SkikoProjectContext.configureNativeTarget(
+    os: OS,
+    arch: Arch,
+    target: KotlinNativeTarget,
+    libPrefix: String,
+    cinteropNameProvider: (OS) -> String,
+    librariesProvider: (String, String, SkiaBuildType) -> List<String>,
+    extraLinuxOptions: (String, Arch) -> List<String> = { _, _ -> emptyList() }
+) = with(this.project) {
     if (!os.isCompatibleWithHost) return
 
     target.generateVersion(os, arch, skiko)
@@ -229,29 +254,29 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
     val unpackedSkia = unzipper.get()
     val skiaDir = unpackedSkia.absolutePath
 
-    val bridgesLibrary = layout.buildDirectory.file("nativeBridges/static/$targetString/skiko-native-bridges-$targetString.a")
+    val bridgesLibrary = layout.buildDirectory.file(
+        "nativeBridges/static/$targetString/${libPrefix}-$targetString.a"
+    )
     val bridgesLibraryPath = bridgesLibrary.get().asFile.absolutePath
-    val allLibraries = skiaStaticLibraries(skiaDir, targetString, buildType) + bridgesLibraryPath
+
+    val allLibraries =
+        librariesProvider(skiaDir, targetString, buildType) + bridgesLibraryPath
 
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
     val linkerFlags = when (os) {
         OS.MacOS -> {
             val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
-            configureCinterop("skiko", os, arch, target, targetString, macFrameworks)
+            configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, macFrameworks)
             mutableListOfLinkerOptions(macFrameworks)
         }
         OS.IOS -> {
             val iosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
-            // list of linker options to be included into klib, which are needed for skiko consumers
-            // https://github.com/JetBrains/compose-multiplatform/issues/3178
-            // Important! Removing or renaming cinterop-uikit publication might cause compile error
-            // for projects depending on older Compose/Skiko transitively https://youtrack.jetbrains.com/issue/KT-60399
-            configureCinterop("uikit", os, arch, target, targetString, iosFrameworks)
+            configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, iosFrameworks)
             mutableListOfLinkerOptions(iosFrameworks)
         }
         OS.TVOS -> {
             val tvosFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "UIKit")
-            configureCinterop("uikit", os, arch, target, targetString, tvosFrameworks)
+            configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, tvosFrameworks)
             mutableListOfLinkerOptions(tvosFrameworks)
         }
         OS.Linux -> {
@@ -260,36 +285,17 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
                 "-L/usr/lib/${if (arch == Arch.Arm64) "aarch64" else "x86_64"}-linux-gnu",
                 "-lfontconfig",
                 "-lGL",
-                // TODO: an ugly hack, Linux linker searches only unresolved symbols.
-                "$skiaBinDir/libskottie.a",
-                "$skiaBinDir/libjsonreader.a",
-                "$skiaBinDir/libsksg.a",
-                "$skiaBinDir/libskshaper.a",
-                "$skiaBinDir/libskunicode_core.a",
-                "$skiaBinDir/libskunicode_icu.a",
-                "$skiaBinDir/libskia.a"
             )
+
+            options.addAll(extraLinuxOptions(skiaBinDir, arch))
+
             if (arch == Arch.Arm64) {
                 options.add("-lEGL")
             }
-            // When cross-compiling for ARM64 from x64, use the ARM toolchain sysroot
-            if (arch == Arch.Arm64 && hostArch != Arch.Arm64) {
-                // ARM GNU toolchain sysroot paths
-                options.add(0, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/lib64")
-                options.add(1, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/usr/lib64")
-            }
+
             mutableListOfLinkerOptions(options)
         }
         else -> mutableListOf()
-    }
-    if (skiko.includeTestHelpers) {
-        linkerFlags.addAll(when (os) {
-            OS.Linux -> listOf(
-                "-linker-option", "-lX11",
-                "-linker-option", "-lGLX",
-            )
-            else -> emptyList()
-        })
     }
 
     // For some reason since 1.8.0 we need to set freeCompilerArgs for binaries AND for compilations
@@ -318,7 +324,7 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
         }
         inputs.files(objectFiles)
         val outDir = layout.buildDirectory.dir("nativeBridges/static/$targetString").get().asFile
-        val staticLib = "skiko-native-bridges-$targetString.a"
+        val staticLib = "$libPrefix-$targetString.a"
         workingDir = outDir
         when (os) {
             OS.Linux -> {
@@ -341,7 +347,61 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
         }
     }
 }
+fun SkikoProjectContext.configureNativeTarget(
+    os: OS,
+    arch: Arch,
+    target: KotlinNativeTarget
+) {
+    // list of linker options to be included into klib, which are needed for skiko consumers
+    // https://github.com/JetBrains/compose-multiplatform/issues/3178
+    // Important! Removing or renaming cinterop-uikit publication might cause compile error
+    // for projects depending on older Compose/Skiko transitively https://youtrack.jetbrains.com/issue/KT-60399
+    val cinteropNameProvider: (OS) -> String = {
+        when (it) {
+            OS.IOS, OS.TVOS -> "uikit"
+            else -> "skiko"
+        }
+    }
 
+    configureNativeTarget(
+        os,
+        arch,
+        target,
+        libPrefix = "skiko-native-bridges",
+        cinteropNameProvider = cinteropNameProvider,
+        librariesProvider = ::skiaStaticLibraries,
+        extraLinuxOptions = { skiaBinDir, _ ->
+            listOf(
+                // TODO: an ugly hack, Linux linker searches only unresolved symbols.
+                "$skiaBinDir/libskottie.a",
+                "$skiaBinDir/libjsonreader.a",
+                "$skiaBinDir/libsksg.a",
+                "$skiaBinDir/libskshaper.a",
+                "$skiaBinDir/libskunicode_core.a",
+                "$skiaBinDir/libskunicode_icu.a",
+                "$skiaBinDir/libskia.a"
+            )
+        }
+    )
+}
+
+fun SkikoProjectContext.configureGraphiteNativeTarget(
+    os: OS,
+    arch: Arch,
+    target: KotlinNativeTarget
+) {
+    configureNativeTarget(
+        os,
+        arch,
+        target,
+        libPrefix = "skiko-graphite-native-bridges",
+        cinteropNameProvider = { "skiko-graphite" },
+        librariesProvider = ::skiaGraphiteStaticLibraries,
+        extraLinuxOptions = { skiaBinDir, _ ->
+            listOf("$skiaBinDir/libskia_graphite_dawn_ext.a")
+        }
+    )
+}
 
 fun KotlinMultiplatformExtension.configureIOSTestsWithMetal(project: Project) {
     val metalTestTargets = listOf("iosX64", "iosSimulatorArm64")

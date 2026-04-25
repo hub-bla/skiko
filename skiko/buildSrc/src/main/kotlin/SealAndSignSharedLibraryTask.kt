@@ -26,6 +26,7 @@ abstract class SealAndSignSharedLibraryTask : DefaultTask() {
     @get:InputFile
     abstract val libFile: RegularFileProperty
 
+
     @get:OutputDirectory
     abstract val outDir: DirectoryProperty
 

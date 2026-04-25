@@ -125,7 +125,8 @@ internal class VisualCppCompilerArgBuilder : BaseVisualStudioBuildToolsArgBuilde
 internal class VisualCppLinkerArgBuilder : BaseVisualStudioBuildToolsArgBuilder() {
     private val outArg = "/OUT"
     private val libPathArg = "/LIBPATH"
-    private val argsToJoinWithValues = listOf(outArg, libPathArg)
+    private val implibArg = "/IMPLIB"
+    private val argsToJoinWithValues = listOf(outArg, libPathArg, implibArg)
 
     override fun newSelfInstance(): ArgBuilder = VisualCppLinkerArgBuilder()
 

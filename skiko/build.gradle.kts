@@ -11,6 +11,10 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import java.io.File
+import java.nio.file.Path
+import CompileSkikoCppTask
+import CompileSkikoObjCTask
 import tasks.configuration.*
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -328,6 +332,30 @@ afterEvaluate {
     }
 }
 
+if (supportAwt) {
+    afterEvaluate {
+        fun configureSymbolsFor(os: OS, arch: Arch) {
+            val suffix = joinToTitleCamelCase(os.id, arch.id)
+            val skiaBindingsDir = skikoProjectContext.registerOrGetSkiaDirProvider(os, arch)
+            val coreCompile = tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
+            val coreObjcCompile = if (os.isMacOs) tasks.named<CompileSkikoObjCTask>("objcCompile$suffix") else null
+
+            skikoProjectContext.configureGenerateSymbolsList(
+                os, arch, skiaBindingsDir, coreCompile, coreObjcCompile
+            )
+
+            tasks.named("linkJvmBindings$suffix") {
+                dependsOn("generateSymbolsList$suffix")
+            }
+        }
+
+        configureSymbolsFor(targetOs, targetArch)
+
+        if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
+            configureSymbolsFor(OS.MacOS, Arch.X64)
+        }
+    }
+}
 skikoProjectContext.declarePublications()
 
 val mavenCentral = MavenCentralProperties(project)

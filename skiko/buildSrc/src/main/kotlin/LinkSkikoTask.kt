@@ -35,6 +35,14 @@ abstract class LinkSkikoTask : AbstractSkikoNativeToolTask() {
         else super.createArgBuilder()
 
     override fun execute(mode: ToolMode, args: ArgBuilder) {
+        println("==== OBJECT FILES (resolved at execution) ====")
+        objectFiles.files.forEach { println(it) }
+
+        println("==== LIB FILES ====")
+        libFiles.files.forEach { println(it) }
+
+        println("==== LIB DIRS ====")
+        libDirs.get().forEach { println(it) }
         check(mode is ToolMode.NonIncremental) {
             "Linking is not incremental, but $mode is received"
         }
@@ -53,6 +61,11 @@ abstract class LinkSkikoTask : AbstractSkikoNativeToolTask() {
     override fun configureArgs() =
         super.configureArgs().apply {
             arg("-o", outDir.resolveToIoFile(libOutputFileName))
+
+            if (buildTargetOS.get().isWindows) {
+                val libFile = File(outDir.resolveToIoFile(libOutputFileName).absolutePath.replace(buildTargetOS.get().dynamicLibExt, ".lib"))
+                arg("/IMPLIB", libFile)
+            }
 
             repeatedArg("-L", values = libDirs.get())
             repeatedArg(values = objectFiles.files)

@@ -46,11 +46,13 @@ fun SkikoProjectContext.declareSkiaTasks() {
 
             val skiaReleaseTag = project.skiaVersion(target)
 
-            val skiaBaseUrl = "https://github.com/JetBrains/skia/releases/download/$skiaReleaseTag"
+            val skiaBaseUrl = "https://github.com/hub-bla/skia/releases/download/$skiaReleaseTag"
 
             val artifactId = "Skia-${skiaReleaseTag}-${config}-$buildType-${arch}"
 
-            val downloadSkiaTask = project.tasks.register<Download>("downloadSkia$buildType$taskNameSuffix") {
+            val rootProject = project.rootProject
+
+            val downloadSkiaTask = rootProject.tasks.registerOrGetTask<Download>("downloadSkia$buildType$taskNameSuffix") {
                 group = "Skia Binaries"
 
                 val skiaUrl = "$skiaBaseUrl/$artifactId.zip"
@@ -63,15 +65,14 @@ fun SkikoProjectContext.declareSkiaTasks() {
                 )
             }
 
-            project.tasks.register<Copy>("unzipSkia$buildType$taskNameSuffix") {
+            rootProject.tasks.registerOrGetTask<Copy>("unzipSkia$buildType$taskNameSuffix") {
                 group = "Skia Binaries"
 
                 val outputDir = skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId")
                 description = "unzips to $outputDir"
 
                 dependsOn(downloadSkiaTask)
-                from(project.zipTree(downloadSkiaTask.get().dest))
-
+                from(rootProject.zipTree(downloadSkiaTask.get().dest))
                 into(outputDir)
             }
         }
@@ -100,7 +101,7 @@ fun SkikoProjectContext.registerOrGetSkiaDirProvider(
             skiaDir.absoluteFile
         }
     } else {
-        project.tasks.withType<Copy>().named("unzipSkia$taskNameSuffix").map { it.destinationDir.absoluteFile }
+        project.rootProject.tasks.withType<Copy>().named("unzipSkia$taskNameSuffix").map { it.destinationDir.absoluteFile }
     }
 }
 
