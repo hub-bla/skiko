@@ -280,7 +280,7 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
             coreObjectFiles.from(coreObjcCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
         }
 
-        listOf(":skiko-graphite", ":skiko-skottie").forEach { projPath ->
+        listOf(":skiko-skottie").forEach { projPath ->
             val proj = project.findProject(projPath)
             if (proj != null) {
                 val mCompileTask = proj.tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
@@ -318,14 +318,6 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
                 include("${filePrefix}skottie$fileExtension")
                 include("${filePrefix}sksg$fileExtension")
                 include("${filePrefix}jsonreader$fileExtension")
-
-                // Graphite static libs
-                if (targetOs.isWindows) {
-                    include("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-                    include("${filePrefix}dawn$fileExtension")
-                } else {
-                    include("${filePrefix}skia_graphite_ext$fileExtension")
-                }
             }.files
         })
     }
@@ -361,15 +353,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
             exclude("${filePrefix}jsonreader$fileExtension")
             if (targetOs.isWindows) {
                 exclude("${filePrefix}skshaper$fileExtension")
-            }
-        }
-
-        if (libBaseName == "skiko-graphite") {
-            if (targetOs.isWindows) {
-                include("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-                include("${filePrefix}dawn$fileExtension")
-            } else {
-                include("${filePrefix}skia_graphite_ext$fileExtension")
             }
         }
 
@@ -735,19 +718,6 @@ fun SkikoProjectContext.createSkikoJvmJarTask(
         commonJar,
         libBaseName = "skiko",
         includeIcu = true
-    )
-
-fun SkikoProjectContext.createGraphiteSkikoJvmJarTask(
-    os: OS,
-    arch: Arch,
-    commonJar: TaskProvider<Jar>
-): TaskProvider<Jar> =
-    createJvmJar(
-        os,
-        arch,
-        commonJar,
-        libBaseName = "skiko-graphite",
-        includeIcu = false
     )
 
 fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
