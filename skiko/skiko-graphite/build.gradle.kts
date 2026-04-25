@@ -268,13 +268,13 @@ fun createChecksumsTask(
 if (supportAwt) {
     val targetSuffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
 
-    val skikoSkottieAwtJarForTests by project.tasks.registering(Jar::class) {
-        archiveBaseName.set("skiko-skottie-awt-test")
+    val skikoGraphiteAwtJarForTests by project.tasks.registering(Jar::class) {
+        archiveBaseName.set("skiko-graphite-awt-test")
         from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
     }
     val rootRuntimeJar = project(":").tasks.named<Jar>("skikoJvmRuntimeJar$targetSuffix")
 
-    skikoGraphiteContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
+    skikoGraphiteContext.setupJvmTestTask(skikoGraphiteAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
 }
 
 afterEvaluate {
