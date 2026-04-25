@@ -6,6 +6,7 @@ ARG TARGETARCH
 
 # Install basic & development tools
 RUN yum install -y tar xz git wget curl zip unzip gzip && \
+    yum install -y binutils && \
     yum install -y gcc10 gcc10-c++ gcc10-binutils make && \
     ln -sf /usr/bin/gcc10-gcc /usr/bin/gcc && \
     ln -sf /usr/bin/gcc10-g++ /usr/bin/g++ && \

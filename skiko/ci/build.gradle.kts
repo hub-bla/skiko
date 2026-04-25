@@ -7,8 +7,8 @@ val GITHUB_REPO = "JetBrains/skiko"
 
 val skikoArtifactIds: List<String> =
     listOf(
-        SkikoArtifacts.commonArtifactId,
-        SkikoArtifacts.jvmArtifactId,
+        SkikoArtifacts.commonArtifactId(),
+        SkikoArtifacts.jvmArtifactId(),
         SkikoArtifacts.jvmRuntimeArtifactIdFor(OS.Windows, Arch.X64),
         SkikoArtifacts.jvmRuntimeArtifactIdFor(OS.Windows, Arch.Arm64),
         SkikoArtifacts.jvmRuntimeArtifactIdFor(OS.Linux, Arch.X64),
@@ -17,9 +17,9 @@ val skikoArtifactIds: List<String> =
         SkikoArtifacts.jvmRuntimeArtifactIdFor(OS.MacOS, Arch.Arm64),
         SkikoArtifacts.jvmAdditionalRuntimeArtifactIdFor("angle", OS.Windows, Arch.X64),
         SkikoArtifacts.jvmAdditionalRuntimeArtifactIdFor("angle", OS.Windows, Arch.Arm64),
-        SkikoArtifacts.jsWasmArtifactId,
-        SkikoArtifacts.jsArtifactId,
-        SkikoArtifacts.wasmArtifactId,
+        SkikoArtifacts.jsWasmArtifactId(),
+        SkikoArtifacts.jsArtifactId(),
+        SkikoArtifacts.wasmArtifactId(),
         SkikoArtifacts.nativeArtifactIdFor(OS.Linux, Arch.X64),
         SkikoArtifacts.nativeArtifactIdFor(OS.Linux, Arch.Arm64),
         SkikoArtifacts.nativeArtifactIdFor(OS.MacOS, Arch.Arm64),
