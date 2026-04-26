@@ -79,7 +79,10 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         // 4. initial keep list = intersection of ext imports + JNI with core exports
         val coreExportsSet = coreExportedList.toSet()
-        val keepSet = extImportedList.filter { it in coreExportsSet }.toSet()
+        val keepSet = extImportedList
+            .filter { it in coreExportsSet }
+            .filter { !it.startsWith("XML_") }
+            .toSet()
         symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
         // 5. unexported = core exports minus what strip decided to keep
