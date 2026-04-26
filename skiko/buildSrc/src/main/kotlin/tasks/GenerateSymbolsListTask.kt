@@ -68,7 +68,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         // also keep jvm infrastructure globals
         extImportedList.addAll(coreExportedList.filter {
-            it.contains("jvm") || it.contains("JNI") || it.contains("Java_")
+            it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_")
         })
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
@@ -122,7 +122,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                         val isUndef = line.contains("UNDEF")
                         if (exported && !isUndef || !exported && isUndef) {
                             val s = line.substringAfter("|").trim().substringBefore(" ")
-                            if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@")) {
+                            if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@") && !s.startsWith("??_C@") && !s.startsWith("\"")) {
                                 result.add(s)
                             }
                         }
