@@ -425,22 +425,27 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "-static-libgcc",
                         "-lGL",
                         "-lX11",
+                        "-lexpat",
                         "-lfontconfig",
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
                         "-Wl,-z,relro,-z,now",
-                        // Hack to fix problem with linker not always finding certain declarations.
-                        "$skiaBinDir/libsksg.a",
-                        "$skiaBinDir/libskshaper.a",
-                        "$skiaBinDir/libskunicode_icu.a",
-                        "$skiaBinDir/libskunicode_core.a",
-                        "$skiaBinDir/libjsonreader.a",
                     )
                 )
                 if (targetArch == Arch.Arm64) {
                     add("-lEGL")
                 }
                 if (libBaseName == "skiko") {
+                    // Hack to fix problem with linker not always finding certain declarations.
+                    addAll(
+                        arrayOf(
+                            "$skiaBinDir/libsksg.a",
+                            "$skiaBinDir/libskshaper.a",
+                            "$skiaBinDir/libskunicode_icu.a",
+                            "$skiaBinDir/libskunicode_core.a",
+                            "$skiaBinDir/libjsonreader.a",
+                        )
+                    )
                     add("-Wl,--allow-multiple-definition")
                     add("-Wl,--whole-archive")
                     add("$skiaBinDir/libskia.a")
