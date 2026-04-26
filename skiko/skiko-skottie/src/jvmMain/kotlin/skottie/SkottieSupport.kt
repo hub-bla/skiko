@@ -1,21 +1,25 @@
 package org.jetbrains.skia.skottie
-import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skiko.hostId
 import org.jetbrains.skiko.LibraryLoader
 import org.jetbrains.skiko.LockFile
 import org.jetbrains.skiko.Library
 
-fun loadNativeLibrary(name: String) = LibraryLoader(
-    name = name,
+private val skottieLoader = LibraryLoader(
+    name = "skiko-skottie-$hostId",
     lockFile = LockFile.skiko,
-).loadOnce()
-
+    init = {
+        try {
+            _nAfterLoad()
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
+    }
+)
 
 actual object SkottieLibrary {
     actual fun load() {
         Library.load()
-        loadNativeLibrary("skiko-skottie-$hostId")
-        _nAfterLoad()
+        skottieLoader.loadOnce()
     }
 }
 

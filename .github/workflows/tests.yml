@@ -226,6 +226,7 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.arch=x64 \
               -Pskiko.native.linux.enabled=true \
+              :skiko:linkDebugTestLinuxArm64 \
               :skiko:skiko-skottie:linkDebugTestLinuxArm64
 
       - uses: actions/upload-artifact@v4
@@ -253,7 +254,7 @@ jobs:
         name: 'Download precompiled linuxArm64 test binary'
         with:
           name: test-binary-linuxArm64
-          path: ./skiko/build/bin/linuxArm64
+          path: .
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run Linux (arm64) Tests'
@@ -264,6 +265,8 @@ jobs:
           command: |
             chmod +x ./build/bin/linuxArm64/debugTest/test.kexe
             ./build/bin/linuxArm64/debugTest/test.kexe
+            chmod +x ./skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
+            ./skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
