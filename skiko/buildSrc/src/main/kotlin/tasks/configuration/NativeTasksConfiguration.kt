@@ -294,6 +294,16 @@ fun SkikoProjectContext.configureNativeTarget(
         else -> mutableListOf()
     }
 
+    if (skiko.includeTestHelpers) {
+        linkerFlags.addAll(when (os) {
+            OS.Linux -> listOf(
+                "-linker-option", "-lX11",
+                "-linker-option", "-lGLX",
+            )
+            else -> emptyList()
+        })
+    }
+
     // For some reason since 1.8.0 we need to set freeCompilerArgs for binaries AND for compilations
     target.binaries.all {
         freeCompilerArgs += allLibraries.map { listOf("-include-binary", it) }.flatten() + linkerFlags
