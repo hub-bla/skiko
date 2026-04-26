@@ -254,7 +254,7 @@ jobs:
         name: 'Download precompiled linuxArm64 test binary'
         with:
           name: test-binary-linuxArm64
-          path: .
+          path: ./skiko
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run Linux (arm64) Tests'
