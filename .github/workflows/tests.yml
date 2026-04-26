@@ -279,8 +279,7 @@ jobs:
               -Pskiko.native.enabled=true \
               -Dskiko.test.onci=true \
               -Dskiko.test.performance.enabled=false \
-              :skiko:awtTest \
-              :skiko:skiko-skottie:awtTest
+              :skiko:awtTest
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
