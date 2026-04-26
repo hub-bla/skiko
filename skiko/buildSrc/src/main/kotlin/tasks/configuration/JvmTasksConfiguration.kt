@@ -439,6 +439,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     // Hack to fix problem with linker not always finding certain declarations.
                     addAll(
                         arrayOf(
+                            "$skiaBinDir/libskia_ganesh_ext.a",
                             "$skiaBinDir/libskshaper.a",
                             "$skiaBinDir/libskunicode_icu.a",
                             "$skiaBinDir/libskunicode_core.a",
