@@ -431,9 +431,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "-Wl,-z,relro,-z,now",
                         // Hack to fix problem with linker not always finding certain declarations.
                         "$skiaBinDir/libsksg.a",
-                        "$skiaBinDir/libskunicode_core.a",
-                        "$skiaBinDir/libskunicode_icu.a",
                         "$skiaBinDir/libskshaper.a",
+                        "$skiaBinDir/libskunicode_icu.a",
+                        "$skiaBinDir/libskunicode_core.a",
                         "$skiaBinDir/libjsonreader.a",
                     )
                 )
