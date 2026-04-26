@@ -452,6 +452,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     dependsOn(coreLinkTask)
                     add("-L${coreLinkTask.get().outDir.get().asFile.absolutePath}")
                     add("-lskiko-${targetOs.id}-${targetArch.id}")
+                    add("-Wl,-rpath,\$ORIGIN")
                 }
             }.toTypedArray()
         }
