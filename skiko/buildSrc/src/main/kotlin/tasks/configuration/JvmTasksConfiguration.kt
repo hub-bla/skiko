@@ -759,7 +759,7 @@ fun SkikoProjectContext.setupJvmTestTask(
 ) = with(project) {
     val skikoAwtRuntimeJarForTests = createJvmJar(targetOs, targetArch, skikoAwtJarForTests, libBaseName = project.name,
         includeIcu = includeIcu)
-    val jars = listOf(skikoAwtRuntimeJarForTests) + extraRuntimeJars
+    val jars = listOf(skikoAwtJarForTests, skikoAwtRuntimeJarForTests) + extraRuntimeJars
     val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(targetOs, targetArch, jars, additionalRuntimeLibraries)
     val skikoJarForTests = skikoJarForTestsTask(skikoRuntimeDirForTests)
 
