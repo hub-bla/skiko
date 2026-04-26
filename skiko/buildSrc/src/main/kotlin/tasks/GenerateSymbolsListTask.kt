@@ -68,7 +68,11 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         // also keep jvm infrastructure globals
         extImportedList.addAll(coreExportedList.filter {
-            it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_")
+            if (os.isLinux) {
+                it.contains("jvm") || it.contains("JNI") || it.startsWith("Java_")
+            } else {
+                it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_")
+            }
         })
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
