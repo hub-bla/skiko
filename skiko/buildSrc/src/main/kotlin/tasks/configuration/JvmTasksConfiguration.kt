@@ -439,11 +439,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     // Hack to fix problem with linker not always finding certain declarations.
                     addAll(
                         arrayOf(
-                            "$skiaBinDir/libsksg.a",
                             "$skiaBinDir/libskshaper.a",
                             "$skiaBinDir/libskunicode_icu.a",
                             "$skiaBinDir/libskunicode_core.a",
-                            "$skiaBinDir/libjsonreader.a",
                         )
                     )
                     add("-Wl,--allow-multiple-definition")
@@ -452,6 +450,13 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("$skiaBinDir/libskresources.a")
                     add("-Wl,--no-whole-archive")
                 } else {
+                    // Hack to fix problem with linker not always finding certain declarations.
+                    addAll(
+                        arrayOf(
+                            "$skiaBinDir/libsksg.a",
+                            "$skiaBinDir/libjsonreader.a",
+                        )
+                    )
                     val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                     val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                     dependsOn(coreLinkTask)
