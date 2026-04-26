@@ -2,7 +2,6 @@ package org.jetbrains.skia.skottie
 
 import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skia.impl.InteropPointer
-import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skia.impl.NativePointer
 import org.jetbrains.skia.impl.RefCnt
 import org.jetbrains.skia.impl.Stats
@@ -12,7 +11,7 @@ import org.jetbrains.skia.impl.Stats
  * A Logger subclass can be used to receive
  * [org.jetbrains.skia.skottie.AnimationBuilder] parsing errors and warnings.
  */
-abstract class Logger : RefCnt(_nMake()) {
+abstract class Logger : RefCnt(makeLogger()) {
     companion object {
         init {
             SkottieLibrary.load()
@@ -26,6 +25,11 @@ abstract class Logger : RefCnt(_nMake()) {
         Stats.onNativeCall()
         doInit(_ptr)
     }
+}
+
+private fun makeLogger(): NativePointer {
+    SkottieLibrary.load()
+    return _nMake()
 }
 
 internal expect fun Logger.doInit(ptr: NativePointer)

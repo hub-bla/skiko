@@ -9,7 +9,9 @@ import java.io.File
 internal class ImportGeneratorExtension(
     private val path: String,
     private val prefix: String?,
-    private val reexportPath: String?
+    private val reexportPath: String?,
+    private val targetModule: String,
+    private val extraReexportHeader: List<String>,
 ) : IrGenerationExtension {
     override fun generate(
         moduleFragment: IrModuleFragment,
@@ -18,10 +20,14 @@ internal class ImportGeneratorExtension(
         val outputFile = File(path)
         outputFile.parentFile.mkdirs()
         val prefixFile = prefix?.let { File(it) }
-        val importGenerator = ImportGeneratorTransformer(pluginContext)
+        val importGenerator = ImportGeneratorTransformer(pluginContext, targetModule)
 
         outputFile.writer().use { writer ->
-            prefixFile?.let { writer.appendLine(it.readText()) }
+            prefixFile?.let {
+                if (it.exists()) {
+                    writer.appendLine(it.readText())
+                }
+            }
             moduleFragment.transformChildrenVoid(importGenerator)
 
             importGenerator.getExportSymbols().forEach { symbolName ->
@@ -35,14 +41,21 @@ internal class ImportGeneratorExtension(
         reexportFile.parentFile.mkdirs()
 
         reexportFile.writer().use { reexportWriter ->
-            reexportWriter.appendLine("import * as wasmApi from \"./skiko.mjs\";")
-            reexportWriter.appendLine("window['GL'] = wasmApi.GL;")
-            reexportWriter.appendLine("export const api = { awaitSkiko: wasmApi.awaitSkiko }")
-
+            reexportWriter.appendLine("import * as wasmApi from \"$targetModule\";")
+            extraReexportHeader.forEach(reexportWriter::appendLine)
             importGenerator.getExportSymbols().forEach { symbolName ->
                 reexportWriter.appendLine("window['${symbolName}'] = wasmApi['${symbolName}'];")
             }
         }
     }
-}
 
+    companion object {
+        val MAIN_MODULE_REEXPORT_HEADER = listOf(
+            "window['GL'] = wasmApi.GL;",
+            "export const api = { awaitSkiko: wasmApi.awaitSkiko }",
+        )
+        val SIDE_MODULE_REEXPORT_HEADER = listOf(
+            "export const reexportSymbolsLoaded = true;",
+        )
+    }
+}

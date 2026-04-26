@@ -1,16 +1,16 @@
 package org.jetbrains.skia.skottie
 
 import org.jetbrains.skia.Point
+import org.jetbrains.skiko.tests.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class AnimationTest {
     @Test
-    fun canCreateFromString() {
+    fun canCreateFromString() = runTest {
         val animation = Animation.makeFromString(
             """{"nm": "Test","v": "1.42.0","ip": 0,"op": 180,"fr": 60,"w": 32,"h": 32,"layers": []}"""
         )
-
         assertEquals("1.42.0", animation.version)
         assertEquals(Point(32.0f, 32.0f), animation.size)
         assertEquals(60.0f, animation.fPS)
@@ -20,7 +20,7 @@ class AnimationTest {
     }
 
     @Test
-    fun canCreateFromStringBuilder() {
+    fun canCreateFromStringBuilder() = runTest {
         val animation = AnimationBuilder().buildFromString(
             """{"nm": "Test","v": "1.42.0","ip": 0,"op": 180,"fr": 60,"w": 32,"h": 32,"layers": []}"""
         )

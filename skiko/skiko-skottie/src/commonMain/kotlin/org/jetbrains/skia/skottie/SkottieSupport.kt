@@ -1,5 +1,5 @@
 package org.jetbrains.skia.skottie
 
-expect object  SkottieLibrary {
+expect object SkottieLibrary {
     fun load()
 }

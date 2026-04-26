@@ -1,8 +1,8 @@
-@file:JsModule("./js-reexport-symbols.mjs")
+@file:JsModule("./js-skiko-reexport-symbols.mjs")
 @file:JsNonModule
 @file:JsQualifier("api")
 package org.jetbrains.skiko.wasm
 
 import kotlin.js.Promise
 
-internal actual external val awaitSkiko: Promise<JsAny>
+actual external val awaitSkiko: Promise<JsAny>

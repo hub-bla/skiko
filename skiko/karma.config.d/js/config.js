@@ -1,6 +1,7 @@
 // see https://kotlinlang.org/docs/js-project-setup.html#webpack-configuration-file
 
 const path = require("path");
+const fs = require("fs");
 
 config.browserConsoleLogOptions.level = "debug";
 
@@ -18,6 +19,11 @@ debug(`karma generatedAssetsPath: ${generatedAssetsPath}`);
 config.proxies = {
     "/wasm/": wasmPath,
     "/resources": path.resolve(basePath, "kotlin"),
+}
+
+const skottieWasmPath = path.resolve(basePath, "kotlin", "skiko-skottie.wasm");
+if (fs.existsSync(skottieWasmPath)) {
+    config.proxies["/skiko-skottie.wasm"] = "/absolute" + skottieWasmPath;
 }
 
 config.webpack.output = Object.assign(config.webpack.output || {}, {
@@ -40,12 +46,11 @@ config.webpack.module.rules.push(
 );
 
 config.files = [
-    path.resolve(wasmPath, "skiko.js"),
-    {pattern: path.resolve(wasmPath, "skiko.wasm"), included: false, served: true, watched: false},
     {pattern: path.resolve(generatedAssetsPath, "**/*"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.png"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.gif"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.ttf"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.txt"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.json"), included: false, served: true, watched: false},
+    {pattern: skottieWasmPath, included: false, served: true, watched: false},
 ].concat(config.files);

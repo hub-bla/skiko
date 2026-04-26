@@ -2,6 +2,7 @@
 
 
 const path = require("path");
+const fs = require("fs");
 
 config.browserConsoleLogOptions.level = "debug";
 
@@ -16,6 +17,11 @@ debug(`karma generatedAssetsPath: ${generatedAssetsPath}`);
 
 config.proxies["/resources"] = path.resolve(basePath, "kotlin");
 
+const skottieWasmPath = path.resolve(basePath, "kotlin", "skiko-skottie.wasm");
+if (fs.existsSync(skottieWasmPath)) {
+    config.proxies["/skiko-skottie.wasm"] = "/absolute" + skottieWasmPath;
+}
+
 config.files = [
     {pattern: path.resolve(generatedAssetsPath, "**/*"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.png"), included: false, served: true, watched: false},
@@ -23,6 +29,7 @@ config.files = [
     {pattern: path.resolve(basePath, "kotlin", "**/*.ttf"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.txt"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.json"), included: false, served: true, watched: false},
+    {pattern: skottieWasmPath, included: false, served: true, watched: false},
 ].concat(config.files);
 
 function KarmaWebpackOutputFramework(config) {

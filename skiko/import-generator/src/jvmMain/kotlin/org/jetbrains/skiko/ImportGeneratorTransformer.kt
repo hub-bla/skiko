@@ -20,8 +20,10 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import kotlin.collections.plus
 
-internal class ImportGeneratorTransformer(private val pluginContext: IrPluginContext) : IrElementTransformerVoid() {
-
+internal class ImportGeneratorTransformer(
+    private val pluginContext: IrPluginContext,
+    private val targetModule: String,
+) : IrElementTransformerVoid() {
     private val exportSymbols = mutableListOf<String>()
     fun getExportSymbols(): List<String> = exportSymbols
 
@@ -30,7 +32,7 @@ internal class ImportGeneratorTransformer(private val pluginContext: IrPluginCon
         (getValueArgument(Name.identifier(value)) as IrConst).value as String
 
     @OptIn(UnsafeDuringIrConstructionAPI::class, DeprecatedForRemovalCompilerApi::class)
-    private fun IrFunction.addWasmImportAnnotation(name: String) {
+    private fun IrFunction.addWasmImportAnnotation(name: String, moduleName: String) {
         val annotationClass = pluginContext.referenceClass(
             ClassId.fromString("kotlin/wasm/WasmImport")
         ) ?: return
@@ -43,8 +45,6 @@ internal class ImportGeneratorTransformer(private val pluginContext: IrPluginCon
             type = annotationClass.owner.defaultType,
             constructorSymbol = ctor.symbol,
         )
-
-        val moduleName = if (name.startsWith("org_jetbrains_skiko_tests_")) "./skiko-test.mjs" else "./skiko.mjs"
 
         annotationCall.putValueArgument(0, IrConstImpl.string(
             startOffset,
@@ -97,7 +97,7 @@ internal class ImportGeneratorTransformer(private val pluginContext: IrPluginCon
 
             val name = webImportAnnotation.getStringValue("name")
             addJsNameAnnotation(name)
-            addWasmImportAnnotation(name)
+            addWasmImportAnnotation(name, targetModule)
 
             exportSymbols.add(name)
         }
