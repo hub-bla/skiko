@@ -40,6 +40,10 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     @get:InputFiles
     abstract val moduleLibs: ConfigurableFileCollection
 
+    @get:InputFiles
+    @get:Optional
+    abstract val systemLibs: ConfigurableFileCollection
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -77,9 +81,22 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
 
-        // 4. initial keep list = intersection of ext imports + JNI with core exports
+        // 3. system lib exports (symbols from system DLLs/shared libs that must not be re-exported)
+        val systemLibFiles = systemLibs.files.filter { it.isFile }
+        val systemSymbolsSet: Set<String> = if (systemLibFiles.isNotEmpty()) {
+            extractSystemLibSymbols(systemLibFiles).toSet().also {
+                logger.lifecycle("generateSymbolsList: found ${it.size} exported symbols in ${systemLibFiles.size} system lib(s)")
+            }
+        } else {
+            emptySet()
+        }
+
+        // 4. initial keep list = intersection of ext imports + JNI with core exports, minus system lib symbols
         val coreExportsSet = coreExportedList.toSet()
-        val keepSet = extImportedList.filter { it in coreExportsSet }.toSet()
+        val keepSet = extImportedList
+            .filter { it in coreExportsSet }
+            .filter { it !in systemSymbolsSet }
+            .toSet()
         symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
         // 5. unexported = core exports minus what strip decided to keep
@@ -97,6 +114,108 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
 
         logger.lifecycle("Symbols to keep: ${keepSet.size}, to hide: ${unexportedSet.size}")
+    }
+
+    /**
+     * Extracts exported symbol names from system shared libraries / import libs.
+     * Uses `dumpbin /EXPORTS` on Windows (import libs), and `nm -g` on Linux/macOS (shared objects).
+     */
+    private fun extractSystemLibSymbols(files: List<File>): List<String> {
+        val os = targetOs.get()
+        val arch = targetArch.get()
+        val result = mutableSetOf<String>()
+        if (files.isEmpty()) return emptyList()
+
+        val executableCandidates = resolveExecutableCandidates(os, arch)
+
+        when {
+            os.isMacOs || os.isLinux -> {
+                // Split files into .tbd stubs (macOS SDK) and regular shared objects.
+                val (tbdFiles, soFiles) = files.partition { it.extension == "tbd" }
+
+                // Parse .tbd (Text-Based Dylib) stubs — YAML-like files whose `symbols:` blocks
+                // may span multiple lines inside a single `[ ... ]` bracket pair.
+                tbdFiles.forEach { tbd ->
+                    val lines = tbd.readLines()
+                    var inSymbols = false
+                    val buf = StringBuilder()
+                    for (line in lines) {
+                        val trimmed = line.trim()
+                        if (!inSymbols) {
+                            if (trimmed.startsWith("symbols:")) {
+                                val rest = trimmed.removePrefix("symbols:").trim()
+                                buf.setLength(0)
+                                buf.append(rest)
+                                if (']' in rest) {
+                                    // single-line block
+                                    extractTbdSymbols(buf.toString(), result)
+                                    buf.setLength(0)
+                                } else {
+                                    inSymbols = true
+                                }
+                            }
+                        } else {
+                            buf.append(' ').append(trimmed)
+                            if (']' in trimmed) {
+                                inSymbols = false
+                                extractTbdSymbols(buf.toString(), result)
+                                buf.setLength(0)
+                            }
+                        }
+                    }
+                }
+
+                // Regular shared objects — use nm with -D (dynamic symbol table).
+                // Shared libraries export symbols via the dynamic symbol table (.dynsym), not
+                // the regular symbol table (.symtab).  nm --defined-only without -D produces
+                // zero results for stripped .so files; -D reads the right table.
+                if (soFiles.isNotEmpty()) {
+                    val nmFlags = nmFlags(os, exported = true, dynamic = os.isLinux)
+                    try {
+                        run(executables = executableCandidates, args = nmFlags, files = soFiles).lines().forEach { line ->
+                            val s = line.trim().split(" ").lastOrNull().orEmpty()
+                            if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
+                                result.add(s)
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        logger.warn("generateSymbolsList: could not extract system lib symbols via nm: ${t.message}")
+                    }
+                }
+            }
+            else -> {
+                // On Windows, use dumpbin /EXPORTS to read the export table of each import lib.
+                files.forEach { file ->
+                    try {
+                        run(executables = executableCandidates, args = listOf("/EXPORTS"), files = listOf(file)).lines().forEach { line ->
+                            val trimmed = line.trim()
+                            // dumpbin /EXPORTS output has lines like: "  1    0 00000000 SymbolName"
+                            // or decorated names; skip header/footer lines
+                            if (trimmed.isNotEmpty() &&
+                                !trimmed.startsWith("Microsoft") &&
+                                !trimmed.startsWith("Dump") &&
+                                !trimmed.startsWith("File") &&
+                                !trimmed.startsWith("Section") &&
+                                !trimmed.startsWith("Summary") &&
+                                !trimmed.startsWith("ordinal") &&
+                                !trimmed.startsWith("RVA") &&
+                                !trimmed.startsWith("Export")) {
+                                // Typical line: "      1          0  [NONAME]" or "    1    0 00001234 FunctionName"
+                                val parts = trimmed.split(Regex("\\s+"))
+                                val sym = parts.lastOrNull().orEmpty()
+                                if (sym.isNotEmpty() && sym != "[NONAME]" && !sym.all { it.isDigit() }) {
+                                    result.add(sym)
+                                }
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        logger.warn("generateSymbolsList: could not extract exports from ${file.name}: ${t.message}")
+                    }
+                }
+            }
+        }
+
+        return result.toList()
     }
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {
@@ -195,10 +314,30 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
     }
 
-    private fun nmFlags(os: OS, exported: Boolean): List<String> {
+    /**
+     * Extracts C symbol names from the content of a `.tbd` `symbols:` block,
+     * e.g. `[ _CFRelease, _CFRetain, ... ]`.
+     * Filters out linker-directive pseudo-symbols (`$ld$…`) and keeps only
+     * tokens that start with `_` (C-linkage) or are plain identifiers.
+     */
+    private fun extractTbdSymbols(block: String, result: MutableSet<String>) {
+        val b = block.indexOf('[')
+        val e = block.lastIndexOf(']')
+        if (b < 0 || e <= b) return
+        block.substring(b + 1, e).split(",").forEach { raw ->
+            // strip surrounding whitespace and optional single-quotes used in tbd-version 3
+            val s = raw.trim().removeSurrounding("'").trim()
+            if (s.isNotEmpty() && !s.startsWith("\$ld\$") && !s.startsWith("'")) {
+                result.add(s)
+            }
+        }
+    }
+
+    private fun nmFlags(os: OS, exported: Boolean, dynamic: Boolean = false): List<String> {
         return when {
             !exported -> listOf("-u")
             os.isMacOs -> listOf("-g", "-U")
+            dynamic -> listOf("-D", "--defined-only")  // shared objects: use dynamic symbol table
             else -> listOf("-g", "--defined-only")
         }
     }
