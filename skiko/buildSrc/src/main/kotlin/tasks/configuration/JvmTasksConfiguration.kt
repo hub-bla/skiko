@@ -257,6 +257,67 @@ fun generateDefFile(exportedTxt: Path, output: Path) {
     })
 }
 
+/**
+ * Resolves the actual system library files for [targetOs] / [targetArch] that are linked into skiko.
+ * These symbols must not be re-exported from the skiko shared library.
+ */
+private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: Arch): List<File> {
+    return when (targetOs) {
+        OS.Windows -> {
+            // The exact .lib files passed to the Windows linker – resolve them from the SDK lib dirs.
+            val systemLibNames = listOf(
+                "Advapi32.lib", "gdi32.lib", "Dwmapi.lib", "ole32.lib",
+                "Propsys.lib", "shcore.lib", "Shlwapi.lib", "user32.lib",
+                "FontSub.lib", "Usp10.lib", "dxgi.lib"
+            )
+            val libDirs = windowsSdkPaths.libDirs
+            systemLibNames.flatMap { libName ->
+                libDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
+            }
+        }
+        OS.Linux -> {
+            // Standard search paths used on typical Linux distros.
+            val arch64Suffix = if (targetArch == Arch.X64) "x86_64-linux-gnu" else "aarch64-linux-gnu"
+            val searchDirs = listOf(
+                "/usr/lib/$arch64Suffix",
+                "/usr/lib",
+                "/lib/$arch64Suffix",
+                "/lib"
+            ).map { File(it) }
+
+            val libNames = buildList {
+                add("libGL.so")
+                add("libX11.so")
+                add("libfontconfig.so")
+                add("libstdc++.so.6")
+                add("libgcc_s.so.1")
+                if (targetArch == Arch.Arm64) add("libEGL.so")
+                // Also try versioned symlink names commonly found on Debian/Ubuntu
+                add("libGL.so.1")
+                add("libX11.so.6")
+                add("libfontconfig.so.1")
+                if (targetArch == Arch.Arm64) add("libEGL.so.1")
+            }
+
+            libNames.flatMap { libName ->
+                searchDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
+            }.distinctBy { it.canonicalPath }
+        }
+        OS.MacOS -> {
+            // Frameworks used by the macOS skiko build.
+            val frameworkNames = listOf(
+                "AppKit", "CoreFoundation", "CoreGraphics", "CoreServices",
+                "CoreText", "Foundation", "IOKit", "Metal", "OpenGL", "QuartzCore"
+            )
+            val frameworkBase = File("/System/Library/Frameworks")
+            frameworkNames.mapNotNull { name ->
+                frameworkBase.resolve("$name.framework/$name").takeIf { it.isFile }
+            }
+        }
+        else -> emptyList()
+    }
+}
+
 fun SkikoProjectContext.configureGenerateSymbolsList(
     targetOs: OS,
     targetArch: Arch,
@@ -320,6 +381,9 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
                 include("${filePrefix}jsonreader$fileExtension")
             }.files
         })
+
+        // Populate system libs so their exported symbols are excluded from the skiko re-export list.
+        systemLibs.from(resolveSystemLibFiles(targetOs, targetArch))
     }
 }
 

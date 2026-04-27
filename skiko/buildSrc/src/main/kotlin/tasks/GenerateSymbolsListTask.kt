@@ -40,6 +40,10 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     @get:InputFiles
     abstract val moduleLibs: ConfigurableFileCollection
 
+    @get:InputFiles
+    @get:Optional
+    abstract val systemLibs: ConfigurableFileCollection
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -77,14 +81,21 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
 
-        // 4. initial keep list = intersection of ext imports + JNI with core exports
+        // 3. system lib exports (symbols from system DLLs/shared libs that must not be re-exported)
+        val systemLibFiles = systemLibs.files.filter { it.isFile }
+        val systemSymbolsSet: Set<String> = if (systemLibFiles.isNotEmpty()) {
+            extractSystemLibSymbols(systemLibFiles).toSet().also {
+                logger.lifecycle("generateSymbolsList: found ${it.size} exported symbols in ${systemLibFiles.size} system lib(s)")
+            }
+        } else {
+            emptySet()
+        }
+
+        // 4. initial keep list = intersection of ext imports + JNI with core exports, minus system lib symbols
         val coreExportsSet = coreExportedList.toSet()
         val keepSet = extImportedList
             .filter { it in coreExportsSet }
-            .filter { !it.startsWith("XML_") }
-            .filter { !it.startsWith("Xml") }
-            .filter { !it.startsWith("FT_") }
-            .filter { !it.startsWith("Cr_") }
+            .filter { it !in systemSymbolsSet }
             .toSet()
         symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
@@ -103,6 +114,69 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
 
         logger.lifecycle("Symbols to keep: ${keepSet.size}, to hide: ${unexportedSet.size}")
+    }
+
+    /**
+     * Extracts exported symbol names from system shared libraries / import libs.
+     * Uses `dumpbin /EXPORTS` on Windows (import libs), and `nm -g` on Linux/macOS (shared objects).
+     */
+    private fun extractSystemLibSymbols(files: List<File>): List<String> {
+        val os = targetOs.get()
+        val arch = targetArch.get()
+        val result = mutableSetOf<String>()
+        if (files.isEmpty()) return emptyList()
+
+        val executableCandidates = resolveExecutableCandidates(os, arch)
+
+        when {
+            os.isMacOs || os.isLinux -> {
+                // nm -g lists globally visible (exported) symbols; -U (macOS) / --defined-only (Linux)
+                // skips undefined ones so we only get what the library itself exports.
+                val nmFlags = nmFlags(os, exported = true)
+                try {
+                    run(executables = executableCandidates, args = nmFlags, files = files).lines().forEach { line ->
+                        val s = line.trim().split(" ").lastOrNull().orEmpty()
+                        if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
+                            result.add(s)
+                        }
+                    }
+                } catch (t: Throwable) {
+                    logger.warn("generateSymbolsList: could not extract system lib symbols: ${t.message}")
+                }
+            }
+            else -> {
+                // On Windows, use dumpbin /EXPORTS to read the export table of each import lib.
+                files.forEach { file ->
+                    try {
+                        run(executables = executableCandidates, args = listOf("/EXPORTS"), files = listOf(file)).lines().forEach { line ->
+                            val trimmed = line.trim()
+                            // dumpbin /EXPORTS output has lines like: "  1    0 00000000 SymbolName"
+                            // or decorated names; skip header/footer lines
+                            if (trimmed.isNotEmpty() &&
+                                !trimmed.startsWith("Microsoft") &&
+                                !trimmed.startsWith("Dump") &&
+                                !trimmed.startsWith("File") &&
+                                !trimmed.startsWith("Section") &&
+                                !trimmed.startsWith("Summary") &&
+                                !trimmed.startsWith("ordinal") &&
+                                !trimmed.startsWith("RVA") &&
+                                !trimmed.startsWith("Export")) {
+                                // Typical line: "      1          0  [NONAME]" or "    1    0 00001234 FunctionName"
+                                val parts = trimmed.split(Regex("\\s+"))
+                                val sym = parts.lastOrNull().orEmpty()
+                                if (sym.isNotEmpty() && sym != "[NONAME]" && !sym.all { it.isDigit() }) {
+                                    result.add(sym)
+                                }
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        logger.warn("generateSymbolsList: could not extract exports from ${file.name}: ${t.message}")
+                    }
+                }
+            }
+        }
+
+        return result.toList()
     }
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {
