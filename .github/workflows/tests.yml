@@ -269,7 +269,7 @@ jobs:
             cd ./skiko-skottie && ./build/bin/linuxArm64/debugTest/test.kexe
 
       - uses: ./.github/actions/docker-skiko-run
-        name: 'Build libskiko.so'
+        name: 'Run AWT Tests'
         timeout-minutes: 25
         with:
           image_name: linux-compat
@@ -277,7 +277,9 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.native.enabled=true \
-              :skiko:linkJvmBindingsLinuxArm64
+              -Dskiko.test.onci=true \
+              -Dskiko.test.performance.enabled=false \
+              :skiko:awtTest
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Dump exported symbols'
@@ -291,18 +293,6 @@ jobs:
             nm -D $LIB > ./libskiko-arm64-symbols.txt
             nm -D $LIB | grep "XML_" > ./libskiko-arm64-xml-symbols.txt
             nm -D $LIB | grep " T " > ./libskiko-arm64-exported.txt
-            if [ -f "$LIB" ]; then
-              cp "$LIB" ./libskiko-linux-arm64.so
-            fi
-
-      - name: 'Upload libskiko-linux-arm64.so'
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: libskiko-linux-arm64.so
-          path: ./skiko/libskiko-linux-arm64.so
-          if-no-files-found: warn
-          retention-days: 5
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
