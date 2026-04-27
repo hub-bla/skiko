@@ -82,6 +82,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val keepSet = extImportedList
             .filter { it in coreExportsSet }
             .filter { !it.startsWith("XML_") }
+            .filter { !it.startsWith("FT_") }
+            .filter { !it.startsWith("Cr_") }
             .toSet()
         symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
