@@ -281,6 +281,7 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
                 add("libGL")
                 add("libX11")
                 add("libfontconfig")
+                add("libexpat")   // transitive via libfontconfig → libexpat
                 add("libstdc++")
                 add("libgcc_s")
                 if (targetArch == Arch.Arm64) add("libEGL")
@@ -335,6 +336,7 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
                     add("libGL.so.1")
                     add("libX11.so.6")
                     add("libfontconfig.so.1")
+                    add("libexpat.so.1")   // transitive via libfontconfig → libexpat
                     add("libstdc++.so.6")
                     add("libgcc_s.so.1")
                     if (targetArch == Arch.Arm64) add("libEGL.so.1")
@@ -342,6 +344,7 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
                     add("libGL.so")
                     add("libX11.so")
                     add("libfontconfig.so")
+                    add("libexpat.so")
                     if (targetArch == Arch.Arm64) add("libEGL.so")
                 }
 
