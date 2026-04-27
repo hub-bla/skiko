@@ -281,7 +281,7 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
                 add("libGL")
                 add("libX11")
                 add("libfontconfig")
-                add("libexpat")   // transitive via libfontconfig → libexpat
+                add("libexpat")
                 add("libstdc++")
                 add("libgcc_s")
                 if (targetArch == Arch.Arm64) add("libEGL")

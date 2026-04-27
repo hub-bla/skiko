@@ -165,9 +165,12 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                     }
                 }
 
-                // Regular shared objects — use nm.
+                // Regular shared objects — use nm with -D (dynamic symbol table).
+                // Shared libraries export symbols via the dynamic symbol table (.dynsym), not
+                // the regular symbol table (.symtab).  nm --defined-only without -D produces
+                // zero results for stripped .so files; -D reads the right table.
                 if (soFiles.isNotEmpty()) {
-                    val nmFlags = nmFlags(os, exported = true)
+                    val nmFlags = nmFlags(os, exported = true, dynamic = os.isLinux)
                     try {
                         run(executables = executableCandidates, args = nmFlags, files = soFiles).lines().forEach { line ->
                             val s = line.trim().split(" ").lastOrNull().orEmpty()
@@ -330,10 +333,11 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
     }
 
-    private fun nmFlags(os: OS, exported: Boolean): List<String> {
+    private fun nmFlags(os: OS, exported: Boolean, dynamic: Boolean = false): List<String> {
         return when {
             !exported -> listOf("-u")
             os.isMacOs -> listOf("-g", "-U")
+            dynamic -> listOf("-D", "--defined-only")  // shared objects: use dynamic symbol table
             else -> listOf("-g", "--defined-only")
         }
     }
