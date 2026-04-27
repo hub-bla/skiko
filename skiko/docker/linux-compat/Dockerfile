@@ -7,7 +7,6 @@ ARG TARGETARCH
 # Install basic & development tools
 RUN yum install -y tar xz git wget curl zip unzip gzip && \
     yum install -y gcc10 gcc10-c++ gcc10-binutils make && \
-    yum update -y expat fontconfig && \
     ln -sf /usr/bin/gcc10-gcc /usr/bin/gcc && \
     ln -sf /usr/bin/gcc10-g++ /usr/bin/g++ && \
     ln -sf /usr/bin/gcc10-ar /usr/bin/ar && \
