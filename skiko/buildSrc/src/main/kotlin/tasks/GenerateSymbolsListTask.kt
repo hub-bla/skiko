@@ -130,18 +130,54 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         when {
             os.isMacOs || os.isLinux -> {
-                // nm -g lists globally visible (exported) symbols; -U (macOS) / --defined-only (Linux)
-                // skips undefined ones so we only get what the library itself exports.
-                val nmFlags = nmFlags(os, exported = true)
-                try {
-                    run(executables = executableCandidates, args = nmFlags, files = files).lines().forEach { line ->
-                        val s = line.trim().split(" ").lastOrNull().orEmpty()
-                        if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                            result.add(s)
+                // Split files into .tbd stubs (macOS SDK) and regular shared objects.
+                val (tbdFiles, soFiles) = files.partition { it.extension == "tbd" }
+
+                // Parse .tbd (Text-Based Dylib) stubs — YAML-like files whose `symbols:` blocks
+                // may span multiple lines inside a single `[ ... ]` bracket pair.
+                tbdFiles.forEach { tbd ->
+                    val lines = tbd.readLines()
+                    var inSymbols = false
+                    val buf = StringBuilder()
+                    for (line in lines) {
+                        val trimmed = line.trim()
+                        if (!inSymbols) {
+                            if (trimmed.startsWith("symbols:")) {
+                                val rest = trimmed.removePrefix("symbols:").trim()
+                                buf.setLength(0)
+                                buf.append(rest)
+                                if (']' in rest) {
+                                    // single-line block
+                                    extractTbdSymbols(buf.toString(), result)
+                                    buf.setLength(0)
+                                } else {
+                                    inSymbols = true
+                                }
+                            }
+                        } else {
+                            buf.append(' ').append(trimmed)
+                            if (']' in trimmed) {
+                                inSymbols = false
+                                extractTbdSymbols(buf.toString(), result)
+                                buf.setLength(0)
+                            }
                         }
                     }
-                } catch (t: Throwable) {
-                    logger.warn("generateSymbolsList: could not extract system lib symbols: ${t.message}")
+                }
+
+                // Regular shared objects — use nm.
+                if (soFiles.isNotEmpty()) {
+                    val nmFlags = nmFlags(os, exported = true)
+                    try {
+                        run(executables = executableCandidates, args = nmFlags, files = soFiles).lines().forEach { line ->
+                            val s = line.trim().split(" ").lastOrNull().orEmpty()
+                            if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
+                                result.add(s)
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        logger.warn("generateSymbolsList: could not extract system lib symbols via nm: ${t.message}")
+                    }
                 }
             }
             else -> {
@@ -272,6 +308,25 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 thrownException
             )
             throw thrownException ?: RuntimeException("Execution failed without an exception")
+        }
+    }
+
+    /**
+     * Extracts C symbol names from the content of a `.tbd` `symbols:` block,
+     * e.g. `[ _CFRelease, _CFRetain, ... ]`.
+     * Filters out linker-directive pseudo-symbols (`$ld$…`) and keeps only
+     * tokens that start with `_` (C-linkage) or are plain identifiers.
+     */
+    private fun extractTbdSymbols(block: String, result: MutableSet<String>) {
+        val b = block.indexOf('[')
+        val e = block.lastIndexOf(']')
+        if (b < 0 || e <= b) return
+        block.substring(b + 1, e).split(",").forEach { raw ->
+            // strip surrounding whitespace and optional single-quotes used in tbd-version 3
+            val s = raw.trim().removeSurrounding("'").trim()
+            if (s.isNotEmpty() && !s.startsWith("\$ld\$") && !s.startsWith("'")) {
+                result.add(s)
+            }
         }
     }
 

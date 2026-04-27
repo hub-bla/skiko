@@ -304,14 +304,29 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
             }.distinctBy { it.canonicalPath }
         }
         OS.MacOS -> {
-            // Frameworks used by the macOS skiko build.
+            // On macOS 12+, framework binaries live in the dyld shared cache and are NOT
+            // present as real files on disk.  The Xcode SDK ships .tbd (Text-Based Dylib)
+            // stub files that list every exported symbol — use those instead.
             val frameworkNames = listOf(
                 "AppKit", "CoreFoundation", "CoreGraphics", "CoreServices",
                 "CoreText", "Foundation", "IOKit", "Metal", "OpenGL", "QuartzCore"
             )
-            val frameworkBase = File("/System/Library/Frameworks")
-            frameworkNames.mapNotNull { name ->
-                frameworkBase.resolve("$name.framework/$name").takeIf { it.isFile }
+            // Resolve the active SDK path via xcrun so we don't hard-code an Xcode location.
+            val sdkPath = try {
+                val out = java.io.ByteArrayOutputStream()
+                project.exec {
+                    commandLine("xcrun", "--show-sdk-path")
+                    standardOutput = out
+                    isIgnoreExitValue = true
+                }.exitValue.let { if (it != 0) null else out.toString().trim() }
+            } catch (_: Exception) { null }
+            if (sdkPath != null) {
+                val frameworkBase = File(sdkPath).resolve("System/Library/Frameworks")
+                frameworkNames.mapNotNull { name ->
+                    frameworkBase.resolve("$name.framework/$name.tbd").takeIf { it.isFile }
+                }
+            } else {
+                emptyList()
             }
         }
         else -> emptyList()
@@ -383,7 +398,9 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
         })
 
         // Populate system libs so their exported symbols are excluded from the skiko re-export list.
-        systemLibs.from(resolveSystemLibFiles(targetOs, targetArch))
+        val systemLibFiles = resolveSystemLibFiles(targetOs, targetArch)
+        println("System lib files: $systemLibFiles")
+        systemLibs.from(systemLibFiles)
     }
 }
 
