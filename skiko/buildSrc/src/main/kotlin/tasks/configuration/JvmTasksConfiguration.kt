@@ -425,7 +425,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         "-static-libgcc",
                         "-lGL",
                         "-lX11",
-                        "-lfontconfig",
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
                         "-Wl,-z,relro,-z,now",
@@ -435,6 +434,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     add("-lEGL")
                 }
                 if (libBaseName == "skiko") {
+                    add("-lfontconfig")
                     // Hack to fix problem with linker not always finding certain declarations.
                     addAll(
                         arrayOf(
