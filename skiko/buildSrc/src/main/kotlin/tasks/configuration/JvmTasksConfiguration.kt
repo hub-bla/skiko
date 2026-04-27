@@ -518,6 +518,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             linker.set(project.androidClangFor(targetArch))
             if (libBaseName == "skiko") {
                 androidFlags += arrayOf(
+                    "-Wl,--allow-multiple-definition",
                     "-Wl,--whole-archive",
                     "$skiaBinDir/libskia.a",
                     "-Wl,--no-whole-archive"
