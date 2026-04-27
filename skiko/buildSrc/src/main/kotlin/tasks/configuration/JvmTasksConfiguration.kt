@@ -276,32 +276,79 @@ private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: 
             }
         }
         OS.Linux -> {
-            // Standard search paths used on typical Linux distros.
-            val arch64Suffix = if (targetArch == Arch.X64) "x86_64-linux-gnu" else "aarch64-linux-gnu"
-            val searchDirs = listOf(
-                "/usr/lib/$arch64Suffix",
-                "/usr/lib",
-                "/lib/$arch64Suffix",
-                "/lib"
-            ).map { File(it) }
-
-            val libNames = buildList {
-                add("libGL.so")
-                add("libX11.so")
-                add("libfontconfig.so")
-                add("libstdc++.so.6")
-                add("libgcc_s.so.1")
-                if (targetArch == Arch.Arm64) add("libEGL.so")
-                // Also try versioned symlink names commonly found on Debian/Ubuntu
-                add("libGL.so.1")
-                add("libX11.so.6")
-                add("libfontconfig.so.1")
-                if (targetArch == Arch.Arm64) add("libEGL.so.1")
+            // The libraries linked into libskiko.so on Linux (see osFlags in createLinkJvmBindings).
+            val linkedLibSoNames = buildList {
+                add("libGL")
+                add("libX11")
+                add("libfontconfig")
+                add("libstdc++")
+                add("libgcc_s")
+                if (targetArch == Arch.Arm64) add("libEGL")
             }
 
-            libNames.flatMap { libName ->
-                searchDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
-            }.distinctBy { it.canonicalPath }
+            // Primary: ask ldconfig which real files back these sonames.
+            // ldconfig -p lines look like:
+            //   libGL.so.1 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libGL.so.1
+            val ldconfigResult: String = try {
+                val out = java.io.ByteArrayOutputStream()
+                project.exec {
+                    commandLine("ldconfig", "-p")
+                    standardOutput = out
+                    isIgnoreExitValue = true
+                }
+                out.toString()
+            } catch (_: Exception) { "" }
+
+            val resolvedViaLdconfig: List<File> = if (ldconfigResult.isNotEmpty()) {
+                val archToken = if (targetArch == Arch.X64) "x86-64" else "AArch64"
+                val found = mutableListOf<File>()
+                for (line in ldconfigResult.lines()) {
+                    val trimmed = line.trim()
+                    // Only pick the ABI that matches the target architecture.
+                    if (!trimmed.contains(archToken)) continue
+                    val soName = trimmed.substringBefore(" ").substringBefore("(")
+                    if (linkedLibSoNames.none { soName.startsWith("$it.so") }) continue
+                    val path = trimmed.substringAfter("=>").trim()
+                    if (path.isNotEmpty()) {
+                        val f = File(path)
+                        if (f.isFile) found.add(f)
+                    }
+                }
+                found.distinctBy { it.canonicalPath }
+            } else emptyList()
+
+            if (resolvedViaLdconfig.isNotEmpty()) {
+                resolvedViaLdconfig
+            } else {
+                // Fallback: probe well-known directories directly (e.g. cross-compile sysroot or
+                // minimal containers where ldconfig may not be available).
+                val arch64Suffix = if (targetArch == Arch.X64) "x86_64-linux-gnu" else "aarch64-linux-gnu"
+                val searchDirs = listOf(
+                    "/usr/lib/$arch64Suffix",
+                    "/usr/lib",
+                    "/lib/$arch64Suffix",
+                    "/lib"
+                ).map { File(it) }
+
+                val libNamesWithVersions = buildList {
+                    // Versioned sonames commonly installed without -dev packages:
+                    add("libGL.so.1")
+                    add("libX11.so.6")
+                    add("libfontconfig.so.1")
+                    add("libstdc++.so.6")
+                    add("libgcc_s.so.1")
+                    if (targetArch == Arch.Arm64) add("libEGL.so.1")
+                    // Also try unversioned linker stubs (present when -dev packages are installed):
+                    add("libGL.so")
+                    add("libX11.so")
+                    add("libfontconfig.so")
+                    if (targetArch == Arch.Arm64) add("libEGL.so")
+                }
+
+                libNamesWithVersions.flatMap { libName ->
+                    searchDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
+                }.distinctBy { it.canonicalPath }
+            }
         }
         OS.MacOS -> {
             // On macOS 12+, framework binaries live in the dyld shared cache and are NOT
