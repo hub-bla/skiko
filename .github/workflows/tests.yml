@@ -281,6 +281,18 @@ jobs:
               -Dskiko.test.performance.enabled=false \
               :skiko:awtTest
 
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Dump exported symbols'
+        if: always()
+        with:
+          image_name: linux-compat
+          command: |
+            LIB=$(find /workspace/skiko -name "libskiko-linux-arm64.so" | head -1)
+            echo "Found: $LIB"
+            nm -D $LIB > /workspace/skiko/libskiko-arm64-symbols.txt
+            nm -D $LIB | grep "XML_" > /workspace/skiko/libskiko-arm64-xml-symbols.txt
+            nm -D $LIB | grep " T " > /workspace/skiko/libskiko-arm64-exported-count.txt
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: failure()
@@ -290,6 +302,9 @@ jobs:
             ./skiko/build/reports/tests
             ./skiko/src/jvmTest/screenshots/*_actual.png
             ./skiko/hs_err_pid*.log
+            ./skiko/libskiko-arm64-symbols.txt
+            ./skiko/libskiko-arm64-xml-symbols.txt
+            ./skiko/libskiko-arm64-exported-count.txt
           retention-days: 5
 
       - name: Test Summary
