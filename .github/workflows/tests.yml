@@ -286,6 +286,7 @@ jobs:
         if: always()
         with:
           image_name: linux-compat
+          working_directory: skiko
           command: |
             LIB=$(find /workspace/skiko -name "libskiko-linux-arm64.so" | head -1)
             echo "Found: $LIB"
