@@ -10,6 +10,7 @@ class AnimationBuilder internal constructor(ptr: NativePointer) : Managed(ptr, _
         init {
             SkottieLibrary.load()
         }
+
         internal fun _flagsToInt(vararg builderFlags: AnimationBuilderFlag): Int {
             var flags = 0
             for (flag in builderFlags) flags = flags or flag._flag
@@ -23,7 +24,7 @@ class AnimationBuilder internal constructor(ptr: NativePointer) : Managed(ptr, _
     }
 
     constructor() : this(*emptyArray<AnimationBuilderFlag>()) {}
-    constructor(vararg builderFlags: AnimationBuilderFlag) : this(AnimationBuilder_nMake(_flagsToInt(*builderFlags))) {
+    constructor(vararg builderFlags: AnimationBuilderFlag) : this(makeAnimationBuilder(_flagsToInt(*builderFlags))) {
         Stats.onNativeCall()
     }
 
@@ -80,6 +81,11 @@ class AnimationBuilder internal constructor(ptr: NativePointer) : Managed(ptr, _
             reachabilityBarrier(this)
         }
     }
+}
+
+private fun makeAnimationBuilder(flags: Int): NativePointer {
+    SkottieLibrary.load()
+    return AnimationBuilder_nMake(flags)
 }
 
 @ExternalSymbolName("org_jetbrains_skia_skottie_AnimationBuilder__1nGetFinalizer")

@@ -1,16 +1,16 @@
 package org.jetbrains.skia.skottie
 
-import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skia.sksg.InvalidationController
 import org.jetbrains.skia.*
 import org.jetbrains.skia.ExternalSymbolName
 import org.jetbrains.skia.impl.*
 
 class Animation internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
-    init {
-        SkottieLibrary.load()
-    }
     companion object {
+        init {
+            SkottieLibrary.load()
+        }
+
         fun makeFromString(data: String): Animation {
             Stats.onNativeCall()
             interopScope {

@@ -21,7 +21,7 @@ class InvalidationController internal constructor(ptr: NativePointer) : Managed(
         val PTR = InvalidationController_nGetFinalizer()
     }
 
-    constructor() : this(InvalidationController_nMake()) {}
+    constructor() : this(makeInvalidationController()) {}
 
     fun invalidate(left: Float, top: Float, right: Float, bottom: Float, matrix: Matrix33?): InvalidationController {
         Stats.onNativeCall()
@@ -53,6 +53,11 @@ class InvalidationController internal constructor(ptr: NativePointer) : Managed(
         InvalidationController_nReset(_ptr)
         return this
     }
+}
+
+private fun makeInvalidationController(): NativePointer {
+    SkottieLibrary.load()
+    return InvalidationController_nMake()
 }
 
 @ExternalSymbolName("org_jetbrains_skia_sksg_InvalidationController_nGetFinalizer")
