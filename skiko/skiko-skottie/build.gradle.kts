@@ -4,6 +4,7 @@ import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.LibraryPlugin
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.compose.internal.publishing.MavenCentralProperties
@@ -29,12 +30,7 @@ val skiko = SkikoProperties(rootProject)
 val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
-
-fun skiaSkottieStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
-    val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
-    val extension = if (targetString.contains("wasm")) ".wasm.a" else ".a"
-    return listOf("$skiaBinSubdir/libskottie$extension", "$skiaBinSubdir/libjsonreader$extension", "$skiaBinSubdir/libsksg$extension")
-}
+val skikoSkottieModule = project.currentSkikoExtensionModule()
 
 val skikoSkottieProjectContext = SkikoProjectContext(
     project = project,
@@ -46,8 +42,24 @@ val skikoSkottieProjectContext = SkikoProjectContext(
     createChecksumsTask = { targetOs: OS, targetArch: Arch, fileToChecksum: Provider<File> ->
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
-    additionalRuntimeLibraries = emptyList()
+    additionalRuntimeLibraries = emptyList(),
+    currentExtensionModule = skikoSkottieModule
 )
+
+fun configureSkottieNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) {
+    skikoSkottieProjectContext.configureNativeBridgesForExtension(
+        skikoSkottieModule,
+        os,
+        arch,
+        target
+    ) { skiaDir, targetString, currentBuildType ->
+        skikoSkottieModule.staticLibraryPaths(
+            skiaDir = skiaDir,
+            targetString = targetString,
+            buildType = currentBuildType
+        )
+    }
+}
 
 repositories {
     mavenCentral()
@@ -96,7 +108,11 @@ kotlin {
 
         skikoSkottieProjectContext.declareWasmTasks(
             isSideModule = true,
-            extraLibraries = skiaSkottieStaticLibraries(skiaWasmDir.get().absolutePath, "wasm-wasm", buildType),
+            extraLibraries = skikoSkottieModule.staticLibraryPaths(
+                skiaDir = skiaWasmDir.get().absolutePath,
+                targetString = "wasm-wasm",
+                buildType = buildType
+            ),
             extraIncludeDirs = listOf(
                 project(":").projectDir.resolve("src/nativeJsMain/cpp"),
                 project(":").projectDir.resolve("src/commonMain/cpp/common/include")
@@ -161,113 +177,37 @@ kotlin {
     }
 
     if (supportNativeMac) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.MacOS,
-            Arch.X64,
-            macosX64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.MacOS,
-            Arch.Arm64,
-            macosArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.MacOS, Arch.X64, macosX64())
+        configureSkottieNativeTarget(OS.MacOS, Arch.Arm64, macosArm64())
     }
 
     if (supportNativeLinux) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.Linux,
-            Arch.X64,
-            linuxX64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries,
-            extraLinuxOptions = { skiaBinDir, _ ->
-                listOf("$skiaBinDir/libskottie.a")
-            }
-        )
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.Linux,
-            Arch.Arm64,
-            linuxArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries,
-            extraLinuxOptions = { skiaBinDir, _ ->
-                listOf("$skiaBinDir/libskottie.a")
-            }
-        )
+        configureSkottieNativeTarget(OS.Linux, Arch.X64, linuxX64())
+        configureSkottieNativeTarget(OS.Linux, Arch.Arm64, linuxArm64())
     }
 
     if (supportNativeIosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.IOS,
-            Arch.Arm64,
-            iosArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.IOS, Arch.Arm64, iosArm64())
     }
 
     if (supportNativeIosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.IOS,
-            Arch.Arm64,
-            iosSimulatorArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64())
     }
 
     if (supportNativeIosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.IOS,
-            Arch.X64,
-            iosX64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.IOS, Arch.X64, iosX64())
     }
 
     if (supportNativeTvosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.TVOS,
-            Arch.Arm64,
-            tvosArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64())
     }
 
     if (supportNativeTvosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.TVOS,
-            Arch.Arm64,
-            tvosSimulatorArm64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64())
     }
 
     if (supportNativeTvosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(
-            OS.TVOS,
-            Arch.X64,
-            tvosX64(),
-            libPrefix = "skiko-skottie-native-bridges",
-            cinteropNameProvider = { "skiko-skottie" },
-            librariesProvider = ::skiaSkottieStaticLibraries
-        )
+        configureSkottieNativeTarget(OS.TVOS, Arch.X64, tvosX64())
     }
 
     sourceSets.commonMain.dependencies {
@@ -362,7 +302,7 @@ if (supportAndroid) {
     }
     for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
         skikoSkottieProjectContext.createJvmJar(os, arch, skikoSkottieAndroidJar,
-            libBaseName = "skiko-skottie",
+            libBaseName = skikoSkottieModule.libBaseName,
             includeIcu = false)
     }
     tasks.matching { name == "publishAndroidReleasePublicationToMavenLocal" }.configureEach {

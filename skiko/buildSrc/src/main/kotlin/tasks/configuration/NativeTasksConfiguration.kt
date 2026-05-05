@@ -4,6 +4,7 @@ import Arch
 import CompileSkikoCppTask
 import OS
 import SkiaBuildType
+import SkikoExtensionModule
 import SkikoProjectContext
 import WriteCInteropDefFile
 import compilerForTarget
@@ -384,6 +385,24 @@ fun SkikoProjectContext.configureNativeTarget(
         }
     )
 }
+
+fun SkikoProjectContext.configureNativeBridgesForExtension(
+    module: SkikoExtensionModule,
+    os: OS,
+    arch: Arch,
+    target: KotlinNativeTarget,
+    librariesProvider: (String, String, SkiaBuildType) -> List<String>
+) = configureNativeTarget(
+    os,
+    arch,
+    target,
+    libPrefix = module.nativeBridgesLibPrefix,
+    cinteropNameProvider = { module.cinteropName },
+    librariesProvider = librariesProvider,
+    extraLinuxOptions = { skiaBinDir, _ ->
+        module.nativeLinuxExtraLibBaseNames.map { "$skiaBinDir/lib$it.a" }
+    }
+)
 
 fun KotlinMultiplatformExtension.configureIOSTestsWithMetal(project: Project) {
     val metalTestTargets = listOf("iosX64", "iosSimulatorArm64")
