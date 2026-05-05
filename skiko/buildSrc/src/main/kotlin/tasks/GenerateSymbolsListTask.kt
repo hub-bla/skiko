@@ -9,14 +9,44 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.process.ExecOperations
-import tasks.configuration.generateDefFile
-import tasks.configuration.generateVersionScript
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import javax.inject.Inject
+import kotlin.io.path.readLines
+import kotlin.io.path.writeText
+
+internal fun generateDefFile(exportedTxt: Path, output: Path) {
+    val symbols = exportedTxt.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    output.writeText(buildString {
+        appendLine("EXPORTS")
+        symbols.forEach { symbol ->
+            appendLine("    $symbol")
+        }
+    })
+}
+
+internal fun generateVersionScript(symbolsTxt: Path, output: Path) {
+    val symbols = symbolsTxt.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    output.writeText(buildString {
+        appendLine("{")
+        appendLine("  global:")
+        symbols.forEach { symbol ->
+            appendLine("    \"$symbol\";")
+        }
+        appendLine("  local:")
+        appendLine("    *;")
+        appendLine("};")
+    })
+}
 
 abstract class GenerateSymbolsListTask : DefaultTask() {
     @get:Inject

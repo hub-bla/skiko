@@ -227,36 +227,6 @@ fun SkikoProjectContext.createObjcCompileTask(
     )
 }
 
-fun generateVersionScript(symbolsTxt: Path, output: Path) {
-    val symbols = symbolsTxt.readLines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-
-    output.writeText(buildString {
-        appendLine("{")
-        appendLine("  global:")
-        symbols.forEach { symbol ->
-            appendLine("    \"$symbol\";")
-        }
-        appendLine("  local:")
-        appendLine("    *;")
-        appendLine("};")
-    })
-}
-
-fun generateDefFile(exportedTxt: Path, output: Path) {
-    val symbols = exportedTxt.readLines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-
-    output.writeText(buildString {
-        appendLine("EXPORTS")
-        symbols.forEach { symbol ->
-            appendLine("    $symbol")
-        }
-    })
-}
-
 /**
  * Resolves the actual system library files for [targetOs] / [targetArch] that are linked into skiko.
  * These symbols must not be re-exported from the skiko shared library.
