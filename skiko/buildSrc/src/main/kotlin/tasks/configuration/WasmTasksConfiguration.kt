@@ -21,19 +21,28 @@ import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsTargetDsl
 import projectDirs
 import registerOrGetSkiaDirProvider
 import supportWeb
+import targetId
 import wasmImport
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 private val Project.setupMjs
     get() = wasmImport("setup.mjs")
 
+private val Project.sideModuleSetupMjs
+    get() = wasmImport("$name.mjs")
+
 private val Project.setupReexportMjs
-    get() = wasmImport("js-reexport-symbols.mjs")
+    get() = wasmImport("js-$name-reexport-symbols.mjs")
 
 private val Project.skikoTestMjs
     get() = wasmImport("skiko-test.mjs")
 
-fun SkikoProjectContext.declareWasmTasks() {
+fun SkikoProjectContext.declareWasmTasks(
+    isSideModule: Boolean = false,
+    extraLibraries: List<String> = emptyList(),
+    extraIncludeDirs: List<File> = emptyList()
+) {
     if (!project.supportWeb) {
         return
     }
@@ -54,6 +63,11 @@ fun SkikoProjectContext.declareWasmTasks() {
         includeHeadersNonRecursive(project.projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/webMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/commonMain/cpp/common/include"))
+
+        extraIncludeDirs.forEach {
+            includeHeadersNonRecursive(it)
+        }
+
         includeHeadersNonRecursive(skiaHeadersDirs(skiaWasmDir.get()))
 
         flags.set(
@@ -62,6 +76,7 @@ fun SkikoProjectContext.declareWasmTasks() {
                 addAll(buildType.clangFlags)
                 add("-fno-rtti")
                 add("-fno-exceptions")
+                add("-fPIC")
                 if (skiko.isWasmBuildWithProfiling) add("--profiling")
             }
         )
@@ -92,19 +107,31 @@ fun SkikoProjectContext.declareWasmTasks() {
         )
 
         flags.addAll(buildList {
-            addAll(
-                listOf(
-                    "-l", "GL",
+            if (isSideModule) {
+                addAll(listOf(
+                    "-s", "SIDE_MODULE=1",
+                ))
+            } else {
+                addAll(listOf(
+                    // TODO: switch MAIN_MODULE to =2, since =1 exports everything by default
+                    // should significantly reduce size
+                    "-s", "MAIN_MODULE=1",
                     "-s", "MAX_WEBGL_VERSION=2",
                     "-s", "MIN_WEBGL_VERSION=2",
+                    "-s", "MODULARIZE=1",
+                    "-s", "EXPORT_NAME=loadSkikoWASM",
+                    "-s", "EXPORT_ALL=1",
+                    "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports]\"",
+                    "--bind",
+                ))
+            }
+
+            addAll(
+                listOf(
                     "-s", "OFFSCREEN_FRAMEBUFFER=1",
                     "-s", "ALLOW_MEMORY_GROWTH=1", // TODO: Is there a better way? Should we use `-s INITIAL_MEMORY=X`?
                     "-s", "EXPORT_ES6=1",
-                    "-s", "MODULARIZE=1",
-                    "-s", "EXPORT_NAME=loadSkikoWASM",
-                    "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports]\"",
                     "-s", "SUPPORT_LONGJMP=wasm",
-                    "--bind",
                     // -O2 saves 800kB for the output file, and ~100kB for transferred size.
                     // -O3 breaks the exports in js/mjs files. skiko.wasm size is the same though
                     "-O2"
@@ -118,6 +145,9 @@ fun SkikoProjectContext.declareWasmTasks() {
             // skiko.mjs is referenced in karma.config.d/*/config.js
             // so symbols must be replaced right after linking
             val jsFile = outDir.asFile.get().walk().first { it.name == jsOutputFileName.get() }
+            if (jsFile.extension != "mjs") {
+                return@doLast
+            }
 
             val isEnvironmentNodeCheckRegex = Regex(
                 // spacing is different in release and debug builds
@@ -138,10 +168,10 @@ fun SkikoProjectContext.declareWasmTasks() {
         )
 
         buildSuffix.set("es6")
-        jsOutputFileName.set("skiko.mjs") // this determines the name .wasm file too
-        libOutputFileName.set("skiko.wasm")
+        jsOutputFileName.set(if (isSideModule) "${project.name}.wasm" else "skiko.mjs")  // this determines the name .wasm file too
+        libOutputFileName.set(if (isSideModule) "${project.name}.wasm" else "skiko.wasm")
 
-        configureCommon(project.setupMjs.normalize().absolutePath)
+        configureCommon(if (isSideModule) project.sideModuleSetupMjs.normalize().absolutePath else project.setupMjs.normalize().absolutePath)
     }
 
     val linkWasmD8WithES6 by project.tasks.registering(LinkSkikoWasmTask::class) {
@@ -151,12 +181,12 @@ fun SkikoProjectContext.declareWasmTasks() {
         )
 
         buildSuffix.set("d8")
-        jsOutputFileName.set("skikod8.mjs") // this determines the name .wasm file too
-        libOutputFileName.set("skikod8.wasm")
+        jsOutputFileName.set(if (isSideModule) "${project.name}d8.wasm" else "skikod8.mjs")
+        libOutputFileName.set(if (isSideModule) "${project.name}d8.wasm" else "skikod8.wasm")
 
         flags.addAll(listOf("-s", "ENVIRONMENT=shell"))
 
-        configureCommon(project.setupMjs.normalize().absolutePath)
+        configureCommon(if (isSideModule) project.sideModuleSetupMjs.normalize().absolutePath else project.setupMjs.normalize().absolutePath)
     }
 
     // skikoWasmJar is used by task name
@@ -172,9 +202,11 @@ fun SkikoProjectContext.declareWasmTasks() {
         }
 
         from(linkWasmD8WithES6) {
-            include("*.mjs")
-            filesMatching("*.mjs") {
-                filter { it.replace("skikod8.wasm", "skiko.wasm") }
+            if (!isSideModule) {
+                include("*.mjs")
+                filesMatching("*.mjs") {
+                    filter { it.replace("skikod8.wasm", "skiko.wasm") }
+                }
             }
         }
 
