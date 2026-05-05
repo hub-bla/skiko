@@ -31,8 +31,8 @@ if (supportAndroid) {
     apply<LibraryPlugin>()
 }
 
-apply<WasmImportsGeneratorCompilerPluginSupportPlugin>()
-apply<WasmImportsGeneratorForTestCompilerPluginSupportPlugin>()
+apply<MainWasmImportsGeneratorPlugin>()
+apply<WasmTestImportsGeneratorPlugin>()
 
 val skiko = SkikoProperties(rootProject)
 val buildType = skiko.buildType

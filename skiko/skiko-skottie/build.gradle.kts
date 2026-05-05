@@ -23,8 +23,7 @@ if (supportAndroid) {
     apply<LibraryPlugin>()
 }
 
-apply<WasmImportsGeneratorCompilerPluginSupportPlugin>()
-apply<WasmImportsGeneratorForTestCompilerPluginSupportPlugin>()
+apply<SideWasmImportsGeneratorPlugin>()
 
 val skiko = SkikoProperties(rootProject)
 val buildType = skiko.buildType
@@ -33,7 +32,8 @@ val targetArch = skiko.targetArch
 
 fun skiaSkottieStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBuildType): List<String> {
     val skiaBinSubdir = "$skiaDir/out/${buildType.id}-$targetString"
-    return listOf("$skiaBinSubdir/libskottie.a", "$skiaBinSubdir/libsksg.a")
+    val extension = if (targetString.contains("wasm")) ".wasm.a" else ".a"
+    return listOf("$skiaBinSubdir/libskottie$extension", "$skiaBinSubdir/libjsonreader$extension", "$skiaBinSubdir/libsksg$extension")
 }
 
 val skikoSkottieProjectContext = SkikoProjectContext(
@@ -92,15 +92,24 @@ kotlin {
     }
 
     if (supportWeb) {
-        skikoSkottieProjectContext.declareWasmTasks()
+        val skiaWasmDir = skikoSkottieProjectContext.registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+
+        skikoSkottieProjectContext.declareWasmTasks(
+            isSideModule = true,
+            extraLibraries = skiaSkottieStaticLibraries(skiaWasmDir.get().absolutePath, "wasm-wasm", buildType),
+            extraIncludeDirs = listOf(
+                project(":").projectDir.resolve("src/nativeJsMain/cpp"),
+                project(":").projectDir.resolve("src/commonMain/cpp/common/include")
+            )
+        )
 
         js {
-            outputModuleName.set("skiko-skottie-kjs") // override the name to avoid name collision with a different skiko.js file
+            outputModuleName.set("skiko-skottie-kjs")
             browser {
                 testTask {
                     useKarma {
                         useChromeHeadless()
-                        useConfigDirectory(project.projectDir.resolve("karma.config.d").resolve("js"))
+                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("js"))
                     }
                 }
             }
@@ -109,20 +118,27 @@ kotlin {
 
             val test by compilations.getting
             project.tasks.named<Copy>(test.processResourcesTaskName) {
-                dependsOn(test.compileTaskProvider, tasks["compileTestKotlinWasmJs"])
+                dependsOn(
+                    test.compileTaskProvider,
+                    tasks["compileTestKotlinWasmJs"],
+                    project(":").tasks.named("compileKotlinJs"),
+                    project(":").tasks.named("compileKotlinWasmJs"),
+                    project(":").tasks.named("compileTestKotlinJs"),
+                    project(":").tasks.named("compileTestKotlinWasmJs"),
+                )
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(isSideModule = true)
         }
 
         @OptIn(ExperimentalWasmDsl::class)
         wasmJs {
-            outputModuleName.set("skiko-skottie-kjs-wasm") // override the name to avoid name collision with a different skiko.js file
+            outputModuleName.set("skiko-skottie-kjs-wasm")
             browser {
                 testTask {
                     useKarma {
                         useChromeHeadless()
-                        useConfigDirectory(project.projectDir.resolve("karma.config.d").resolve("wasm"))
+                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("wasm"))
                     }
                 }
             }
@@ -130,10 +146,17 @@ kotlin {
 
             val test by compilations.getting
             project.tasks.named<Copy>(test.processResourcesTaskName) {
-                dependsOn(test.compileTaskProvider, tasks["compileTestKotlinJs"])
+                dependsOn(
+                    test.compileTaskProvider,
+                    tasks["compileTestKotlinJs"],
+                    project(":").tasks.named("compileKotlinJs"),
+                    project(":").tasks.named("compileKotlinWasmJs"),
+                    project(":").tasks.named("compileTestKotlinJs"),
+                    project(":").tasks.named("compileTestKotlinWasmJs"),
+                )
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(isSideModule = true)
         }
     }
 
@@ -270,10 +293,7 @@ kotlin {
     skikoSkottieProjectContext.jvmMainSourceSet?.dependencies {
         implementation(kotlin("stdlib"))
     }
-    sourceSets.commonTest.dependencies {
-        implementation(kotlin("test"))
-        implementation(kotlin("test-annotations-common"))
-    }
+
     skikoSkottieProjectContext.jvmTestSourceSet?.dependencies {
         implementation(libs.coroutines.test)
         implementation(kotlin("test-junit"))
@@ -294,18 +314,19 @@ kotlin {
         implementation(libs.coroutines.android)
     }
 
-    skikoSkottieProjectContext.jvmTestSourceSet?.dependencies {
-        implementation(kotlin("test-junit"))
-        implementation(kotlin("test"))
-    }
-
     skikoSkottieProjectContext.wasmJsTest?.dependencies {
         implementation(kotlin("test-wasm-js"))
+    }
+    skikoSkottieProjectContext.webTestSourceSet?.dependencies {
+        implementation(libs.coroutines.core)
     }
 
     skikoSkottieProjectContext.webTestSourceSet?.apply {
         resources.srcDirs(
-            tasks.named("linkWasm"), wasmImports
+            tasks.named("linkWasm"),
+            project(":").tasks.named("linkWasm"),
+            wasmImports,
+            project(":").wasmImports,
         )
     }
 
