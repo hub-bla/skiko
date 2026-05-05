@@ -187,6 +187,8 @@ fun SkikoProjectContext.declareWasmTasks() {
 
 abstract class AbstractImportGeneratorCompilerPluginSupportPlugin(
     val compilationName: String,
+    private val moduleKind: String,
+    private val targetModuleProvider: (Project) -> String,
     private val outputFileProvider: (Project) -> File,
     private val prefixFileProvider: (Project) -> File,
     private val reexportFileProvider: ((Project) -> File)?
@@ -201,7 +203,9 @@ abstract class AbstractImportGeneratorCompilerPluginSupportPlugin(
         return project.provider {
             buildList {
                 add(SubpluginOption("import-generator-path", outputFile.normalize().absolutePath))
-                add(SubpluginOption("import-generator-prefix", prefixFile.normalize().absolutePath),)
+                add(SubpluginOption("import-generator-prefix", prefixFile.normalize().absolutePath))
+                add(SubpluginOption("import-generator-kind", moduleKind))
+                add(SubpluginOption("import-generator-target-module", targetModuleProvider(project)))
                 if (reexportFile != null) {
                     add(SubpluginOption("import-generator-reexport-path", reexportFile.normalize().absolutePath))
                 }
@@ -220,26 +224,39 @@ abstract class AbstractImportGeneratorCompilerPluginSupportPlugin(
     }
 }
 
-class WasmImportsGeneratorCompilerPluginSupportPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
+class MainWasmImportsGeneratorPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
     KotlinCompilation.MAIN_COMPILATION_NAME,
+    "main",
+    { "./skiko.mjs" },
     { it.setupMjs },
     { it.projectDir.resolve("src/webMain/resources/pre-setup.mjs") },
     { it.setupReexportMjs }
 )
 
-class WasmImportsGeneratorForTestCompilerPluginSupportPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
+class SideWasmImportsGeneratorPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
+    KotlinCompilation.MAIN_COMPILATION_NAME,
+    "side",
+    { "./${it.name}.mjs" },
+    { it.sideModuleSetupMjs },
+    { it.projectDir.resolve("src/webMain/resources/pre-${it.name}.mjs") },
+    { it.setupReexportMjs }
+)
+
+class WasmTestImportsGeneratorPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
     KotlinCompilation.TEST_COMPILATION_NAME,
+    "main",
+    { "./skiko-test.mjs" },
     { it.skikoTestMjs },
     { it.projectDir.resolve("src/webMain/resources/pre-skiko-test.mjs") },
     null
 )
 
-fun KotlinJsTargetDsl.setupImportsGeneratorPlugin() {
+fun KotlinJsTargetDsl.setupImportsGeneratorPlugin(isSideModule: Boolean = false) {
     val main by compilations.getting
     val test by compilations.getting
 
     main.compileTaskProvider.configure {
-        outputs.file(project.setupMjs)
+        outputs.file(if (isSideModule) project.sideModuleSetupMjs else project.setupMjs)
     }
 
     test.compileTaskProvider.configure {

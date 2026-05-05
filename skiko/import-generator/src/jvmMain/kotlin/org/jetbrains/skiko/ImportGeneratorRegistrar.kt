@@ -13,12 +13,18 @@ class ImportGeneratorRegistrar : CompilerPluginRegistrar() {
     override fun ExtensionStorage.registerExtensions(
         configuration: CompilerConfiguration,
     ) {
+        val path = configuration.get(ImportGeneratorConfigurationKeys.PATH)!!
+        val prefix = configuration.get(ImportGeneratorConfigurationKeys.PREFIX)
+        val reexportPath = configuration.get(ImportGeneratorConfigurationKeys.REEXPORT_PATH)
+        val targetModule = configuration.get(ImportGeneratorConfigurationKeys.TARGET_MODULE)!!
+
+        val extraReexportHeader = when (configuration.get(ImportGeneratorConfigurationKeys.KIND)!!) {
+            ModuleKind.Main -> ImportGeneratorExtension.MAIN_MODULE_REEXPORT_HEADER
+            ModuleKind.Side -> ImportGeneratorExtension.SIDE_MODULE_REEXPORT_HEADER
+        }
+
         IrGenerationExtension.registerExtension(
-            ImportGeneratorExtension(
-                configuration.get(ImportGeneratorConfigurationKeys.PATH)!!,
-                configuration.get(ImportGeneratorConfigurationKeys.PREFIX),
-                configuration.get(ImportGeneratorConfigurationKeys.REEXPORT_PATH)
-            )
+            ImportGeneratorExtension(path, prefix, reexportPath, targetModule, extraReexportHeader)
         )
     }
 }
