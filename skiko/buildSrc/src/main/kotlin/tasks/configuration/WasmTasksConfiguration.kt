@@ -81,28 +81,120 @@ fun SkikoProjectContext.declareWasmTasks(
             }
         )
     }
+    // TODO: experimental creation of uber skia static archive
+    // throws duplicate object files which prevents duplicate errors/warning
+    val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
+    val mainModuleSkiaLibraries = listOf(
+        "libskia.wasm.a",
+        "libskia_ganesh_ext.wasm.a",
+        "libsvg.wasm.a",
+        "libskparagraph.wasm.a",
+        "libskshaper.wasm.a",
+        "libskunicode_core.wasm.a",
+        "libskunicode_icu.wasm.a",
+        "libicu.wasm.a",
+        "libharfbuzz.wasm.a",
+        "libbentleyottmann.wasm.a",
+        "libskresources.wasm.a",
+        "libfreetype2.wasm.a",
+        "libpng.wasm.a",
+        "libjpeg.wasm.a",
+        "libjpeg12.wasm.a",
+        "libjpeg16.wasm.a",
+        "libwebp.wasm.a",
+        "libwebp_sse41.wasm.a",
+        "libwuffs.wasm.a",
+        "libskcms.wasm.a",
+        "libzlib.wasm.a",
+        "libexpat.wasm.a",
+        "libbrotli.wasm.a",
+    )
+    val mergedSkiaWasmArchiveFile = project.layout.buildDirectory.file(
+        "out/skia-wasm-main-module/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}/libskia-main-module.wasm.a"
+    )
+    val mergeSkiaWasmMainModuleArchive = if (isSideModule) null else project.tasks.register("mergeSkiaWasmMainModuleArchive") {
+        dependsOn(skiaWasmDir)
+        inputs.files(skiaBinDir.map { dir -> mainModuleSkiaLibraries.map { dir.resolve(it) } })
+        outputs.file(mergedSkiaWasmArchiveFile)
+
+        doLast {
+            val archiveFile = mergedSkiaWasmArchiveFile.get().asFile
+            val workDir = archiveFile.parentFile.resolve("objects")
+            val selectedMembers = mutableListOf<File>()
+            val seenMemberNames = mutableSetOf<String>()
+
+            project.delete(workDir)
+            workDir.mkdirs()
+
+            mainModuleSkiaLibraries.forEachIndexed { archiveIndex, libraryName ->
+                val inputArchive = skiaBinDir.get().resolve(libraryName)
+                val extractDir = workDir.resolve("extract-$archiveIndex")
+                val memberNamesOutput = ByteArrayOutputStream()
+
+                extractDir.mkdirs()
+
+                project.exec {
+                    executable = "emar"
+                    args("t", inputArchive.absolutePath)
+                    standardOutput = memberNamesOutput
+                }
+
+                project.exec {
+                    executable = "emar"
+                    workingDir = extractDir
+                    args("x", inputArchive.absolutePath)
+                }
+
+                memberNamesOutput.toString()
+                    .lineSequence()
+                    .filter { it.isNotBlank() }
+                    .forEach { memberName ->
+                        if (seenMemberNames.add(memberName)) {
+                            val extractedMember = extractDir.resolve(memberName)
+                            val selectedMember = workDir.resolve(memberName)
+                            extractedMember.copyTo(selectedMember)
+                            selectedMembers.add(selectedMember)
+                        }
+                    }
+            }
+
+            archiveFile.parentFile.mkdirs()
+            project.delete(archiveFile)
+            project.exec {
+                executable = "emar"
+                workingDir = workDir
+                args(listOf("crs", archiveFile.absolutePath) + selectedMembers.map { it.name })
+            }
+        }
+    }
 
     fun LinkSkikoWasmTask.configureCommon(prefixPath: String) {
         dependsOn(compileWasm)
         dependsOn(skiaWasmDir)
+        if (mergeSkiaWasmMainModuleArchive != null) {
+            dependsOn(mergeSkiaWasmMainModuleArchive)
+        }
 
         linker.set(linkerForTarget(OS.Wasm, Arch.Wasm))
         buildTargetOS.set(OS.Wasm)
         buildTargetArch.set(Arch.Wasm)
         buildVariant.set(buildType)
 
-        libFiles = project.fileTree(skiaWasmDir.get()) {
-            include("**/*.a.wasm")
-            exclude("**/libskia_graphite_ext.a.wasm")
-            exclude("**/libskia_graphite_dawn_ext.a.wasm")
+        libFiles = if (isSideModule) {
+            project.files(extraLibraries)
+        } else {
+            project.files(mergedSkiaWasmArchiveFile, *extraLibraries.toTypedArray())
         }
+
         objectFiles = project.fileTree(compileWasm.map { it.outDir.get() }) {
             include("**/*.o")
         }
 
+        val coreProject = if (project.name == "skiko") project else project.parent!!
+        val skikoCallbacksJs = coreProject.layout.projectDirectory.file("src/webMain/resources/skikoCallbacks.js")
+
         externPostJs.from(
-            // the order matters
-            project.layout.projectDirectory.file("src/webMain/resources/skikoCallbacks.js"),
+            skikoCallbacksJs,
             project.layout.projectDirectory.file(prefixPath)
         )
 
@@ -194,6 +286,9 @@ fun SkikoProjectContext.declareWasmTasks(
         // We produce jar that contains .js of wrapper/bindings and .wasm with Skia + bindings.
         from(project.setupReexportMjs.parentFile) {
             include(project.setupReexportMjs.name)
+            if (isSideModule) {
+                include(project.sideModuleSetupMjs.name)
+            }
         }
 
         from(linkWasm) {
