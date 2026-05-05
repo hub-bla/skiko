@@ -202,13 +202,10 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskparagraph.a",
         "libskia.a",
         "libicu.a",
-        "libjsonreader.a",
         "libskia_ganesh_ext.a",
-//        "libskottie.a",
         "libsvg.a",
         "libpng.a",
         "libwebp_sse41.a",
-//        "libsksg.a",
         "libskunicode_core.a",
         "libskunicode_icu.a",
         "libwebp.a",
@@ -379,9 +376,6 @@ fun SkikoProjectContext.configureNativeTarget(
         extraLinuxOptions = { skiaBinDir, _ ->
             listOf(
                 // TODO: an ugly hack, Linux linker searches only unresolved symbols.
-                "$skiaBinDir/libskottie.a",
-                "$skiaBinDir/libjsonreader.a",
-                "$skiaBinDir/libsksg.a",
                 "$skiaBinDir/libskshaper.a",
                 "$skiaBinDir/libskunicode_core.a",
                 "$skiaBinDir/libskunicode_icu.a",
