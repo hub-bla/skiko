@@ -106,10 +106,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         // 2. all ext imports
         val extImportedList = extractSymbols(moduleObjectFiles.files.toList() + moduleLibs.files.toList(), false).toMutableList()
 
-        // Also keep JVM/JNI infrastructure globals. The single regex matcher works
-        // on every JVM-host platform: Linux/Windows/Android (no leading underscore),
-        // and macOS (leading `_` from the Mach-O ABI) — fixing the Windows-x64
-        // miss in the previous Linux-vs-non-Linux branch.
+        // Keep JVM/JNI infrastructure globals
         extImportedList.addAll(coreExportedList.filter(::isJniInfrastructureSymbol))
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))

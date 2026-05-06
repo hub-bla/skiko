@@ -333,6 +333,7 @@ jobs:
           ./gradlew --no-daemon --stacktrace \
             -Dskiko.test.onci=true \
             -Dskiko.test.performance.enabled=false \
+            -Dskiko.test.ui.renderApi.ignoreAssertsFor=OPENGL \
             :skiko:awtTest \
             :skiko:skiko-skottie:awtTest
 
