@@ -28,6 +28,13 @@ abstract class PatchSkiaSymbolsTask : DefaultTask() {
     @get:InputFiles
     abstract val skiaLibs: ListProperty<File>
 
+    /**
+     * Additional static libraries whose public symbols must be present in the
+     * rename map, but which should not be copied into [outputDir].
+     */
+    @get:InputFiles
+    abstract val symbolSourceLibs: ListProperty<File>
+
     /** Path to the skiko C++ native-bridges static library (.a). */
     @get:InputFile
     abstract val skikoBridge: Property<File>
@@ -43,6 +50,7 @@ abstract class PatchSkiaSymbolsTask : DefaultTask() {
         outDir.mkdirs()
 
         val skiaLibFiles = skiaLibs.get()
+        val symbolSourceLibFiles = symbolSourceLibs.get()
         val bridgeFile = skikoBridge.get()
         val allLibs = skiaLibFiles + bridgeFile
 
@@ -53,7 +61,7 @@ abstract class PatchSkiaSymbolsTask : DefaultTask() {
         //    renamed a second time.
         logger.lifecycle("Extracting public symbols from Skia libraries …")
         val allSymbols = mutableSetOf<String>()
-        for (lib in skiaLibFiles) {
+        for (lib in symbolSourceLibFiles + skiaLibFiles) {
             val syms = extractGlobalDefinedSymbols(lib)
             val newSyms = syms.filterTo(mutableSetOf()) { !it.endsWith("_skiko") }
             logger.lifecycle(

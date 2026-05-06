@@ -363,10 +363,36 @@ fun SkikoProjectContext.configureNativeTarget(
     // For iOS/tvOS: patch all Skia + skiko-bridge symbols after linking.
     val compilationDependency = if (requiresSymbolPatching) {
         val patchActionName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim)
+        // Extension modules (e.g. skiko-skottie) must build their rename map
+        // from the full target symbol universe, not only their owned libraries.
+        // Their bridge/object files can reference core Skia and :skiko bridge
+        // symbols under original names; those references need the same rewrite
+        // as the core definitions. symbolSourceLibs are scanned only, while
+        // skiaLibs controls which archives are actually patched into outputDir.
+        val coreBridgeForSymbols: File? = if (currentExtensionModule != null) {
+            project.rootProject.layout.buildDirectory
+                .file("nativeBridges/static/$targetString/skiko-native-bridges-$targetString.a")
+                .get().asFile
+        } else {
+            null
+        }
         project.registerSkikoTask<PatchSkiaSymbolsTask>(patchActionName, os, arch) {
             dependsOn(unzipper)
             dependsOn(linkTask)
+            if (coreBridgeForSymbols != null) {
+                val coreLinkTaskName = "linkNativeBridges".withSuffix(isUikitSim = isUikitSim) +
+                    joinToTitleCamelCase(os.id, arch.id)
+                dependsOn(project.rootProject.tasks.named(coreLinkTaskName))
+            }
             skiaLibs.set(librariesProvider(skiaDir, targetString, buildType).map { File(it) })
+            symbolSourceLibs.set(
+                if (currentExtensionModule == null) {
+                    emptyList()
+                } else {
+                    skiaStaticLibraries(skiaDir, targetString, buildType).map { File(it) } +
+                        listOfNotNull(coreBridgeForSymbols)
+                }
+            )
             skikoBridge.set(File(bridgesLibraryPath))
             outputDir.set(patchedLibsDir)
         }
