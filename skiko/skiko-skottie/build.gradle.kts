@@ -79,7 +79,7 @@ kotlin {
         jvm("awt") {
             compilations.all {
                 compileTaskProvider.configure {
-                    compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
+                    compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
                 }
             }
             generateVersion(targetOs, targetArch, skiko)
@@ -91,7 +91,7 @@ kotlin {
             publishLibraryVariants("release")
             compilations.all {
                 compileTaskProvider.configure {
-                    compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
+                    compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
                 }
             }
             // Keep the previously defined attribute that was used to distinguish JVM and android variant
@@ -287,8 +287,8 @@ if (supportAndroid) {
         namespace = "org.jetbrains.skia.skottie"
         defaultConfig.minSdk = 24
         defaultConfig.targetSdk = 24
-        compileOptions.sourceCompatibility = JavaVersion.VERSION_1_8
-        compileOptions.targetCompatibility = JavaVersion.VERSION_1_8
+        compileOptions.sourceCompatibility = JavaVersion.VERSION_11
+        compileOptions.targetCompatibility = JavaVersion.VERSION_11
         sourceSets.named("main") {
             java.srcDirs("src/androidMain/java")
             res.srcDirs("src/androidMain/res")

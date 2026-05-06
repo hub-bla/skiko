@@ -2,6 +2,7 @@ package tasks.configuration
 
 import Arch
 import CompileSkikoCppTask
+import PatchSkiaSymbolsTask
 import OS
 import SkiaBuildType
 import SkikoExtensionModule
@@ -202,8 +203,8 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskresources.a",
         "libskparagraph.a",
         "libskia.a",
-        "libicu.a",
         "libskia_ganesh_ext.a",
+        "libicu.a",
         "libsvg.a",
         "libpng.a",
         "libwebp_sse41.a",
@@ -247,8 +248,21 @@ fun SkikoProjectContext.configureNativeTarget(
     )
     val bridgesLibraryPath = bridgesLibrary.get().asFile.absolutePath
 
-    val allLibraries =
+    // For iOS/tvOS we patch every library so that public Skia symbols are
+    // renamed, preventing conflicts when multiple Skia copies are present in
+    // the same app binary. Many C++ Itanium-mangled symbols are rewritten by
+    // inserting the `skiko` namespace into the mangled name; C symbols and
+    // unsupported shapes fall back to a "_skiko" suffix.
+    val requiresSymbolPatching = os == OS.IOS || os == OS.TVOS
+    val patchedLibsDir = layout.buildDirectory.dir("nativeBridges/patched/$targetString").get().asFile
+
+    val allLibraries = if (requiresSymbolPatching) {
+        librariesProvider(skiaDir, targetString, buildType).map { lib ->
+            "${patchedLibsDir.absolutePath}/${File(lib).name}"
+        } + "${patchedLibsDir.absolutePath}/${libPrefix}-$targetString.a"
+    } else {
         librariesProvider(skiaDir, targetString, buildType) + bridgesLibraryPath
+    }
 
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
     val linkerFlags = when (os) {
@@ -345,9 +359,24 @@ fun SkikoProjectContext.configureNativeTarget(
         file(outDir).mkdirs()
         outputs.dir(outDir)
     }
+
+    // For iOS/tvOS: patch all Skia + skiko-bridge symbols after linking.
+    val compilationDependency = if (requiresSymbolPatching) {
+        val patchActionName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim)
+        project.registerSkikoTask<PatchSkiaSymbolsTask>(patchActionName, os, arch) {
+            dependsOn(unzipper)
+            dependsOn(linkTask)
+            skiaLibs.set(librariesProvider(skiaDir, targetString, buildType).map { File(it) })
+            skikoBridge.set(File(bridgesLibraryPath))
+            outputDir.set(patchedLibsDir)
+        }
+    } else {
+        linkTask
+    }
+
     target.compilations.all {
         compileTaskProvider.configure {
-            dependsOn(linkTask)
+            dependsOn(compilationDependency)
         }
     }
 }
