@@ -9,6 +9,12 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.process.ExecOperations
+import tasks.symbols.SymbolType
+import tasks.symbols.isJniInfrastructureSymbol
+import tasks.symbols.parseDumpbinExports
+import tasks.symbols.parseDumpbinSymbols
+import tasks.symbols.parseNmPosix
+import tasks.symbols.parseTbd
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -100,18 +106,17 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         // 2. all ext imports
         val extImportedList = extractSymbols(moduleObjectFiles.files.toList() + moduleLibs.files.toList(), false).toMutableList()
 
-        // also keep jvm infrastructure globals
-        extImportedList.addAll(coreExportedList.filter {
-            if (os.isLinux) {
-                it.contains("jvm") || it.contains("JNI") || it.startsWith("Java_")
-            } else {
-                it.contains("_jvm") || it.contains("_JNI") || it.contains("_Java_")
-            }
-        })
+        // Also keep JVM/JNI infrastructure globals. The single regex matcher works
+        // on every JVM-host platform: Linux/Windows/Android (no leading underscore),
+        // and macOS (leading `_` from the Mach-O ABI) — fixing the Windows-x64
+        // miss in the previous Linux-vs-non-Linux branch.
+        extImportedList.addAll(coreExportedList.filter(::isJniInfrastructureSymbol))
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
 
         // 3. system lib exports (symbols from system DLLs/shared libs that must not be re-exported)
+        // TODO: might be an overkill, but linux arm had issue with libexpat (XML parser) which is loaded as a system library
+        // and bundled in skia as static archive as well
         val systemLibFiles = systemLibs.files.filter { it.isFile }
         val systemSymbolsSet: Set<String> = if (systemLibFiles.isNotEmpty()) {
             extractSystemLibSymbols(systemLibFiles).toSet().also {
@@ -163,36 +168,11 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 // Split files into .tbd stubs (macOS SDK) and regular shared objects.
                 val (tbdFiles, soFiles) = files.partition { it.extension == "tbd" }
 
-                // Parse .tbd (Text-Based Dylib) stubs — YAML-like files whose `symbols:` blocks
-                // may span multiple lines inside a single `[ ... ]` bracket pair.
+                // Parse .tbd (Text-Based Dylib) stubs — YAML-like SDK files that list every
+                // linker-visible symbol exported by macOS frameworks. The parser handles every
+                // symbol-bearing key (symbols, weak-symbols, re-exports, objc-classes, …).
                 tbdFiles.forEach { tbd ->
-                    val lines = tbd.readLines()
-                    var inSymbols = false
-                    val buf = StringBuilder()
-                    for (line in lines) {
-                        val trimmed = line.trim()
-                        if (!inSymbols) {
-                            if (trimmed.startsWith("symbols:")) {
-                                val rest = trimmed.removePrefix("symbols:").trim()
-                                buf.setLength(0)
-                                buf.append(rest)
-                                if (']' in rest) {
-                                    // single-line block
-                                    extractTbdSymbols(buf.toString(), result)
-                                    buf.setLength(0)
-                                } else {
-                                    inSymbols = true
-                                }
-                            }
-                        } else {
-                            buf.append(' ').append(trimmed)
-                            if (']' in trimmed) {
-                                inSymbols = false
-                                extractTbdSymbols(buf.toString(), result)
-                                buf.setLength(0)
-                            }
-                        }
-                    }
+                    parseTbd(tbd.readText()).forEach { result.add(it) }
                 }
 
                 // Regular shared objects — use nm with -D (dynamic symbol table).
@@ -202,12 +182,10 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 if (soFiles.isNotEmpty()) {
                     val nmFlags = nmFlags(os, exported = true, dynamic = os.isLinux)
                     try {
-                        run(executables = executableCandidates, args = nmFlags, files = soFiles).lines().forEach { line ->
-                            val s = line.trim().split(" ").lastOrNull().orEmpty()
-                            if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                                result.add(s)
-                            }
-                        }
+                        val output = run(executables = executableCandidates, args = nmFlags, files = soFiles)
+                        parseNmPosix(output)
+                            .filter { it.type == SymbolType.DefinedGlobal }
+                            .forEach { result.add(it.name) }
                     } catch (t: Throwable) {
                         logger.warn("generateSymbolsList: could not extract system lib symbols via nm: ${t.message}")
                     }
@@ -217,27 +195,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                 // On Windows, use dumpbin /EXPORTS to read the export table of each import lib.
                 files.forEach { file ->
                     try {
-                        run(executables = executableCandidates, args = listOf("/EXPORTS"), files = listOf(file)).lines().forEach { line ->
-                            val trimmed = line.trim()
-                            // dumpbin /EXPORTS output has lines like: "  1    0 00000000 SymbolName"
-                            // or decorated names; skip header/footer lines
-                            if (trimmed.isNotEmpty() &&
-                                !trimmed.startsWith("Microsoft") &&
-                                !trimmed.startsWith("Dump") &&
-                                !trimmed.startsWith("File") &&
-                                !trimmed.startsWith("Section") &&
-                                !trimmed.startsWith("Summary") &&
-                                !trimmed.startsWith("ordinal") &&
-                                !trimmed.startsWith("RVA") &&
-                                !trimmed.startsWith("Export")) {
-                                // Typical line: "      1          0  [NONAME]" or "    1    0 00001234 FunctionName"
-                                val parts = trimmed.split(Regex("\\s+"))
-                                val sym = parts.lastOrNull().orEmpty()
-                                if (sym.isNotEmpty() && sym != "[NONAME]" && !sym.all { it.isDigit() }) {
-                                    result.add(sym)
-                                }
-                            }
-                        }
+                        val output = run(executables = executableCandidates, args = listOf("/EXPORTS"), files = listOf(file))
+                        parseDumpbinExports(output).forEach { result.add(it) }
                     } catch (t: Throwable) {
                         logger.warn("generateSymbolsList: could not extract exports from ${file.name}: ${t.message}")
                     }
@@ -262,25 +221,18 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         when {
             os.isMacOs || os.isLinux -> {
                 val nmFlags = nmFlags(os, exported)
-                run(executables = executableCandidates, args = nmFlags, files = files).lines().forEach { line ->
-                    val s = line.trim().split(" ").lastOrNull().orEmpty()
-                    if (s.isNotEmpty() && !s.contains(":") && !s.startsWith("/")) {
-                        result.add(s)
-                    }
-                }
+                val output = run(executables = executableCandidates, args = nmFlags, files = files)
+                val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
+                parseNmPosix(output)
+                    .filter { it.type == wanted }
+                    .forEach { result.add(it.name) }
             }
             else -> {
-                run(executables = executableCandidates, args = listOf("/SYMBOLS"), files = files).lines().forEach { line ->
-                    if (line.contains("External")) {
-                        val isUndef = line.contains("UNDEF")
-                        if (exported && !isUndef || !exported && isUndef) {
-                            val s = line.substringAfter("|").trim().substringBefore(" ")
-                            if (s.isNotEmpty() && !s.startsWith("__imp_") && !s.startsWith(".refptr") && !s.startsWith("__real@") && !s.startsWith("__xmm@") && !s.startsWith("??_C@") && !s.startsWith("\"")) {
-                                result.add(s)
-                            }
-                        }
-                    }
-                }
+                val output = run(executables = executableCandidates, args = listOf("/SYMBOLS"), files = files)
+                val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
+                parseDumpbinSymbols(output)
+                    .filter { it.type == wanted }
+                    .forEach { result.add(it.name) }
             }
         }
 
@@ -344,31 +296,15 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
     }
 
-    /**
-     * Extracts C symbol names from the content of a `.tbd` `symbols:` block,
-     * e.g. `[ _CFRelease, _CFRetain, ... ]`.
-     * Filters out linker-directive pseudo-symbols (`$ld$…`) and keeps only
-     * tokens that start with `_` (C-linkage) or are plain identifiers.
-     */
-    private fun extractTbdSymbols(block: String, result: MutableSet<String>) {
-        val b = block.indexOf('[')
-        val e = block.lastIndexOf(']')
-        if (b < 0 || e <= b) return
-        block.substring(b + 1, e).split(",").forEach { raw ->
-            // strip surrounding whitespace and optional single-quotes used in tbd-version 3
-            val s = raw.trim().removeSurrounding("'").trim()
-            if (s.isNotEmpty() && !s.startsWith("\$ld\$") && !s.startsWith("'")) {
-                result.add(s)
-            }
-        }
-    }
 
     private fun nmFlags(os: OS, exported: Boolean, dynamic: Boolean = false): List<String> {
+        // Always use POSIX format (`-P`) so output is column-stable across
+        // GNU binutils nm, LLVM nm, BSD/macOS nm, and aarch64-linux-gnu-nm.
         return when {
-            !exported -> listOf("-u")
-            os.isMacOs -> listOf("-g", "-U")
-            dynamic -> listOf("-D", "--defined-only")  // shared objects: use dynamic symbol table
-            else -> listOf("-g", "--defined-only")
+            !exported -> listOf("-P", "-u")
+            os.isMacOs -> listOf("-P", "-g", "-U")
+            dynamic -> listOf("-P", "-D", "--defined-only")  // shared objects: use dynamic symbol table
+            else -> listOf("-P", "-g", "--defined-only")
         }
     }
 
@@ -380,8 +316,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
         OS.MacOS -> listOf("nm")
         OS.Android -> listOf("llvm-nm", "nm")
-        OS.IOS, OS.TVOS -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
-        OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support wasm targets")
+        OS.IOS, OS.TVOS, OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
     }
 
     private fun resolveExecutableCandidates(os: OS, arch: Arch): List<String> {
