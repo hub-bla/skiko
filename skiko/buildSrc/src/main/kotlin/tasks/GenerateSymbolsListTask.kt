@@ -15,9 +15,7 @@ import tasks.symbols.parseDumpbinSymbols
 import tasks.symbols.parseNmPosix
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import javax.inject.Inject
 import kotlin.io.path.readLines
 import kotlin.io.path.writeText
@@ -241,24 +239,6 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
     private fun resolveExecutableCandidates(os: OS, arch: Arch): List<String> {
         return executableCandidates(os, arch)
-            .map { candidate -> findExecutableInPath(candidate) ?: candidate }
             .distinct()
-    }
-
-    private fun findExecutableInPath(name: String): String? {
-        val pathValue = System.getenv("PATH").orEmpty()
-        val executableNames = if (name.endsWith(".exe")) listOf(name) else listOf(name, "$name.exe")
-        return pathValue
-            .split(File.pathSeparator)
-            .asSequence()
-            .filter { it.isNotBlank() }
-            .flatMap { dir -> executableNames.asSequence().map { execName -> Paths.get(dir, execName) } }
-            .firstOrNull { candidate -> isExecutableFile(candidate) }
-            ?.toAbsolutePath()
-            ?.toString()
-    }
-
-    private fun isExecutableFile(path: Path): Boolean {
-        return Files.isRegularFile(path) && Files.isExecutable(path)
     }
 }
