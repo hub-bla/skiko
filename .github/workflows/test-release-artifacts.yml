@@ -33,7 +33,8 @@ jobs:
               -Pdeploy.version=${{ inputs.version }} \
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.android.enabled=true \
-              :skiko:publishToBuildRepo
+              :skiko:publishToBuildRepo \
+              :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Android Maven Repo'
@@ -62,7 +63,8 @@ jobs:
               -Pdeploy.version=${{ inputs.version }} \
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.wasm.enabled=true \
-              :skiko:publishToBuildRepo
+              :skiko:publishToBuildRepo \
+              :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Web Maven Repo'
@@ -94,7 +96,10 @@ jobs:
               -Pskiko.awt.enabled=true \
               :skiko:publishKotlinMultiplatformPublicationToBuildRepoRepository \
               :skiko:publishAwtPublicationToBuildRepoRepository \
-              :skiko:publishAwtRuntimeElementsPublicationToBuildRepoRepository
+              :skiko:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
+              :skiko:skiko-skottie:publishKotlinMultiplatformPublicationToBuildRepoRepository \
+              :skiko:skiko-skottie:publishAwtPublicationToBuildRepoRepository \
+              :skiko:skiko-skottie:publishAwtRuntimeElementsPublicationToBuildRepoRepository
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Publish Linux Native to Build Repo'
@@ -107,7 +112,9 @@ jobs:
               -Pskiko.native.enabled=true \
               -Pskiko.awt.enabled=false \
               :skiko:publishLinuxArm64PublicationToBuildRepoRepository \
-              :skiko:publishLinuxX64PublicationToBuildRepoRepository
+              :skiko:publishLinuxX64PublicationToBuildRepoRepository \
+              :skiko:skiko-skottie:publishLinuxArm64PublicationToBuildRepoRepository \
+              :skiko:skiko-skottie:publishLinuxX64PublicationToBuildRepoRepository
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Linux Maven Repo'
@@ -140,7 +147,8 @@ jobs:
             -Pdeploy.version=${{ inputs.version }} \
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
-            :skiko:publishToBuildRepo
+            :skiko:publishToBuildRepo \
+            :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
         name: 'Upload macOS Maven Repo'
@@ -177,7 +185,8 @@ jobs:
             -Pdeploy.version=${{ inputs.version }} \
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
-            :skiko:publishToBuildRepo
+            :skiko:publishToBuildRepo \
+            :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Windows Maven Repo'
