@@ -529,7 +529,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         add("-lEGL")
                     }
                     add("-lfontconfig")
-                    add("-Wl,--allow-multiple-definition")
                 } else {
                     // Hack to fix problem with linker not always finding certain declarations.
                     addAll(currentExtensionModule?.jvmLinuxExtraLibBaseNames.orEmpty().map { "$skiaBinDir/lib$it.a" })
@@ -593,7 +592,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
             if (isCore) {
                 androidFlags += arrayOf(
                     "-lEGL",
-                    "-Wl,--allow-multiple-definition",
                 )
             }
             osFlags = androidFlags.toTypedArray()
