@@ -17,9 +17,7 @@ import tasks.symbols.parseNmPosix
 import tasks.symbols.parseTbd
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import javax.inject.Inject
 import kotlin.io.path.readLines
 import kotlin.io.path.writeText
@@ -158,7 +156,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
-        val executableCandidates = resolveExecutableCandidates(os, arch)
+        val executableCandidates = executableCandidates(os, arch)
 
         when {
             os.isMacOs || os.isLinux -> {
@@ -210,7 +208,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
-        val executableCandidates = resolveExecutableCandidates(os, arch)
+        val executableCandidates = executableCandidates(os, arch)
         logger.lifecycle(
             "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols using candidates ${executableCandidates} from ${files.size} files"
         )
@@ -316,26 +314,4 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         OS.IOS, OS.TVOS, OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
     }
 
-    private fun resolveExecutableCandidates(os: OS, arch: Arch): List<String> {
-        return executableCandidates(os, arch)
-            .map { candidate -> findExecutableInPath(candidate) ?: candidate }
-            .distinct()
-    }
-
-    private fun findExecutableInPath(name: String): String? {
-        val pathValue = System.getenv("PATH").orEmpty()
-        val executableNames = if (name.endsWith(".exe")) listOf(name) else listOf(name, "$name.exe")
-        return pathValue
-            .split(File.pathSeparator)
-            .asSequence()
-            .filter { it.isNotBlank() }
-            .flatMap { dir -> executableNames.asSequence().map { execName -> Paths.get(dir, execName) } }
-            .firstOrNull { candidate -> isExecutableFile(candidate) }
-            ?.toAbsolutePath()
-            ?.toString()
-    }
-
-    private fun isExecutableFile(path: Path): Boolean {
-        return Files.isRegularFile(path) && Files.isExecutable(path)
-    }
 }
