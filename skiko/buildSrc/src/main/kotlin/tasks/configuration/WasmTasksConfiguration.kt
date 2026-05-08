@@ -81,18 +81,6 @@ fun SkikoProjectContext.declareWasmTasks(
                 add("-fno-rtti")
                 add("-fno-exceptions")
                 add("-fPIC")
-                // Quick-win size reductions for WASM:
-                //   -flto                       : enables link-time optimization across our
-                //                                 own C++ glue (Skia archives are prebuilt
-                //                                 and not affected). At link time we also
-                //                                 pass -flto so wasm-ld can drop more
-                //                                 unreferenced code under MAIN_MODULE=2.
-                //   -fvisibility=hidden +
-                //   -fvisibility-inlines-hidden : default-hide our own symbols. Things tagged
-                //                                 SKIKO_EXPORT (= EMSCRIPTEN_KEEPALIVE extern "C")
-                //                                 stay reachable; everything else becomes a
-                //                                 candidate for DCE.
-                add("-flto")
                 add("-fvisibility=hidden")
                 add("-fvisibility-inlines-hidden")
                 if (skiko.isWasmBuildWithProfiling) add("--profiling")
