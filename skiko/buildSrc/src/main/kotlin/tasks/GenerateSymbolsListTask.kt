@@ -11,10 +11,8 @@ import org.gradle.api.tasks.*
 import org.gradle.process.ExecOperations
 import tasks.symbols.SymbolType
 import tasks.symbols.isJniInfrastructureSymbol
-import tasks.symbols.parseDumpbinExports
 import tasks.symbols.parseDumpbinSymbols
 import tasks.symbols.parseNmPosix
-import tasks.symbols.parseTbd
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -76,10 +74,6 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     @get:InputFiles
     abstract val moduleLibs: ConfigurableFileCollection
 
-    @get:InputFiles
-    @get:Optional
-    abstract val systemLibs: ConfigurableFileCollection
-
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -111,27 +105,12 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         extImports.writeText(extImportedList.distinct().sorted().joinToString("\n"))
 
-        // 3. system lib exports (symbols from system DLLs/shared libs that must not be re-exported)
-        // TODO: might be an overkill, but linux arm had issue with libexpat (XML parser) which is loaded as a system library
-        // and bundled in skia as static archive as well
-        val systemLibFiles = systemLibs.files.filter { it.isFile }
-        val systemSymbolsSet: Set<String> = if (systemLibFiles.isNotEmpty()) {
-            extractSystemLibSymbols(systemLibFiles).toSet().also {
-                logger.lifecycle("generateSymbolsList: found ${it.size} exported symbols in ${systemLibFiles.size} system lib(s)")
-            }
-        } else {
-            emptySet()
-        }
-
-        // 4. initial keep list = intersection of ext imports + JNI with core exports, minus system lib symbols
+        // 3. initial keep list = intersection of ext imports + JNI with core exports
         val coreExportsSet = coreExportedList.toSet()
-        val keepSet = extImportedList
-            .filter { it in coreExportsSet }
-            .filter { it !in systemSymbolsSet }
-            .toSet()
+        val keepSet = extImportedList.filter { it in coreExportsSet }.toSet()
         symbolsFiltered.writeText(keepSet.sorted().joinToString("\n"))
 
-        // 5. unexported = core exports minus what strip decided to keep
+        // 4. unexported = core exports minus what strip decided to keep
         val unexportedSet = coreExportsSet - keepSet
         symbolsUnexported.writeText(unexportedSet.sorted().joinToString("\n"))
 
@@ -146,62 +125,6 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         }
 
         logger.lifecycle("Symbols to keep: ${keepSet.size}, to hide: ${unexportedSet.size}")
-    }
-
-    /**
-     * Extracts exported symbol names from system shared libraries / import libs.
-     * Uses `dumpbin /EXPORTS` on Windows (import libs), and `nm -g` on Linux/macOS (shared objects).
-     */
-    private fun extractSystemLibSymbols(files: List<File>): List<String> {
-        val os = targetOs.get()
-        val arch = targetArch.get()
-        val result = mutableSetOf<String>()
-        if (files.isEmpty()) return emptyList()
-
-        val executableCandidates = resolveExecutableCandidates(os, arch)
-
-        when {
-            os.isMacOs || os.isLinux -> {
-                // Split files into .tbd stubs (macOS SDK) and regular shared objects.
-                val (tbdFiles, soFiles) = files.partition { it.extension == "tbd" }
-
-                // Parse .tbd (Text-Based Dylib) stubs — YAML-like SDK files that list every
-                // linker-visible symbol exported by macOS frameworks. The parser handles every
-                // symbol-bearing key (symbols, weak-symbols, re-exports, objc-classes, …).
-                tbdFiles.forEach { tbd ->
-                    parseTbd(tbd.readText()).forEach { result.add(it) }
-                }
-
-                // Regular shared objects — use nm with -D (dynamic symbol table).
-                // Shared libraries export symbols via the dynamic symbol table (.dynsym), not
-                // the regular symbol table (.symtab).  nm --defined-only without -D produces
-                // zero results for stripped .so files; -D reads the right table.
-                if (soFiles.isNotEmpty()) {
-                    val nmFlags = nmFlags(os, exported = true, dynamic = os.isLinux)
-                    try {
-                        val output = run(executables = executableCandidates, args = nmFlags, files = soFiles)
-                        parseNmPosix(output)
-                            .filter { it.type == SymbolType.DefinedGlobal }
-                            .forEach { result.add(it.name) }
-                    } catch (t: Throwable) {
-                        logger.warn("generateSymbolsList: could not extract system lib symbols via nm: ${t.message}")
-                    }
-                }
-            }
-            else -> {
-                // On Windows, use dumpbin /EXPORTS to read the export table of each import lib.
-                files.forEach { file ->
-                    try {
-                        val output = run(executables = executableCandidates, args = listOf("/EXPORTS"), files = listOf(file))
-                        parseDumpbinExports(output).forEach { result.add(it) }
-                    } catch (t: Throwable) {
-                        logger.warn("generateSymbolsList: could not extract exports from ${file.name}: ${t.message}")
-                    }
-                }
-            }
-        }
-
-        return result.toList()
     }
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {

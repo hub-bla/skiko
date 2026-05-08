@@ -227,132 +227,6 @@ fun SkikoProjectContext.createObjcCompileTask(
     )
 }
 
-/**
- * Resolves the actual system library files for [targetOs] / [targetArch] that are linked into skiko.
- * These symbols must not be re-exported from the skiko shared library.
- */
-private fun SkikoProjectContext.resolveSystemLibFiles(targetOs: OS, targetArch: Arch): List<File> {
-    return when (targetOs) {
-        OS.Windows -> {
-            // The exact .lib files passed to the Windows linker – resolve them from the SDK lib dirs.
-            val systemLibNames = listOf(
-                "Advapi32.lib", "gdi32.lib", "Dwmapi.lib", "ole32.lib",
-                "Propsys.lib", "shcore.lib", "Shlwapi.lib", "user32.lib",
-                "dxgi.lib"
-            )
-            val libDirs = windowsSdkPaths.libDirs
-            systemLibNames.flatMap { libName ->
-                libDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
-            }
-        }
-        OS.Linux -> {
-            // The libraries linked into libskiko.so on Linux (see osFlags in createLinkJvmBindings).
-            val linkedLibSoNames = buildList {
-                add("libGL")
-                add("libX11")
-                add("libfontconfig")
-                add("libexpat")
-                add("libstdc++")
-                add("libgcc_s")
-                if (targetArch == Arch.Arm64) add("libEGL")
-            }
-
-            // Primary: ask ldconfig which real files back these sonames.
-            // ldconfig -p lines look like:
-            //   libGL.so.1 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libGL.so.1
-            val ldconfigResult: String = try {
-                val out = java.io.ByteArrayOutputStream()
-                project.exec {
-                    commandLine("ldconfig", "-p")
-                    standardOutput = out
-                    isIgnoreExitValue = true
-                }
-                out.toString()
-            } catch (_: Exception) { "" }
-
-            val resolvedViaLdconfig: List<File> = if (ldconfigResult.isNotEmpty()) {
-                val archToken = if (targetArch == Arch.X64) "x86-64" else "AArch64"
-                val found = mutableListOf<File>()
-                for (line in ldconfigResult.lines()) {
-                    val trimmed = line.trim()
-                    // Only pick the ABI that matches the target architecture.
-                    if (!trimmed.contains(archToken)) continue
-                    val soName = trimmed.substringBefore(" ").substringBefore("(")
-                    if (linkedLibSoNames.none { soName.startsWith("$it.so") }) continue
-                    val path = trimmed.substringAfter("=>").trim()
-                    if (path.isNotEmpty()) {
-                        val f = File(path)
-                        if (f.isFile) found.add(f)
-                    }
-                }
-                found.distinctBy { it.canonicalPath }
-            } else emptyList()
-
-            if (resolvedViaLdconfig.isNotEmpty()) {
-                resolvedViaLdconfig
-            } else {
-                // Fallback: probe well-known directories directly (e.g. cross-compile sysroot or
-                // minimal containers where ldconfig may not be available).
-                val arch64Suffix = if (targetArch == Arch.X64) "x86_64-linux-gnu" else "aarch64-linux-gnu"
-                val searchDirs = listOf(
-                    "/usr/lib/$arch64Suffix",
-                    "/usr/lib",
-                    "/lib/$arch64Suffix",
-                    "/lib"
-                ).map { File(it) }
-
-                val libNamesWithVersions = buildList {
-                    // Versioned sonames commonly installed without -dev packages:
-                    add("libGL.so.1")
-                    add("libX11.so.6")
-                    add("libfontconfig.so.1")
-                    add("libexpat.so.1")   // transitive via libfontconfig → libexpat
-                    add("libstdc++.so.6")
-                    add("libgcc_s.so.1")
-                    if (targetArch == Arch.Arm64) add("libEGL.so.1")
-                    // Also try unversioned linker stubs (present when -dev packages are installed):
-                    add("libGL.so")
-                    add("libX11.so")
-                    add("libfontconfig.so")
-                    add("libexpat.so")
-                    if (targetArch == Arch.Arm64) add("libEGL.so")
-                }
-
-                libNamesWithVersions.flatMap { libName ->
-                    searchDirs.mapNotNull { dir -> dir.resolve(libName).takeIf { it.isFile } }
-                }.distinctBy { it.canonicalPath }
-            }
-        }
-        OS.MacOS -> {
-            // On macOS 12+, framework binaries live in the dyld shared cache and are NOT
-            // present as real files on disk.  The Xcode SDK ships .tbd (Text-Based Dylib)
-            // stub files that list every exported symbol — use those instead.
-            val frameworkNames = listOf(
-                "AppKit", "CoreFoundation", "CoreGraphics", "CoreServices",
-                "CoreText", "Foundation", "IOKit", "Metal", "OpenGL", "QuartzCore"
-            )
-            // Resolve the active SDK path via xcrun so we don't hard-code an Xcode location.
-            val sdkPath = try {
-                val out = java.io.ByteArrayOutputStream()
-                project.exec {
-                    commandLine("xcrun", "--show-sdk-path")
-                    standardOutput = out
-                    isIgnoreExitValue = true
-                }.exitValue.let { if (it != 0) null else out.toString().trim() }
-            } catch (_: Exception) { null }
-            if (sdkPath != null) {
-                val frameworkBase = File(sdkPath).resolve("System/Library/Frameworks")
-                frameworkNames.mapNotNull { name ->
-                    frameworkBase.resolve("$name.framework/$name.tbd").takeIf { it.isFile }
-                }
-            } else {
-                emptyList()
-            }
-        }
-        else -> emptyList()
-    }
-}
-
 fun SkikoProjectContext.configureGenerateSymbolsList(
     targetOs: OS,
     targetArch: Arch,
@@ -416,11 +290,6 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
                 }.files
             }
         })
-
-        // Populate system libs so their exported symbols are excluded from the skiko re-export list.
-        val systemLibFiles = resolveSystemLibFiles(targetOs, targetArch)
-        println("System lib files: $systemLibFiles")
-        systemLibs.from(systemLibFiles)
     }
 }
 
@@ -529,10 +398,12 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         add("-lEGL")
                     }
                     add("-lfontconfig")
+                    add("-lexpat")
                     add("-Wl,--allow-multiple-definition")
                 } else {
                     // Hack to fix problem with linker not always finding certain declarations.
-                    addAll(currentExtensionModule?.jvmLinuxExtraLibBaseNames.orEmpty().map { "$skiaBinDir/lib$it.a" })
+                    addAll(currentExtensionModule?.jvmExtraStaticArchivePaths(targetOs, skiaBinDir).orEmpty())
+                    currentExtensionModule?.jvmExtraDynamicLibNames(targetOs)?.forEach { add("-l$it") }
                     val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                     val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                     dependsOn(coreLinkTask)

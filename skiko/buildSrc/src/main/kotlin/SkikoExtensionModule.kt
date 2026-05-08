@@ -8,7 +8,8 @@ data class SkikoExtensionModule(
     val cinteropName: String,
     val ownedStaticLibBaseNames: List<String>,
     val nativeLinuxExtraLibBaseNames: List<String> = emptyList(),
-    val jvmLinuxExtraLibBaseNames: List<String> = emptyList()
+    val jvmExtraStaticArchiveBaseNamesByOs: Map<OS, List<String>> = emptyMap(),
+    val jvmExtraDynamicLibNamesByOs: Map<OS, List<String>> = emptyMap()
 ) {
     fun staticLibraryPaths(
         skiaDir: String,
@@ -25,6 +26,12 @@ data class SkikoExtensionModule(
             File(skiaBinDir, "$libraryFilePrefix$baseName$libraryFileSuffix").absolutePath
         }
     }
+
+    fun jvmExtraStaticArchivePaths(os: OS, skiaBinDir: String): List<String> =
+        jvmExtraStaticArchiveBaseNamesByOs[os].orEmpty().map { "$skiaBinDir/lib$it.a" }
+
+    fun jvmExtraDynamicLibNames(os: OS): List<String> =
+        jvmExtraDynamicLibNamesByOs[os].orEmpty()
 }
 
 private val allSkikoExtensionModules = listOf(
@@ -35,7 +42,8 @@ private val allSkikoExtensionModules = listOf(
         cinteropName = "skiko-skottie",
         ownedStaticLibBaseNames = listOf("skottie", "sksg", "jsonreader"),
         nativeLinuxExtraLibBaseNames = listOf("skottie"),
-        jvmLinuxExtraLibBaseNames = listOf("sksg", "jsonreader")
+        jvmExtraStaticArchiveBaseNamesByOs = mapOf(OS.Linux to listOf("sksg", "jsonreader")),
+        jvmExtraDynamicLibNamesByOs = mapOf(OS.Linux to listOf("expat"))
     )
 )
 
