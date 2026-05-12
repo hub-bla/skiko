@@ -229,6 +229,7 @@ fun SkikoProjectContext.declareWasmTasks(
             if (isSideModule) {
                 addAll(listOf(
                     "-s", "SIDE_MODULE=1",
+                    "-s", "USE_WEBGPU=1"
                 ))
             } else {
                 addAll(listOf(
@@ -393,7 +394,10 @@ fun SkikoProjectContext.configureGenerateWasmExportsList() {
             val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
             val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
             module.ownedStaticLibBaseNames.forEach { baseName ->
-                moduleSkiaArchives.from(skiaBinDir.map { it.resolve("lib$baseName.wasm.a") })
+                moduleSkiaArchives.from(skiaBinDir.map { dir ->
+                    val f = dir.resolve("lib$baseName.wasm.a")
+                    if (f.exists()) listOf(f) else emptyList()
+                })
             }
         }
     }

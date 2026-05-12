@@ -201,7 +201,13 @@ private val WASM_LINKER_PROVIDED_REGEX = Regex(
             "__wasm_init_memory$|" +
             "__wasm_init_tls$|" +
             "GOT\\.|" +
-            "env\\.)"
+            "env\\.|" +
+            // Dawn/WebGPU symbols (C: wgpu*, C++ mangled: _ZN[K]*4wgpu*) are
+            // provided by the browser environment when USE_WEBGPU=1 is set on
+            // the side module link. They must not appear in the core's
+            // EXPORTED_FUNCTIONS.
+            "wgpu|" +
+            "_ZN[A-Z]*\\d*wgpu)"
 )
 
 internal fun isWasmRuntimeProvidedSymbol(name: String): Boolean =

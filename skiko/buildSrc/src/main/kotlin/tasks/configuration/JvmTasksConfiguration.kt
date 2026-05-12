@@ -276,7 +276,9 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
                 exclude("${filePrefix}skia_graphite_ext$fileExtension")
                 exclude("${filePrefix}libdawn_combined$fileExtension")
                 exclude("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-                ownedLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
+                ownedLibBaseNames
+                    .filter { it != "skia_ganesh_ext" }
+                    .forEach { exclude("$filePrefix$it$fileExtension") }
             }.files
         })
 
@@ -284,9 +286,12 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
             if (ownedLibBaseNames.isEmpty()) {
                 emptySet<File>()
             } else {
+                // skia_graphite_dawn_ext is WASM-only (Dawn/WebGPU); skip it on JVM
+                // to avoid pulling unresolvable WebGPU symbols into the core keep-set.
+                val jvmExcluded = setOf("skia_graphite_dawn_ext")
                 project.fileTree(dir) {
                     // Static libs owned by extension modules
-                    ownedLibBaseNames.forEach { include("$filePrefix$it$fileExtension") }
+                    (ownedLibBaseNames - jvmExcluded).forEach { include("$filePrefix$it$fileExtension") }
                 }.files
             }
         })
@@ -324,7 +329,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
             if (targetOs == OS.Linux || targetOs == OS.Android) {
                 exclude("${filePrefix}skia_ganesh_ext$fileExtension")
             }
-            ownedStaticLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
+            ownedStaticLibBaseNames
+                .filter { it != "skia_ganesh_ext" }
+                .forEach { exclude("$filePrefix$it$fileExtension") }
         } else {
             currentExtensionModule?.ownedStaticLibBaseNames.orEmpty().forEach { include("$filePrefix$it$fileExtension") }
         }

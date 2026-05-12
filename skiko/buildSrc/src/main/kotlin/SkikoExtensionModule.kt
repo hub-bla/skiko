@@ -22,9 +22,10 @@ data class SkikoExtensionModule(
             else -> "lib" to ".a"
         }
         val skiaBinDir = File("$skiaDir/out/${buildType.id}-$targetString")
-        return ownedStaticLibBaseNames.map { baseName ->
-            File(skiaBinDir, "$libraryFilePrefix$baseName$libraryFileSuffix").absolutePath
-        }
+        return ownedStaticLibBaseNames
+            .map { baseName -> File(skiaBinDir, "$libraryFilePrefix$baseName$libraryFileSuffix") }
+            .filter { it.exists() }
+            .map { it.absolutePath }
     }
 
     fun jvmExtraStaticArchivePaths(os: OS, skiaBinDir: String): List<String> =
@@ -40,7 +41,7 @@ private val allSkikoExtensionModules = listOf(
         libBaseName = "skiko-skottie",
         nativeBridgesLibPrefix = "skiko-skottie-native-bridges",
         cinteropName = "skiko-skottie",
-        ownedStaticLibBaseNames = listOf("skottie", "sksg", "jsonreader"),
+        ownedStaticLibBaseNames = listOf("skottie", "sksg", "jsonreader", "skia_graphite_ext", "skia_graphite_dawn_ext", "skia_ganesh_ext"),
         nativeLinuxExtraLibBaseNames = listOf("skottie"),
         jvmExtraStaticArchiveBaseNamesByOs = mapOf(OS.Linux to listOf("sksg", "jsonreader")),
         jvmExtraDynamicLibNamesByOs = mapOf(OS.Linux to listOf("expat"))
