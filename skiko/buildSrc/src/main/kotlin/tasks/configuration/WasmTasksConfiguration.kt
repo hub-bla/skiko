@@ -9,6 +9,7 @@ import SkikoProjectContext
 import compilerForTarget
 import linkerForTarget
 import org.gradle.api.Project
+import org.gradle.api.file.FileCollection
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Jar
@@ -44,7 +45,7 @@ private val Project.skikoTestMjs
 
 fun SkikoProjectContext.declareWasmTasks(
     isSideModule: Boolean = false,
-    extraLibraries: List<String> = emptyList(),
+    extraLibraries: FileCollection = project.files(),
     extraIncludeDirs: List<File> = emptyList()
 ) {
     if (!project.supportWeb) {
@@ -208,9 +209,9 @@ fun SkikoProjectContext.declareWasmTasks(
         buildVariant.set(buildType)
 
         libFiles = if (isSideModule) {
-            project.files(extraLibraries)
+            extraLibraries
         } else {
-            project.files(mergedSkiaWasmArchiveFile, *extraLibraries.toTypedArray())
+            project.files(mergedSkiaWasmArchiveFile).plus(extraLibraries)
         }
 
         objectFiles = project.fileTree(compileWasm.map { it.outDir.get() }) {

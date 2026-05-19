@@ -41,10 +41,18 @@ private val allSkikoExtensionModules = listOf(
         libBaseName = "skiko-skottie",
         nativeBridgesLibPrefix = "skiko-skottie-native-bridges",
         cinteropName = "skiko-skottie",
-        ownedStaticLibBaseNames = listOf("skottie", "sksg", "jsonreader", "skia_graphite_ext", "skia_graphite_dawn_ext", "skia_ganesh_ext"),
+        ownedStaticLibBaseNames = listOf("skottie", "sksg", "jsonreader"),
         nativeLinuxExtraLibBaseNames = listOf("skottie"),
         jvmExtraStaticArchiveBaseNamesByOs = mapOf(OS.Linux to listOf("sksg", "jsonreader")),
         jvmExtraDynamicLibNamesByOs = mapOf(OS.Linux to listOf("expat"))
+    ),
+    SkikoExtensionModule(
+        projectPath = ":skiko-graphite",
+        libBaseName = "skiko-graphite",
+        nativeBridgesLibPrefix = "skiko-graphite-native-bridges",
+        cinteropName = "skiko-graphite",
+        ownedStaticLibBaseNames = listOf("skia_graphite_ext", "skia_graphite_dawn_ext", "dawn_combined"),
+        nativeLinuxExtraLibBaseNames = listOf("skia_graphite_ext")
     )
 )
 

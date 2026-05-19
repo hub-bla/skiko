@@ -31,9 +31,9 @@ val skiko = SkikoProperties(rootProject)
 val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
-val skikoSkottieModule = project.currentSkikoExtensionModule()
+val skikoGraphiteModule = project.currentSkikoExtensionModule()
 
-val skikoSkottieProjectContext = SkikoProjectContext(
+val skikoGraphiteProjectContext = SkikoProjectContext(
     project = project,
     skiko = skiko,
     kotlin = kotlin,
@@ -44,17 +44,17 @@ val skikoSkottieProjectContext = SkikoProjectContext(
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
     additionalRuntimeLibraries = emptyList(),
-    currentExtensionModule = skikoSkottieModule
+    currentExtensionModule = skikoGraphiteModule
 )
 
-fun configureSkottieNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) {
-    skikoSkottieProjectContext.configureNativeBridgesForExtension(
-        skikoSkottieModule,
+fun configureGraphiteNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) {
+    skikoGraphiteProjectContext.configureNativeBridgesForExtension(
+        skikoGraphiteModule,
         os,
         arch,
         target
     ) { skiaDir, targetString, currentBuildType ->
-        skikoSkottieModule.staticLibraryPaths(
+        skikoGraphiteModule.staticLibraryPaths(
             skiaDir = skiaDir,
             targetString = targetString,
             buildType = currentBuildType
@@ -74,7 +74,7 @@ kotlin {
     }
 
     applyHierarchyTemplate(skikoSourceSetHierarchyTemplate)
-    skikoSkottieProjectContext.declareSkiaTasks()
+    skikoGraphiteProjectContext.declareSkiaTasks()
 
     if (supportAwt) {
         jvm("awt") {
@@ -105,12 +105,12 @@ kotlin {
     }
 
     if (supportWeb) {
-        val skiaWasmDir = skikoSkottieProjectContext.registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+        val skiaWasmDir = skikoGraphiteProjectContext.registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
 
-        skikoSkottieProjectContext.declareWasmTasks(
+        skikoGraphiteProjectContext.declareWasmTasks(
             isSideModule = true,
             extraLibraries = project.files(Callable {
-                skikoSkottieModule.staticLibraryPaths(
+                skikoGraphiteModule.staticLibraryPaths(
                     skiaDir = skiaWasmDir.get().absolutePath,
                     targetString = "wasm-wasm",
                     buildType = buildType
@@ -123,7 +123,7 @@ kotlin {
         )
 
         js {
-            outputModuleName.set("skiko-skottie-kjs")
+            outputModuleName.set("skiko-graphite-kjs")
             browser {
                 testTask {
                     useKarma {
@@ -152,7 +152,7 @@ kotlin {
 
         @OptIn(ExperimentalWasmDsl::class)
         wasmJs {
-            outputModuleName.set("skiko-skottie-kjs-wasm")
+            outputModuleName.set("skiko-graphite-kjs-wasm")
             browser {
                 testTask {
                     useKarma {
@@ -180,37 +180,37 @@ kotlin {
     }
 
     if (supportNativeMac) {
-        configureSkottieNativeTarget(OS.MacOS, Arch.X64, macosX64())
-        configureSkottieNativeTarget(OS.MacOS, Arch.Arm64, macosArm64())
+        configureGraphiteNativeTarget(OS.MacOS, Arch.X64, macosX64())
+        configureGraphiteNativeTarget(OS.MacOS, Arch.Arm64, macosArm64())
     }
 
     if (supportNativeLinux) {
-        configureSkottieNativeTarget(OS.Linux, Arch.X64, linuxX64())
-        configureSkottieNativeTarget(OS.Linux, Arch.Arm64, linuxArm64())
+        configureGraphiteNativeTarget(OS.Linux, Arch.X64, linuxX64())
+        configureGraphiteNativeTarget(OS.Linux, Arch.Arm64, linuxArm64())
     }
 
     if (supportNativeIosArm64) {
-        configureSkottieNativeTarget(OS.IOS, Arch.Arm64, iosArm64())
+        configureGraphiteNativeTarget(OS.IOS, Arch.Arm64, iosArm64())
     }
 
     if (supportNativeIosSimulatorArm64) {
-        configureSkottieNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64())
+        configureGraphiteNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64())
     }
 
     if (supportNativeIosX64) {
-        configureSkottieNativeTarget(OS.IOS, Arch.X64, iosX64())
+        configureGraphiteNativeTarget(OS.IOS, Arch.X64, iosX64())
     }
 
     if (supportNativeTvosArm64) {
-        configureSkottieNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64())
+        configureGraphiteNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64())
     }
 
     if (supportNativeTvosSimulatorArm64) {
-        configureSkottieNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64())
+        configureGraphiteNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64())
     }
 
     if (supportNativeTvosX64) {
-        configureSkottieNativeTarget(OS.TVOS, Arch.X64, tvosX64())
+        configureGraphiteNativeTarget(OS.TVOS, Arch.X64, tvosX64())
     }
 
     sourceSets.commonMain.dependencies {
@@ -219,10 +219,10 @@ kotlin {
         We use compileOnly here because the root project publishes multiple artifacts
         which makes api/implementation(project(":")) fail during publishing.
         This avoids Gradle's multi-publication ambiguity but skiko core is NOT added
-        as a transitive dependency of skiko-skottie, and it will NOT appear in the published POM
+        as a transitive dependency of skiko-graphite, and it will NOT appear in the published POM
         consumers MUST explicitly depend on both:
             - implementation("org.jetbrains.skiko:skiko-x")
-            - implementation("org.jetbrains.skiko:skiko-skottie-x")
+            - implementation("org.jetbrains.skiko:skiko-graphite-x")
          */
         compileOnly(project(":"))
     }
@@ -233,38 +233,38 @@ kotlin {
         implementation(project(":"))
     }
 
-    skikoSkottieProjectContext.jvmMainSourceSet?.dependencies {
+    skikoGraphiteProjectContext.jvmMainSourceSet?.dependencies {
         implementation(kotlin("stdlib"))
     }
 
-    skikoSkottieProjectContext.jvmTestSourceSet?.dependencies {
+    skikoGraphiteProjectContext.jvmTestSourceSet?.dependencies {
         implementation(libs.coroutines.test)
         implementation(kotlin("test-junit"))
         implementation(kotlin("test"))
     }
-    skikoSkottieProjectContext.awtTestSourceSet?.dependencies {
+    skikoGraphiteProjectContext.awtTestSourceSet?.dependencies {
         implementation(libs.kotlinx.benchmark.runtime)
     }
-    skikoSkottieProjectContext.webMainSourceSet?.dependencies {
+    skikoGraphiteProjectContext.webMainSourceSet?.dependencies {
         implementation(libs.kotlinx.browser)
     }
 
-    skikoSkottieProjectContext.awtMainSourceSet?.dependencies {
+    skikoGraphiteProjectContext.awtMainSourceSet?.dependencies {
         implementation(libs.jetbrainsRuntime.api)
     }
 
-    skikoSkottieProjectContext.androidMainSourceSet?.dependencies {
+    skikoGraphiteProjectContext.androidMainSourceSet?.dependencies {
         implementation(libs.coroutines.android)
     }
 
-    skikoSkottieProjectContext.wasmJsTest?.dependencies {
+    skikoGraphiteProjectContext.wasmJsTest?.dependencies {
         implementation(kotlin("test-wasm-js"))
     }
-    skikoSkottieProjectContext.webTestSourceSet?.dependencies {
+    skikoGraphiteProjectContext.webTestSourceSet?.dependencies {
         implementation(libs.coroutines.core)
     }
 
-    skikoSkottieProjectContext.webTestSourceSet?.apply {
+    skikoGraphiteProjectContext.webTestSourceSet?.apply {
         resources.srcDirs(
             tasks.named("linkWasm"),
             project(":").tasks.named("linkWasm"),
@@ -287,7 +287,7 @@ if (supportAndroid) {
     // Android configuration, when available
     configure<LibraryExtension> {
         compileSdk = 33
-        namespace = "org.jetbrains.skia.skottie"
+        namespace = "org.jetbrains.skia.graphite"
         defaultConfig.minSdk = 24
         defaultConfig.targetSdk = 24
         compileOptions.sourceCompatibility = JavaVersion.VERSION_11
@@ -299,22 +299,22 @@ if (supportAndroid) {
     }
 
     val os = OS.Android
-    val skikoSkottieAndroidJar by project.tasks.registering(Jar::class) {
-        archiveBaseName.set("skiko-skottie-android")
+    val skikoGraphiteAndroidJar by project.tasks.registering(Jar::class) {
+        archiveBaseName.set("skiko-graphite-android")
         from(kotlin.androidTarget("android").compilations["release"].output.allOutputs)
     }
     for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
-        skikoSkottieProjectContext.createJvmJar(os, arch, skikoSkottieAndroidJar,
-            libBaseName = skikoSkottieModule.libBaseName,
+        skikoGraphiteProjectContext.createJvmJar(os, arch, skikoGraphiteAndroidJar,
+            libBaseName = skikoGraphiteModule.libBaseName,
             includeIcu = false)
     }
     tasks.matching { name == "publishAndroidReleasePublicationToMavenLocal" }.configureEach {
         // It needs to be compatible with Gradle 8.1
-        dependsOn(skikoSkottieAndroidJar)
+        dependsOn(skikoGraphiteAndroidJar)
     }
     tasks.matching { name == "generateMetadataFileForAndroidReleasePublication" }.configureEach {
         // It needs to be compatible with Gradle 8.1
-        dependsOn(skikoSkottieAndroidJar)
+        dependsOn(skikoGraphiteAndroidJar)
     }
 }
 
@@ -333,13 +333,13 @@ fun createChecksumsTask(
 if (supportAwt) {
     val targetSuffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
 
-    val skikoSkottieAwtJarForTests by project.tasks.registering(Jar::class) {
-        archiveBaseName.set("skiko-skottie-awt-test")
+    val skikoGraphiteAwtJarForTests by project.tasks.registering(Jar::class) {
+        archiveBaseName.set("skiko-graphite-awt-test")
         from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
     }
     val rootRuntimeJar = project(":").tasks.named<Jar>("skikoJvmRuntimeJar$targetSuffix")
 
-    skikoSkottieProjectContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
+    skikoGraphiteProjectContext.setupJvmTestTask(skikoGraphiteAwtJarForTests, targetOs, targetArch, extraRuntimeJars=listOf(rootRuntimeJar))
 }
 
 afterEvaluate {
@@ -358,7 +358,7 @@ afterEvaluate {
     }
 }
 
-skikoSkottieProjectContext.declarePublications("skottie")
+skikoGraphiteProjectContext.declarePublications("graphite")
 
 val mavenCentral = MavenCentralProperties(project)
 if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {

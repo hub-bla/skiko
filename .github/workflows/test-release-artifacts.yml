@@ -34,6 +34,7 @@ jobs:
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.android.enabled=true \
               :skiko:publishToBuildRepo \
+              :skiko:skiko-graphite:publishToBuildRepo \
               :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
@@ -64,6 +65,7 @@ jobs:
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.wasm.enabled=true \
               :skiko:publishToBuildRepo \
+              :skiko:skiko-graphite:publishToBuildRepo \
               :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
@@ -97,6 +99,9 @@ jobs:
               :skiko:publishKotlinMultiplatformPublicationToBuildRepoRepository \
               :skiko:publishAwtPublicationToBuildRepoRepository \
               :skiko:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
+              :skiko:skiko-graphite:publishKotlinMultiplatformPublicationToBuildRepoRepository \
+              :skiko:skiko-graphite:publishAwtPublicationToBuildRepoRepository \
+              :skiko:skiko-graphite:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishKotlinMultiplatformPublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishAwtPublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishAwtRuntimeElementsPublicationToBuildRepoRepository
@@ -113,6 +118,8 @@ jobs:
               -Pskiko.awt.enabled=false \
               :skiko:publishLinuxArm64PublicationToBuildRepoRepository \
               :skiko:publishLinuxX64PublicationToBuildRepoRepository \
+              :skiko:skiko-graphite:publishLinuxArm64PublicationToBuildRepoRepository \
+              :skiko:skiko-graphite:publishLinuxX64PublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishLinuxArm64PublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishLinuxX64PublicationToBuildRepoRepository
 
@@ -148,6 +155,7 @@ jobs:
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
             :skiko:publishToBuildRepo \
+            :skiko:skiko-graphite:publishToBuildRepo \
             :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4
@@ -186,6 +194,7 @@ jobs:
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
             :skiko:publishToBuildRepo \
+            :skiko:skiko-graphite:publishToBuildRepo \
             :skiko:skiko-skottie:publishToBuildRepo
 
       - uses: actions/upload-artifact@v4

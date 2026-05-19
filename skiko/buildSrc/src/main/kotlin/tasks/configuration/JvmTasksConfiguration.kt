@@ -286,9 +286,12 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
             if (ownedLibBaseNames.isEmpty()) {
                 emptySet<File>()
             } else {
-                // skia_graphite_dawn_ext is WASM-only (Dawn/WebGPU); skip it on JVM
-                // to avoid pulling unresolvable WebGPU symbols into the core keep-set.
-                val jvmExcluded = setOf("skia_graphite_dawn_ext")
+
+                val jvmExcluded = if (targetOs != OS.Windows) {
+                    setOf("skia_graphite_dawn_ext", "dawn_combined")
+                } else {
+                    setOf("skia_graphite_ext")
+                }
                 project.fileTree(dir) {
                     // Static libs owned by extension modules
                     (ownedLibBaseNames - jvmExcluded).forEach { include("$filePrefix$it$fileExtension") }
