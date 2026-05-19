@@ -3,12 +3,11 @@ package org.jetbrains.skiko.context
 import org.jetbrains.skia.*
 import org.jetbrains.skiko.*
 
-internal abstract class ContextHandler(
+@InternalSkikoApi
+abstract class ContextHandler(
     protected val layer: SkiaLayer,
     private val drawContent: Canvas.() -> Unit
 ) {
-    protected var context: DirectContext? = null
-    protected var renderTarget: BackendRenderTarget? = null
     protected var surface: Surface? = null
     protected var canvas: Canvas? = null
 
@@ -16,17 +15,14 @@ internal abstract class ContextHandler(
     protected abstract fun LayerDrawScope.initCanvas()
 
     protected open fun flush(scope: LayerDrawScope) {
-        context?.flush()
     }
 
     open fun dispose() {
         disposeCanvas()
-        context?.close()
     }
 
     protected open fun disposeCanvas() {
         surface?.close()
-        renderTarget?.close()
     }
 
     open fun rendererInfo(): String {
@@ -47,4 +43,3 @@ internal abstract class ContextHandler(
         flush(this)
     }
 }
-

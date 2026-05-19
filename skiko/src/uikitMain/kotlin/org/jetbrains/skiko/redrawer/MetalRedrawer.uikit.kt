@@ -4,6 +4,8 @@ package org.jetbrains.skiko.redrawer
 
 import kotlinx.cinterop.*
 import org.jetbrains.skia.*
+import org.jetbrains.skia.impl.NativePointer
+import org.jetbrains.skia.impl.getPtr
 import org.jetbrains.skiko.Logger
 import org.jetbrains.skiko.internal.fastForEach
 import platform.Foundation.NSNotificationCenter
@@ -116,7 +118,7 @@ internal class MetalRedrawer(
     private val device = metalLayer.device as platform.Metal.MTLDeviceProtocol?
         ?: throw IllegalStateException("CAMetalLayer.device can not be null")
     private val queue = device.newCommandQueue() ?: throw IllegalStateException("Couldn't create Metal command queue")
-    private val context = DirectContext.makeMetal(device.objcPtr(), queue.objcPtr())
+    private val context = _nMakeMetalContext(device.objcPtr(), queue.objcPtr())
     private val inflightCommandBuffers = mutableListOf<MTLCommandBufferProtocol>()
 
     // Semaphore for preventing command buffers count more than swapchain size to be scheduled/executed at the same time
@@ -187,8 +189,8 @@ internal class MetalRedrawer(
         caDisplayLink?.invalidate()
         caDisplayLink = null
 
-        context.flush()
-        context.close()
+        _nFlushDefault(context)
+        _nCloseContext(context)
     }
 
     internal fun needRender() {
@@ -228,20 +230,21 @@ internal class MetalRedrawer(
                 return@autoreleasepool
             }
 
-            val renderTarget = BackendRenderTarget.makeMetal(width, height, metalDrawable.texture.objcPtr())
+            val renderTarget = _nMakeMetalRenderTarget(width, height, metalDrawable.texture.objcPtr())
 
-            val surface = Surface.makeFromBackendRenderTarget(
+            val surfacePtr = _nMakeFromBackendRenderTarget(
                 context,
                 renderTarget,
-                SurfaceOrigin.TOP_LEFT,
-                SurfaceColorFormat.BGRA_8888,
-                ColorSpace.sRGB,
-                SurfaceProps(pixelGeometry = PixelGeometry.UNKNOWN)
+                SurfaceOrigin.TOP_LEFT.ordinal,
+                SurfaceColorFormat.BGRA_8888.ordinal,
+                getPtr(ColorSpace.sRGB),
+                SurfaceProps(pixelGeometry = PixelGeometry.UNKNOWN).packToIntArray().refTo(0)
             )
+            val surface = if (surfacePtr.toLong() == 0L) null else Surface(surfacePtr)
 
             if (surface == null) {
                 Logger.warn { "'Surface.makeFromBackendRenderTarget' returned null. Skipping the frame." }
-                renderTarget.close()
+                _nDeleteBackendRenderTarget(renderTarget)
                 // TODO: manually release metalDrawable when K/N API arrives
                 dispatch_semaphore_signal(inflightSemaphore)
                 return@autoreleasepool
@@ -249,7 +252,7 @@ internal class MetalRedrawer(
 
             surface.canvas.clear(Color.WHITE)
             drawCallback(surface)
-            surface.flushAndSubmit()
+            _nFlushAndSubmit(context, surface._ptr, false)
 
             val commandBuffer = queue.commandBuffer()!!
             commandBuffer.label = "Present"
@@ -261,7 +264,7 @@ internal class MetalRedrawer(
             commandBuffer.commit()
 
             surface.close()
-            renderTarget.close()
+            _nDeleteBackendRenderTarget(renderTarget)
             // TODO manually release metalDrawable when K/N API arrives
 
             // Track current inflight command buffers to synchronously wait for their schedule in case app goes background
@@ -273,6 +276,28 @@ internal class MetalRedrawer(
         }
     }
 }
+
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nMakeMetal")
+private external fun _nMakeMetalContext(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer
+@ExternalSymbolName("org_jetbrains_skia_DirectContext__1nFlushDefault")
+private external fun _nFlushDefault(contextPtr: NativePointer)
+@ExternalSymbolName("org_jetbrains_skia_RefCnt__1nUnref")
+private external fun _nCloseContext(contextPtr: NativePointer)
+@ExternalSymbolName("BackendRenderTarget_nMakeMetal")
+private external fun _nMakeMetalRenderTarget(width: Int, height: Int, texturePtr: NativePointer): NativePointer
+@ExternalSymbolName("org_jetbrains_skia_BackendRenderTarget__1nGetFinalizer")
+private external fun _nBackendRenderTargetFinalizer(): NativePointer
+private external fun _nDeleteBackendRenderTarget(ptr: NativePointer)
+@ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeFromBackendRenderTarget")
+private external fun _nMakeFromBackendRenderTarget(
+    pContext: NativePointer,
+    pBackendRenderTarget: NativePointer,
+    surfaceOrigin: Int,
+    colorType: Int,
+    colorSpacePtr: NativePointer,
+    surfaceProps: CValuesRef<IntVar>?
+): NativePointer
+private external fun _nFlushAndSubmit(contextPtr: NativePointer, surfacePtr: NativePointer, syncCpu: Boolean)
 
 private class DisplayLinkProxy(
     private val callback: () -> Unit

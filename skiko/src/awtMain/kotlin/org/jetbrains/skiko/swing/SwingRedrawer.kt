@@ -8,7 +8,8 @@ import java.awt.Graphics2D
  *
  * See [org.jetbrains.skiko.redrawer.Redrawer] redrawer for on-screen rendering
  */
-internal interface SwingRedrawer {
+@InternalSkikoApi
+interface SwingRedrawer {
     /**
      * Should be called when [SwingRedrawer] no longer needed to free native resources
      */
@@ -24,7 +25,8 @@ internal interface SwingRedrawer {
 /**
  * Creates a [SwingRedrawer] that will draw content provided by [renderDelegate]
  */
-internal fun createSwingRedrawer(
+@InternalSkikoApi
+fun createSwingRedrawer(
     swingLayerProperties: SwingLayerProperties,
     renderDelegate: SkikoRenderDelegate,
     renderApi: GraphicsApi,
@@ -37,10 +39,9 @@ internal fun createSwingRedrawer(
             analytics
         )
     }
-    return when (hostOs) {
-        OS.MacOS -> MetalSwingRedrawer(swingLayerProperties, renderDelegate, analytics)
-        OS.Windows -> Direct3DSwingRedrawer(swingLayerProperties, renderDelegate, analytics)
-        OS.Linux -> LinuxOpenGLSwingRedrawer(swingLayerProperties, renderDelegate, analytics)
-        else -> SoftwareSwingRedrawer(swingLayerProperties, renderDelegate, analytics)
-    }
+    return SwingRenderBackendRegistry.find(renderApi)
+        ?.createSwingRedrawer(swingLayerProperties, renderDelegate, renderApi, analytics)
+        ?: throw RenderException(
+            "Swing renderer $renderApi requires the org.jetbrains.skiko:skiko-ganesh dependency on the classpath."
+        )
 }

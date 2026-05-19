@@ -7,11 +7,13 @@ private val awt = getAWT().also {
     check(it != 0L) { "Can't get AWT" }
 }
 
-internal fun <T> Canvas.useDrawingSurfacePlatformInfo(
+@InternalSkikoApi
+fun <T> Canvas.useDrawingSurfacePlatformInfo(
     block: (Long) -> T
 ) = useDrawingSurfaceInfo { block(it.platformInfo) }
 
-internal fun <T> Canvas.useDrawingSurfaceInfo(
+@InternalSkikoApi
+fun <T> Canvas.useDrawingSurfaceInfo(
     block: (DrawingSurfaceInfo) -> T
 ): T = getDrawingSurface().use { drawingSurface ->
     drawingSurface.withLock {
@@ -21,9 +23,11 @@ internal fun <T> Canvas.useDrawingSurfaceInfo(
     }
 }
 
-internal fun Component.getDrawingSurface() = DrawingSurface(this)
+@InternalSkikoApi
+fun Component.getDrawingSurface() = DrawingSurface(this)
 
-internal class DrawingSurface(
+@InternalSkikoApi
+class DrawingSurface(
     component: Component
 ) : AutoCloseable {
     var ptr =
@@ -56,7 +60,8 @@ internal class DrawingSurface(
     }
 }
 
-internal class DrawingSurfaceInfo(
+@InternalSkikoApi
+class DrawingSurfaceInfo(
     private val drawingSurface: Long
 ) : AutoCloseable {
     var ptr =

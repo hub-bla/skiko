@@ -8,7 +8,8 @@ import org.jetbrains.skiko.SkiaLayerAnalytics.DeviceAnalytics
  * Don't forget to call [onDeviceChosen] and [onContextInit] to send necessary analytics.
  */
 @OptIn(ExperimentalSkikoApi::class)
-internal abstract class AWTRedrawer(
+@InternalSkikoApi
+abstract class AWTRedrawer(
     private val layer: SkiaLayer,
     private val analytics: SkiaLayerAnalytics,
     private val graphicsApi: GraphicsApi,
@@ -54,7 +55,7 @@ internal abstract class AWTRedrawer(
         layer.update(nanoTime)
     }
 
-    protected inline fun inDrawScope(body: LayerDrawScope.() -> Unit) {
+    protected fun inDrawScope(body: LayerDrawScope.() -> Unit) {
         requireNotNull(deviceAnalytics) { "deviceAnalytics is not null. Call onDeviceChosen after choosing the drawing device" }
         if (!isDisposed) {
             val isFirstFrame = !isFirstFrameRendered
@@ -64,6 +65,23 @@ internal abstract class AWTRedrawer(
             }
             deviceAnalytics?.beforeFrameRender()
             layer.inDrawScope(body)
+            if (isFirstFrame && !isDisposed) {
+                deviceAnalytics?.afterFirstFrameRender()
+            }
+            deviceAnalytics?.afterFrameRender()
+        }
+    }
+
+    protected suspend fun inSuspendingDrawScope(body: suspend LayerDrawScope.() -> Unit) {
+        requireNotNull(deviceAnalytics) { "deviceAnalytics is not null. Call onDeviceChosen after choosing the drawing device" }
+        if (!isDisposed) {
+            val isFirstFrame = !isFirstFrameRendered
+            isFirstFrameRendered = true
+            if (isFirstFrame) {
+                deviceAnalytics?.beforeFirstFrameRender()
+            }
+            deviceAnalytics?.beforeFrameRender()
+            layer.inSuspendingDrawScope(body)
             if (isFirstFrame && !isDisposed) {
                 deviceAnalytics?.afterFirstFrameRender()
             }

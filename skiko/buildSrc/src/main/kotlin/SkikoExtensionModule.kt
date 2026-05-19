@@ -37,6 +37,15 @@ data class SkikoExtensionModule(
 
 private val allSkikoExtensionModules = listOf(
     SkikoExtensionModule(
+        projectPath = ":skiko-ganesh",
+        libBaseName = "skiko-ganesh",
+        nativeBridgesLibPrefix = "skiko-ganesh-native-bridges",
+        cinteropName = "skiko-ganesh",
+        ownedStaticLibBaseNames = listOf("skia_ganesh_ext"),
+        nativeLinuxExtraLibBaseNames = listOf("skia_ganesh_ext"),
+        jvmExtraStaticArchiveBaseNamesByOs = mapOf(OS.Linux to listOf("skia_ganesh_ext"))
+    ),
+    SkikoExtensionModule(
         projectPath = ":skiko-skottie",
         libBaseName = "skiko-skottie",
         nativeBridgesLibPrefix = "skiko-skottie-native-bridges",

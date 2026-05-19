@@ -73,6 +73,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
     if (project.path != ":") {
+        includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/awtMain/cpp/include"))
         includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/jvmMain/cpp/common"))
         includeHeadersNonRecursive(project.rootProject.project(":").projectDir.resolve("src/commonMain/cpp/common/include"))
     }
@@ -209,6 +210,12 @@ fun SkikoProjectContext.createObjcCompileTask(
     includeHeadersNonRecursive(projectDir.resolve("src/awtMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp"))
+    if (currentExtensionModule != null) {
+        val coreProjectDir = project.rootProject.projectDir
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/awtMain/cpp/include"))
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/commonMain/cpp/common/include"))
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/jvmMain/cpp"))
+    }
 
     compiler.set(project.appleToolchainExecutableOrDefault("clang", "clang"))
     buildVariant.set(buildType)
@@ -276,9 +283,7 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
                 exclude("${filePrefix}skia_graphite_ext$fileExtension")
                 exclude("${filePrefix}libdawn_combined$fileExtension")
                 exclude("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-                ownedLibBaseNames
-                    .filter { it != "skia_ganesh_ext" }
-                    .forEach { exclude("$filePrefix$it$fileExtension") }
+                ownedLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
             }.files
         })
 
@@ -332,9 +337,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             if (targetOs == OS.Linux || targetOs == OS.Android) {
                 exclude("${filePrefix}skia_ganesh_ext$fileExtension")
             }
-            ownedStaticLibBaseNames
-                .filter { it != "skia_ganesh_ext" }
-                .forEach { exclude("$filePrefix$it$fileExtension") }
+            ownedStaticLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
         } else {
             currentExtensionModule?.ownedStaticLibBaseNames.orEmpty().forEach { include("$filePrefix$it$fileExtension") }
         }
@@ -368,7 +371,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 )
             } else emptyArray()
 
-            osFlags = arrayOf(
+            osFlags = mutableListOf(
                 *targetOs.clangFlags,
                 "-arch", if (targetArch == Arch.Arm64) "arm64" else "x86_64",
                 "-shared",
@@ -383,10 +386,13 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-framework", "CoreText",
                 "-framework", "Foundation",
                 "-framework", "IOKit",
-                "-framework", "Metal",
-                "-framework", "OpenGL",
                 "-framework", "QuartzCore" // for CoreAnimation
-            ) + additionalFlags
+            ).apply {
+                when (currentExtensionModule?.projectPath) {
+                    ":skiko-ganesh" -> addAll(listOf("-framework", "Metal", "-framework", "OpenGL"))
+                    ":skiko-graphite" -> addAll(listOf("-framework", "Metal"))
+                }
+            }.toTypedArray() + additionalFlags
         }
         OS.Linux -> {
             osFlags = mutableListOf<String>().apply {
@@ -396,7 +402,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         // `libstdc++.so.6.*` binaries are forward-compatible and used from GCC 3.4 to 16+,
                         // so do not use `-static-libstdc++` to avoid issues with complex setup.
                         "-static-libgcc",
-                        "-lGL",
                         "-lX11",
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
@@ -414,6 +419,9 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     // Hack to fix problem with linker not always finding certain declarations.
                     addAll(currentExtensionModule?.jvmExtraStaticArchivePaths(targetOs, skiaBinDir).orEmpty())
                     currentExtensionModule?.jvmExtraDynamicLibNames(targetOs)?.forEach { add("-l$it") }
+                    if (currentExtensionModule?.projectPath == ":skiko-ganesh") {
+                        add("-lGL")
+                    }
                     val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                     val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                     dependsOn(coreLinkTask)
@@ -467,8 +475,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-llog",
                 "-landroid",
                 "-latomic",
-                // Hack to fix problem with linker not always finding certain declarations.
-                "$skiaBinDir/libskia_ganesh_ext.a"
             )
             linker.set(project.androidClangFor(targetArch))
             if (isCore) {
@@ -510,7 +516,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         }
                         result.addAll(
                             arrayOf(
-                                "$skiaBinDir/libskia_ganesh_ext.a",
                                 "$skiaBinDir/libskshaper.a",
                                 "$skiaBinDir/libskunicode_icu.a",
                                 "$skiaBinDir/libskunicode_core.a",

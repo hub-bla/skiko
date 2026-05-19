@@ -203,7 +203,6 @@ fun skiaStaticLibraries(skiaDir: String, targetString: String, buildType: SkiaBu
         "libskresources.a",
         "libskparagraph.a",
         "libskia.a",
-        "libskia_ganesh_ext.a",
         "libicu.a",
         "libsvg.a",
         "libpng.a",

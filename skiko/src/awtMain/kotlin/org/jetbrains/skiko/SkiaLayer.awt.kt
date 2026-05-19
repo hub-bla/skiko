@@ -46,7 +46,8 @@ actual open class SkiaLayer internal constructor(
         ContentScale,
     }
 
-    internal val backedLayer: HardwareLayer
+    @InternalSkikoApi
+    val backedLayer: HardwareLayer
 
     constructor(
         accessibleContextProvider: ((Component) -> AccessibleContext)? = null,
@@ -353,7 +354,8 @@ actual open class SkiaLayer internal constructor(
         }
     )
 
-    internal val redrawer: Redrawer? by redrawerManager::redrawer
+    @InternalSkikoApi
+    val redrawer: Redrawer? by redrawerManager::redrawer
 
     actual var renderApi: GraphicsApi by redrawerManager::renderApi
 
@@ -591,7 +593,8 @@ actual open class SkiaLayer internal constructor(
         redrawer?.renderImmediately()
     }
 
-    internal fun update(nanoTime: Long) {
+    @InternalSkikoApi
+    fun update(nanoTime: Long) {
         check(isEventDispatchThread()) { "Method should be called from AWT event dispatch thread" }
         check(!isDisposed) { "SkiaLayer is disposed" }
 
@@ -652,7 +655,8 @@ actual open class SkiaLayer internal constructor(
         scale = contentScale
     )
 
-    internal inline fun inDrawScope(body: LayerDrawScope.() -> Unit) {
+    @InternalSkikoApi
+    fun inDrawScope(body: LayerDrawScope.() -> Unit) {
         check(isEventDispatchThread()) { "Method should be called from AWT event dispatch thread" }
         check(!isDisposed) { "SkiaLayer is disposed" }
         try {
@@ -667,6 +671,25 @@ actual open class SkiaLayer internal constructor(
                 Logger.warn(e) { "Exception in draw scope" }
                 redrawerManager.findNextWorkingRenderApi()
                 redrawer?.renderImmediately()
+            }
+        }
+    }
+
+    @InternalSkikoApi
+    suspend fun inSuspendingDrawScope(body: suspend LayerDrawScope.() -> Unit) {
+        check(isEventDispatchThread()) { "Method should be called from AWT event dispatch thread" }
+        check(!isDisposed) { "SkiaLayer is disposed" }
+        try {
+            fpsCounter?.tick()
+            with(createDrawScope()) {
+                body()
+            }
+        } catch (_: CancellationException) {
+            // ignore
+        } catch (e: RenderException) {
+            if (!isDisposed) {
+                Logger.warn(e) { "Exception in draw scope" }
+                redrawerManager.findNextWorkingRenderApi()
             }
         }
     }

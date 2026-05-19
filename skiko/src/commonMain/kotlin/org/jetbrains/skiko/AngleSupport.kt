@@ -10,4 +10,5 @@ package org.jetbrains.skiko
  *
  * @throws OptionalRenderApiException if ANGLE library can't be loaded.
  */
-internal expect fun loadAngleLibrary()
+@InternalSkikoApi
+expect fun loadAngleLibrary()

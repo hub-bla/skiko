@@ -9,7 +9,8 @@ import java.awt.Graphics
 import java.awt.event.InputMethodEvent
 import javax.accessibility.AccessibleContext
 
-internal open class HardwareLayer(
+@InternalSkikoApi
+open class HardwareLayer(
     private val accessibleContextProvider: ((Component) -> AccessibleContext)? = null
 ) : Canvas() {
     companion object {
@@ -61,7 +62,8 @@ internal open class HardwareLayer(
     }
 }
 
-internal fun layerFrameLimiter(
+@InternalSkikoApi
+fun layerFrameLimiter(
     scope: CoroutineScope,
     component: HardwareLayer,
     onNewFrameLimit: (frameLimit: Double) -> Unit = {}

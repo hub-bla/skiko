@@ -73,7 +73,8 @@ expect open class SkiaLayer {
 
 internal class PictureHolder(val instance: Picture, val width: Int, val height: Int)
 
-internal class LayerDrawScope(
+@InternalSkikoApi
+class LayerDrawScope(
     val pixelGeometry: PixelGeometry,
     val scaledLayerWidth: Int,
     val scaledLayerHeight: Int,
@@ -99,7 +100,7 @@ internal class LayerDrawScope(
         scaledLayerHeight = (layerHeight * scale).toInt().coerceAtLeast(0)
     )
 
-    internal fun ContextHandler.draw() {
+    fun ContextHandler.draw() {
         this@LayerDrawScope.draw()
     }
 }

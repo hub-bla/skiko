@@ -5,6 +5,7 @@ import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Surface
 import org.jetbrains.skia.impl.BufferUtil
+import org.jetbrains.skiko.InternalSkikoApi
 import org.jetbrains.skiko.RenderException
 import java.awt.*
 import java.awt.geom.AffineTransform
@@ -13,7 +14,8 @@ import java.nio.ByteOrder
 import java.nio.IntBuffer
 import kotlin.math.*
 
-internal class SoftwareSwingPainter(
+@InternalSkikoApi
+class SoftwareSwingPainter(
     private val swingLayerProperties: SwingLayerProperties
 ) : SwingPainter {
     private var bufferedImage = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB_PRE)

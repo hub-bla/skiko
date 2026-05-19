@@ -3,6 +3,9 @@ package org.jetbrains.skiko
 import kotlinx.browser.window
 import org.jetbrains.skia.*
 import org.jetbrains.skia.impl.NativePointer
+import org.jetbrains.skia.impl.InteropPointer
+import org.jetbrains.skia.impl.interopScope
+import org.jetbrains.skia.impl.getPtr
 import org.jetbrains.skiko.wasm.ContextAttributes
 import org.w3c.dom.HTMLCanvasElement
 
@@ -18,9 +21,9 @@ internal abstract class CanvasRenderer(
     val width: Int,
     val height: Int,
 ) {
-    private val context: DirectContext
+    private var context: NativePointer = 0
     private var surface: Surface? = null
-    private var renderTarget: BackendRenderTarget? = null
+    private var renderTarget: NativePointer = 0
 
     /**
      * An instance of skiko [Canvas] used for drawing.
@@ -31,30 +34,36 @@ internal abstract class CanvasRenderer(
 
     init {
         GL.makeContextCurrent(contextPointer)
-        context = DirectContext.makeGL()
+        context = _nMakeGL()
         initCanvas()
     }
 
     fun initCanvas() {
         disposeCanvas()
 
-        renderTarget = BackendRenderTarget.makeGL(width, height, 1, 8, 0, 0x8058)
-        surface = Surface.makeFromBackendRenderTarget(
-            context,
-            renderTarget!!,
-            SurfaceOrigin.BOTTOM_LEFT,
-            SurfaceColorFormat.RGBA_8888,
-            ColorSpace.sRGB,
-            SurfaceProps()
-        ) ?: throw RenderException("Cannot create surface")
+        renderTarget = _nMakeBackendRenderTargetGL(width, height, 1, 8, 0, 0x8058)
+        val surfacePtr = interopScope {
+            _nMakeFromBackendRenderTarget(
+                context,
+                renderTarget,
+                SurfaceOrigin.BOTTOM_LEFT.ordinal,
+                SurfaceColorFormat.RGBA_8888.ordinal,
+                getPtr(ColorSpace.sRGB),
+                toInterop(SurfaceProps().packToIntArray())
+            )
+        }
+        if (surfacePtr == 0) throw RenderException("Cannot create surface")
+        surface = Surface(surfacePtr)
         canvas = surface!!.canvas
     }
 
     private fun disposeCanvas() {
         surface?.close()
         surface = null
-        renderTarget?.close()
-        renderTarget = null
+        if (renderTarget != 0) {
+            _nDeleteBackendRenderTarget(renderTarget)
+            renderTarget = 0
+        }
     }
 
     /**
@@ -81,11 +90,25 @@ internal abstract class CanvasRenderer(
             canvas?.clear(Color.WHITE)
             canvas?.resetMatrix()
             drawFrame(timestamp)
-            surface?.flushAndSubmit()
-            context.flush()
+            surface?.let { _nFlushAndSubmit(context, it._ptr, false) }
+            _nFlushDefault(context)
         }
     }
 }
+
+private external fun _nMakeGL(): NativePointer
+private external fun _nMakeBackendRenderTargetGL(width: Int, height: Int, sampleCnt: Int, stencilBits: Int, fbId: Int, fbFormat: Int): NativePointer
+private external fun _nDeleteBackendRenderTarget(ptr: NativePointer)
+private external fun _nMakeFromBackendRenderTarget(
+    pContext: NativePointer,
+    pBackendRenderTarget: NativePointer,
+    surfaceOrigin: Int,
+    colorType: Int,
+    colorSpacePtr: NativePointer,
+    surfaceProps: InteropPointer
+): NativePointer
+private external fun _nFlushAndSubmit(contextPtr: NativePointer, surfacePtr: NativePointer, syncCpu: Boolean)
+private external fun _nFlushDefault(contextPtr: NativePointer)
 
 internal external interface GLInterface {
     fun createContext(context: HTMLCanvasElement, contextAttributes: ContextAttributes): NativePointer

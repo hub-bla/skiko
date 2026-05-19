@@ -16,5 +16,6 @@ pluginManagement {
 rootProject.name = "skiko"
 include("ci")
 include("import-generator")
+include("skiko-ganesh")
 include("skiko-graphite")
 include("skiko-skottie")

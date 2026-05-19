@@ -7,7 +7,7 @@ import org.jetbrains.skia.PixelGeometry
 import org.jetbrains.skia.Color
 
 actual open class SkiaLayer {
-    private var glView: SkikoSurfaceView? = null
+    private var renderView: AndroidSkikoRenderView? = null
     private var container: ViewGroup? = null
 
     actual var renderApi: GraphicsApi = GraphicsApi.OPENGL
@@ -34,28 +34,26 @@ actual open class SkiaLayer {
     fun attachTo(container: ViewGroup) {
         initDefaultContext(container.context)
 
-        val view = SkikoSurfaceView(container.context, this)
-        container.addView(view)
+        val renderView = createAndroidRenderView(container.context)
+        container.addView(renderView.view)
 
         this.container = container
-        this.glView = view
+        this.renderView = renderView
 
-        view.setFocusableInTouchMode(true)
+        renderView.view.setFocusableInTouchMode(true)
 
         needRender()
     }
 
     actual fun detach() {
         this.container?.let {
-            it.removeView(this.glView)
-            this.glView = null
+            it.removeView(this.renderView?.view)
+            this.renderView = null
         }
     }
 
     actual fun needRender(throttledToVsync: Boolean) {
-        glView?.apply {
-            scheduleFrame()
-        }
+        renderView?.scheduleFrame()
     }
 
     actual fun needRedraw() = needRender()
@@ -67,4 +65,24 @@ actual open class SkiaLayer {
         get() = this.container
 
     internal actual fun draw(canvas: Canvas): Unit = TODO()
+
+    private fun createAndroidRenderView(context: Context): AndroidSkikoRenderView {
+        val renderViewClass = try {
+            Class.forName("org.jetbrains.skiko.SkikoSurfaceView")
+        } catch (e: ClassNotFoundException) {
+            throw UnsupportedOperationException(
+                "Android GPU rendering is provided by the skiko-ganesh extension module",
+                e
+            )
+        }
+        val constructor = renderViewClass.getConstructor(Context::class.java, SkiaLayer::class.java)
+        return constructor.newInstance(context, this) as AndroidSkikoRenderView
+    }
+}
+
+@InternalSkikoApi
+interface AndroidSkikoRenderView {
+    val view: View
+
+    fun scheduleFrame()
 }

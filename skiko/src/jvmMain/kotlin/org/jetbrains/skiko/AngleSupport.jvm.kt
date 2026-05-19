@@ -19,7 +19,8 @@ private var loader = LibraryLoader(
     }
 )
 
-internal actual fun loadAngleLibrary() {
+@InternalSkikoApi
+actual fun loadAngleLibrary() {
     when {
         hostOs.isWindows -> loader.loadOnce()
         else -> Unit

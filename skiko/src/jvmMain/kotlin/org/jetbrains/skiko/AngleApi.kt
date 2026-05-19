@@ -1,6 +1,7 @@
 package org.jetbrains.skiko
 
-internal object AngleApi {
+@InternalSkikoApi
+object AngleApi {
     // OpenGL constants
     val GL_VENDOR = 0x1F00
     val GL_RENDERER = 0x1F01

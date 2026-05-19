@@ -93,7 +93,6 @@ fun SkikoProjectContext.declareWasmTasks(
     val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
     val mainModuleSkiaLibraries = listOf(
         "libskia.wasm.a",
-        "libskia_ganesh_ext.wasm.a",
         "libsvg.wasm.a",
         "libskparagraph.wasm.a",
         "libskshaper.wasm.a",

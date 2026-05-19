@@ -1,6 +1,4 @@
 #include <jawt_md.h>
-#include <GL/gl.h>
-#include <GL/glx.h>
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>

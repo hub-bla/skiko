@@ -1,6 +1,4 @@
 #include <jawt_md.h>
-#include <GL/gl.h>
-#include <GL/glx.h>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <unistd.h>
@@ -8,8 +6,6 @@
 #include <vector>
 #include "xrandr_utils.h"
 #include "jni_helpers.h"
-
-typedef GLXContext (*glXCreateContextAttribsARBProc)(Display *, GLXFBConfig, GLXContext, Bool, const int *);
 
 extern "C"
 {

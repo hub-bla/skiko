@@ -34,6 +34,7 @@ jobs:
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.android.enabled=true \
               :skiko:publishToBuildRepo \
+              :skiko:skiko-ganesh:publishToBuildRepo \
               :skiko:skiko-graphite:publishToBuildRepo \
               :skiko:skiko-skottie:publishToBuildRepo
 
@@ -65,6 +66,7 @@ jobs:
               -Pdeploy.release=${{ inputs.release }} \
               -Pskiko.wasm.enabled=true \
               :skiko:publishToBuildRepo \
+              :skiko:skiko-ganesh:publishToBuildRepo \
               :skiko:skiko-graphite:publishToBuildRepo \
               :skiko:skiko-skottie:publishToBuildRepo
 
@@ -99,6 +101,9 @@ jobs:
               :skiko:publishKotlinMultiplatformPublicationToBuildRepoRepository \
               :skiko:publishAwtPublicationToBuildRepoRepository \
               :skiko:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
+              :skiko:skiko-ganesh:publishKotlinMultiplatformPublicationToBuildRepoRepository \
+              :skiko:skiko-ganesh:publishAwtPublicationToBuildRepoRepository \
+              :skiko:skiko-ganesh:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
               :skiko:skiko-graphite:publishKotlinMultiplatformPublicationToBuildRepoRepository \
               :skiko:skiko-graphite:publishAwtPublicationToBuildRepoRepository \
               :skiko:skiko-graphite:publishAwtRuntimeElementsPublicationToBuildRepoRepository \
@@ -118,6 +123,8 @@ jobs:
               -Pskiko.awt.enabled=false \
               :skiko:publishLinuxArm64PublicationToBuildRepoRepository \
               :skiko:publishLinuxX64PublicationToBuildRepoRepository \
+              :skiko:skiko-ganesh:publishLinuxArm64PublicationToBuildRepoRepository \
+              :skiko:skiko-ganesh:publishLinuxX64PublicationToBuildRepoRepository \
               :skiko:skiko-graphite:publishLinuxArm64PublicationToBuildRepoRepository \
               :skiko:skiko-graphite:publishLinuxX64PublicationToBuildRepoRepository \
               :skiko:skiko-skottie:publishLinuxArm64PublicationToBuildRepoRepository \
@@ -155,6 +162,7 @@ jobs:
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
             :skiko:publishToBuildRepo \
+            :skiko:skiko-ganesh:publishToBuildRepo \
             :skiko:skiko-graphite:publishToBuildRepo \
             :skiko:skiko-skottie:publishToBuildRepo
 
@@ -194,6 +202,7 @@ jobs:
             -Pdeploy.release=${{ inputs.release }} \
             -Pskiko.native.enabled=true \
             :skiko:publishToBuildRepo \
+            :skiko:skiko-ganesh:publishToBuildRepo \
             :skiko:skiko-graphite:publishToBuildRepo \
             :skiko:skiko-skottie:publishToBuildRepo
 

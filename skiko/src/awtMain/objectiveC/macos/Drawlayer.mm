@@ -5,8 +5,6 @@
 
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
-#import <Metal/Metal.h>
-#import <QuartzCore/CAMetalLayer.h>
 
 @interface WindowDragView : NSView
 @end
@@ -409,14 +407,6 @@ JNIEXPORT jint JNICALL Java_org_jetbrains_skiko_HardwareLayer_getCurrentDPI(JNIE
         CGSize displayPhysicalSize = CGDisplayScreenSize([[description objectForKey:@"NSScreenNumber"] unsignedIntValue]);
         return (jint)(displayPixelSize.width / (displayPhysicalSize.width / 25.4));
     }
-}
-
-void getMetalDeviceAndQueue(void** device, void** queue)
-{
-    id<MTLDevice> fDevice = MTLCreateSystemDefaultDevice();
-    id<MTLCommandQueue> fQueue = [fDevice newCommandQueue];
-    *device = (__bridge void*) fDevice;
-    *queue = (__bridge void*) fQueue;
 }
 
 } // extern C

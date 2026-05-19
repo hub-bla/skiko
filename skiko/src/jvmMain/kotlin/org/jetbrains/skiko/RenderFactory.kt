@@ -1,8 +1,9 @@
 package org.jetbrains.skiko
 
-import org.jetbrains.skiko.redrawer.*
+import org.jetbrains.skiko.redrawer.Redrawer
 
-internal fun interface RenderFactory {
+@InternalSkikoApi
+fun interface RenderFactory {
     fun createRedrawer(
         layer: SkiaLayer,
         renderApi: GraphicsApi,

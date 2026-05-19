@@ -1,9 +1,10 @@
 package org.jetbrains.skia
 
 import org.jetbrains.skia.impl.*
-import org.jetbrains.skia.impl.Library.Companion.staticLoad
+import org.jetbrains.skiko.GaneshLibraryLoader
+import org.jetbrains.skiko.InternalSkikoApi
 
-class BackendTexture internal constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
+class BackendTexture @InternalSkikoApi constructor(ptr: NativePointer) : Managed(ptr, _FinalizerHolder.PTR) {
     companion object {
         /**
          * Creates BackendTexture from GL texture.
@@ -38,7 +39,8 @@ class BackendTexture internal constructor(ptr: NativePointer) : Managed(ptr, _Fi
         }
 
         init {
-            staticLoad()
+            @OptIn(InternalSkikoApi::class)
+            GaneshLibraryLoader.load()
         }
     }
 

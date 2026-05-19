@@ -188,6 +188,10 @@ kotlin {
         implementation(kotlin("test-annotations-common"))
     }
 
+    sourceSets.all {
+        languageSettings.optIn("org.jetbrains.skiko.InternalSkikoApi")
+    }
+
     skikoProjectContext.jvmMainSourceSet?.dependencies {
         implementation(kotlin("stdlib"))
         implementation(libs.coroutines.core.jvm)

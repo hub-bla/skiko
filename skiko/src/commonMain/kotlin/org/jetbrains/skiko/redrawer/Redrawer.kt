@@ -3,11 +3,13 @@ package org.jetbrains.skiko.redrawer
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.hostOs
+import org.jetbrains.skiko.InternalSkikoApi
 import kotlin.time.TimeSource
 
 private val initialTime = TimeSource.Monotonic.markNow()
 
-internal interface Redrawer {
+@InternalSkikoApi
+interface Redrawer {
     fun dispose()
     fun needRender(throttledToVsync: Boolean)
     fun renderImmediately()
@@ -18,7 +20,8 @@ internal interface Redrawer {
     fun isTransparentBackgroundSupported(): Boolean
 }
 
-internal fun defaultIsTransparentBackgroundSupported(layer: SkiaLayer): Boolean {
+@InternalSkikoApi
+fun defaultIsTransparentBackgroundSupported(layer: SkiaLayer): Boolean {
     if (hostOs == OS.MacOS) {
         // macOS transparency is always supported
         return true

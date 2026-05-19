@@ -2,8 +2,9 @@ package org.jetbrains.skia
 
 import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
+import org.jetbrains.skiko.InternalSkikoApi
 
-class Image internal constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInfo {
+class Image @InternalSkikoApi constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInfo {
     companion object {
         /**
          *
@@ -153,29 +154,6 @@ class Image internal constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInf
          *
          * @throws RuntimeException - if nullPtr is returned.
          */
-        fun adoptTextureFrom(
-            context: DirectContext,
-            backendTexture: BackendTexture,
-            origin: SurfaceOrigin,
-            colorType: ColorType,
-        ): Image {
-            return try {
-                Stats.onNativeCall()
-                val ptr = _nAdoptTextureFrom(
-                    getPtr(context),
-                    getPtr(backendTexture),
-                    origin.ordinal,
-                    colorType.ordinal
-                )
-                if (ptr == NullPointer) throw RuntimeException("Failed to Image::makeFromTexture")
-                Image(ptr)
-            }
-            finally {
-                reachabilityBarrier(context)
-                reachabilityBarrier(backendTexture)
-            }
-        }
-
         init {
             staticLoad()
         }
@@ -315,19 +293,11 @@ class Image internal constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInf
     }
 
     fun readPixels(dst: Bitmap): Boolean {
-        return readPixels(null, dst, 0, 0, false)
+        return readPixelsWithContextPtr(NullPointer, dst, 0, 0, false)
     }
 
     fun readPixels(dst: Bitmap, srcX: Int, srcY: Int): Boolean {
-        return readPixels(null, dst, srcX, srcY, false)
-    }
-
-    fun readPixels(context: DirectContext, dst: Bitmap): Boolean {
-        return readPixels(context, dst, 0, 0, false)
-    }
-
-    fun readPixels(context: DirectContext, dst: Bitmap, srcX: Int, srcY: Int): Boolean {
-        return readPixels(context, dst, srcX, srcY, false)
+        return readPixelsWithContextPtr(NullPointer, dst, srcX, srcY, false)
     }
 
 
@@ -370,11 +340,12 @@ class Image internal constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInf
      * @param cache   whether the pixels should be cached locally
      * @return        true if pixels are copied to dstPixels
      */
-    fun readPixels(context: DirectContext?, dst: Bitmap, srcX: Int, srcY: Int, cache: Boolean): Boolean {
+    @InternalSkikoApi
+    fun readPixelsWithContextPtr(contextPtr: NativePointer, dst: Bitmap, srcX: Int, srcY: Int, cache: Boolean): Boolean {
         return try {
             _nReadPixelsBitmap(
                 _ptr,
-                getPtr(context),
+                contextPtr,
                 getPtr(dst),
                 srcX,
                 srcY,
@@ -382,7 +353,6 @@ class Image internal constructor(ptr: NativePointer) : RefCnt(ptr), IHasImageInf
             )
         } finally {
             reachabilityBarrier(this)
-            reachabilityBarrier(context)
             reachabilityBarrier(dst)
         }
     }

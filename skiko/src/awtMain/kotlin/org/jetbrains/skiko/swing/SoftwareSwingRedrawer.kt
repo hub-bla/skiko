@@ -12,14 +12,14 @@ import java.awt.Graphics2D
  *
  * Content to draw is provided by [SkikoRenderDelegate].
  *
- * @see SwingRedrawerBase
+ * @see CoreSwingRedrawerBase
  * @see SoftwareSwingPainter
  */
 internal class SoftwareSwingRedrawer(
     swingLayerProperties: SwingLayerProperties,
     private val renderDelegate: SkikoRenderDelegate,
     analytics: SkiaLayerAnalytics
-) : SwingRedrawerBase(
+) : CoreSwingRedrawerBase(
     swingLayerProperties,
     analytics,
     GraphicsApi.SOFTWARE_FAST
@@ -32,9 +32,7 @@ internal class SoftwareSwingRedrawer(
 
     private val storage = Bitmap()
 
-    init {
-        onContextInit(null)
-    }
+    init { onContextInit() }
 
     override fun dispose() {
         super.dispose()

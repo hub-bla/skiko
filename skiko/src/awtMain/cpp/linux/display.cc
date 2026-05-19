@@ -1,6 +1,4 @@
 #include <jawt_md.h>
-#include <GL/gl.h>
-#include <GL/glx.h>
 #include "xrandr_utils.h"
 #include "jni_helpers.h"
 

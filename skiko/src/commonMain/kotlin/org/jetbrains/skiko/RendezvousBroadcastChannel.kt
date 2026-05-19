@@ -8,7 +8,8 @@ import kotlin.coroutines.*
  * Behaves like `Channel<Unit>(Channel.RENDEZVOUS)`, but with the ability to send a value to all current consumers
  * suspended in [receive].
  */
-internal class RendezvousBroadcastChannel<T> {
+@InternalSkikoApi
+class RendezvousBroadcastChannel<T> {
     private val onRequest = Channel<Unit>(Channel.CONFLATED)
     private var suspended = mutableListOf<Continuation<T>>()
     private var suspendedCopy = mutableListOf<Continuation<T>>()

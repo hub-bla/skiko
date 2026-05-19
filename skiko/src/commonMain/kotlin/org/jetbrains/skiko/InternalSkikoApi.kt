@@ -8,6 +8,7 @@ package org.jetbrains.skiko
 )
 @Target(
     AnnotationTarget.CLASS,
+    AnnotationTarget.CONSTRUCTOR,
     AnnotationTarget.FUNCTION,
     AnnotationTarget.PROPERTY,
     AnnotationTarget.PROPERTY_GETTER,
