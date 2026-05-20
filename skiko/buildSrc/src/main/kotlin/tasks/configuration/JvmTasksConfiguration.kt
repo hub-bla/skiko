@@ -33,6 +33,7 @@ import registerSkikoTask
 import runPkgConfig
 import targetId
 import tasks.GenerateSymbolsListTask
+import tasks.GenerateExtensionExportsListTask
 import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.readLines
@@ -306,6 +307,30 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
     }
 }
 
+fun SkikoProjectContext.configureGenerateExtensionExportsList(
+    targetOs: OS,
+    targetArch: Arch,
+    compileTask: TaskProvider<CompileSkikoCppTask>,
+    objcCompileTask: TaskProvider<CompileSkikoObjCTask>?
+): TaskProvider<GenerateExtensionExportsListTask> {
+    val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
+    val target = targetId(targetOs, targetArch)
+    val extensionExportsDir = project.layout.buildDirectory.dir("extension-exports-$target")
+    return project.tasks.register<GenerateExtensionExportsListTask>("generateJvmExtensionExports$suffix") {
+        this.targetOs.set(targetOs)
+        this.targetArch.set(targetArch)
+        outputDir.set(extensionExportsDir)
+
+        dependsOn(compileTask)
+        objectFiles.from(compileTask.map { it.outDir.get().asFile.walk().filter { file -> file.name.endsWith(".o") || file.name.endsWith(".obj") }.toList() })
+
+        if (objcCompileTask != null) {
+            dependsOn(objcCompileTask)
+            objectFiles.from(objcCompileTask.map { it.outDir.get().asFile.walk().filter { file -> file.name.endsWith(".o") }.toList() })
+        }
+    }
+}
+
 fun SkikoProjectContext.createLinkJvmBindings(
     targetOs: OS,
     targetArch: Arch,
@@ -313,7 +338,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
     compileTask: TaskProvider<CompileSkikoCppTask>,
     objcCompileTask: TaskProvider<CompileSkikoObjCTask>?,
     libBaseName: String = "skiko",
-    taskSuffix:String = ""
+    taskSuffix:String = "",
+    generateExtensionExports: TaskProvider<GenerateExtensionExportsListTask>? = null
 ) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings$taskSuffix", targetOs, targetArch) {
     val target = targetId(targetOs, targetArch)
     val skiaBinSubdir = "out/${buildType.id}-$target"
@@ -491,6 +517,28 @@ fun SkikoProjectContext.createLinkJvmBindings(
     }
     flags.set(listOf(*osFlags))
 
+    if (!isCore && generateExtensionExports != null) {
+        flags.addAll(project.provider {
+            val outDir = generateExtensionExports.get().outputDir.get().asFile
+            val exportedSymbols = outDir.resolve("symbols_filtered.txt")
+            if (!exportedSymbols.exists()) return@provider emptyList()
+
+            when (targetOs) {
+                OS.MacOS -> listOf("-Wl,-exported_symbols_list,${exportedSymbols.absolutePath}")
+                OS.Linux, OS.Android -> {
+                    val versionScript = outDir.resolve("symbols.map")
+                    if (versionScript.exists()) listOf("-Wl,--version-script=${versionScript.absolutePath}") else emptyList()
+                }
+                OS.Windows -> {
+                    val defFile = outDir.resolve("symbols.def")
+                    if (defFile.exists()) listOf("/DEF:${defFile.absolutePath}") else emptyList()
+                }
+                else -> emptyList()
+            }
+        })
+        dependsOn(generateExtensionExports)
+    }
+
     if (isCore) {
         flags.addAll(project.provider {
             val result = mutableListOf<String>()
@@ -632,13 +680,19 @@ fun SkikoProjectContext.createJvmJar(
     val skiaBindingsDir = registerOrGetSkiaDirProvider(os, arch)
     val compileBindings = createCompileJvmBindingsTask(os, arch, skiaBindingsDir)
     val objcCompile = if (os == OS.MacOS) createObjcCompileTask(os, arch, skiaBindingsDir) else null
+    val generateExtensionExports = if (currentExtensionModule != null) {
+        configureGenerateExtensionExportsList(os, arch, compileBindings, objcCompile)
+    } else {
+        null
+    }
     val linkBindings = createLinkJvmBindings(
         os,
         arch,
         skiaBindingsDir,
         compileBindings,
         objcCompile,
-        libBaseName
+        libBaseName,
+        generateExtensionExports = generateExtensionExports
     )
 
     if (os.isMacOs) {
@@ -662,13 +716,19 @@ fun SkikoProjectContext.createJvmJar(
         val skiaBindingsDir2 = registerOrGetSkiaDirProvider(os, altArch)
         val compileBindings2 = createCompileJvmBindingsTask(os, altArch, skiaBindingsDir2)
         val objcCompile2 = createObjcCompileTask(os, altArch, skiaBindingsDir2)
+        val generateExtensionExports2 = if (currentExtensionModule != null) {
+            configureGenerateExtensionExportsList(os, altArch, compileBindings2, objcCompile2)
+        } else {
+            null
+        }
         val linkBindings2 = createLinkJvmBindings(
             os,
             altArch,
             skiaBindingsDir2,
             compileBindings2,
             objcCompile2,
-            libBaseName
+            libBaseName,
+            generateExtensionExports = generateExtensionExports2
         )
         val maybeSign2 = maybeSignOrSealTask(os, altArch, linkBindings2)
         val nativeLib2 = maybeSign2.map { it.outputFiles.get().single { f -> f.name.endsWith(os.dynamicLibExt) } }

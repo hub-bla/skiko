@@ -27,9 +27,12 @@ import registerOrGetSkiaDirProvider
 import supportWeb
 import targetId
 import tasks.GenerateWasmExportsListTask
+import tasks.GenerateWasmSideModuleExportsListTask
+import tasks.HideWasmArchiveSymbolsTask
 import wasmImport
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.Callable
 
 private val Project.setupMjs
     get() = wasmImport("setup.mjs")
@@ -191,6 +194,30 @@ fun SkikoProjectContext.declareWasmTasks(
                 coreSkiaArchives.from(skiaBinDir.map { it.resolve(libName) })
             }
         }
+    val generateWasmSideModuleExportsList: TaskProvider<GenerateWasmSideModuleExportsListTask>? =
+        if (!isSideModule) null else project.tasks.register<GenerateWasmSideModuleExportsListTask>("generateWasmSideModuleExportsList") {
+            dependsOn(compileWasm)
+            outputDir.set(
+                project.layout.buildDirectory.dir(
+                    "wasm-side-module-exports/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}"
+                )
+            )
+            objectFiles.from(
+                compileWasm.map { it.outDir.get().asFile.walk()
+                    .filter { f -> f.name.endsWith(".o") }
+                    .toList() }
+            )
+        }
+    val hideWasmSideModuleArchiveSymbols: TaskProvider<HideWasmArchiveSymbolsTask>? =
+        if (!isSideModule) null else project.tasks.register<HideWasmArchiveSymbolsTask>("hideWasmSideModuleArchiveSymbols") {
+            dependsOn(skiaWasmDir)
+            inputArchives.from(extraLibraries)
+            outputDir.set(
+                project.layout.buildDirectory.dir(
+                    "wasm-hidden-archives/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}"
+                )
+            )
+        }
 
     fun LinkSkikoWasmTask.configureCommon(prefixPath: String) {
         dependsOn(compileWasm)
@@ -201,6 +228,12 @@ fun SkikoProjectContext.declareWasmTasks(
         if (generateWasmExportsList != null) {
             dependsOn(generateWasmExportsList)
         }
+        if (generateWasmSideModuleExportsList != null) {
+            dependsOn(generateWasmSideModuleExportsList)
+        }
+        if (hideWasmSideModuleArchiveSymbols != null) {
+            dependsOn(hideWasmSideModuleArchiveSymbols)
+        }
 
         linker.set(linkerForTarget(OS.Wasm, Arch.Wasm))
         buildTargetOS.set(OS.Wasm)
@@ -208,7 +241,10 @@ fun SkikoProjectContext.declareWasmTasks(
         buildVariant.set(buildType)
 
         libFiles = if (isSideModule) {
-            extraLibraries
+            project.files(Callable {
+                val hiddenArchiveDir = hideWasmSideModuleArchiveSymbols!!.get().outputDir.get().asFile
+                extraLibraries.files.map { hiddenArchiveDir.resolve(it.name) }
+            })
         } else {
             project.files(mergedSkiaWasmArchiveFile).plus(extraLibraries)
         }
@@ -228,7 +264,7 @@ fun SkikoProjectContext.declareWasmTasks(
         flags.addAll(buildList {
             if (isSideModule) {
                 addAll(listOf(
-                    "-s", "SIDE_MODULE=1",
+                    "-s", "SIDE_MODULE=2",
                     "-s", "USE_WEBGPU=1"
                 ))
             } else {
@@ -281,6 +317,12 @@ fun SkikoProjectContext.declareWasmTasks(
 
         if (generateWasmExportsList != null) {
             val exportedFunctionsFile = generateWasmExportsList
+                .flatMap { it.outputDir.file("exported_functions.txt") }
+            flags.add("-s")
+            flags.add(exportedFunctionsFile.map { "EXPORTED_FUNCTIONS=@${it.asFile.absolutePath}" })
+        }
+        if (generateWasmSideModuleExportsList != null) {
+            val exportedFunctionsFile = generateWasmSideModuleExportsList
                 .flatMap { it.outputDir.file("exported_functions.txt") }
             flags.add("-s")
             flags.add(exportedFunctionsFile.map { "EXPORTED_FUNCTIONS=@${it.asFile.absolutePath}" })

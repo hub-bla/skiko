@@ -94,7 +94,10 @@ enum class SkiaBuildType(
         flags = arrayOf("-DNDEBUG"),
         clangFlags = arrayOf("-std=c++2a", "-O3"),
         winCompilerFlags = arrayOf("/O2", "/std:c++20"),
-        winLinkerFlags = arrayOf("/DEBUG"),
+        // /DEBUG changes MSVC/lld-link defaults toward /OPT:NOREF and /OPT:NOICF.
+        // Re-enable dead code elimination and identical COMDAT folding for release
+        // binaries while still emitting debug information.
+        winLinkerFlags = arrayOf("/DEBUG", "/OPT:REF", "/OPT:ICF"),
     );
     override fun toString() = id
 }
