@@ -10,11 +10,14 @@ import compilerForTarget
 import linkerForTarget
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.getValue
 import org.gradle.kotlin.dsl.getting
+import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.provideDelegate
+import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.registering
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsTargetDsl
@@ -22,6 +25,7 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import supportWeb
 import targetId
+import tasks.GenerateWasmExportsListTask
 import wasmImport
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -77,6 +81,8 @@ fun SkikoProjectContext.declareWasmTasks(
                 add("-fno-rtti")
                 add("-fno-exceptions")
                 add("-fPIC")
+                add("-fvisibility=hidden")
+                add("-fvisibility-inlines-hidden")
                 if (skiko.isWasmBuildWithProfiling) add("--profiling")
             }
         )
@@ -168,11 +174,32 @@ fun SkikoProjectContext.declareWasmTasks(
         }
     }
 
+    val generateWasmExportsList: TaskProvider<GenerateWasmExportsListTask>? =
+        if (isSideModule) null else project.tasks.register<GenerateWasmExportsListTask>("generateWasmExportsList") {
+            dependsOn(compileWasm)
+            outputDir.set(
+                project.layout.buildDirectory.dir(
+                    "wasm-exports/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}"
+                )
+            )
+            coreObjectFiles.from(
+                compileWasm.map { it.outDir.get().asFile.walk()
+                    .filter { f -> f.name.endsWith(".o") }
+                    .toList() }
+            )
+            mainModuleSkiaLibraries.forEach { libName ->
+                coreSkiaArchives.from(skiaBinDir.map { it.resolve(libName) })
+            }
+        }
+
     fun LinkSkikoWasmTask.configureCommon(prefixPath: String) {
         dependsOn(compileWasm)
         dependsOn(skiaWasmDir)
         if (mergeSkiaWasmMainModuleArchive != null) {
             dependsOn(mergeSkiaWasmMainModuleArchive)
+        }
+        if (generateWasmExportsList != null) {
+            dependsOn(generateWasmExportsList)
         }
 
         linker.set(linkerForTarget(OS.Wasm, Arch.Wasm))
@@ -205,15 +232,12 @@ fun SkikoProjectContext.declareWasmTasks(
                 ))
             } else {
                 addAll(listOf(
-                    // TODO: switch MAIN_MODULE to =2, since =1 exports everything by default
-                    // should significantly reduce size
-                    "-s", "MAIN_MODULE=1",
+                    "-s", "MAIN_MODULE=2",
                     "-s", "MAX_WEBGL_VERSION=2",
                     "-s", "MIN_WEBGL_VERSION=2",
                     "-s", "MODULARIZE=1",
                     "-s", "EXPORT_NAME=loadSkikoWASM",
-                    "-s", "EXPORT_ALL=1",
-                    "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports]\"",
+                    "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports, loadDynamicLibrary, LDSO, locateFile, HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAPF64]\"",
                     "--bind",
                 ))
             }
@@ -232,6 +256,13 @@ fun SkikoProjectContext.declareWasmTasks(
 
             if (skiko.isWasmBuildWithProfiling) add("--profiling")
         })
+
+        if (generateWasmExportsList != null) {
+            val exportedFunctionsFile = generateWasmExportsList
+                .flatMap { it.outputDir.file("exported_functions.txt") }
+            flags.add("-s")
+            flags.add(exportedFunctionsFile.map { "EXPORTED_FUNCTIONS=@${it.asFile.absolutePath}" })
+        }
 
         doLast {
             // skiko.mjs is referenced in karma.config.d/*/config.js
@@ -308,6 +339,41 @@ fun SkikoProjectContext.declareWasmTasks(
         archiveBaseName.set("skiko-wasm")
         doLast {
             println("Wasm and JS at: ${archiveFile.get().asFile.absolutePath}")
+        }
+    }
+}
+
+/**
+ * Wires every Skiko extension WASM side module (currently only `:skiko-skottie`)
+ * into the core's `generateWasmExportsList` task as additional input
+ * (object files + Skia static archives owned by the side module).
+ *
+ * Must be called from the core (`:skiko`) project after evaluation, so the
+ * extension subprojects' `compileWasm` task is already registered.
+ */
+fun SkikoProjectContext.configureGenerateWasmExportsList() {
+    val task = project.tasks.named<GenerateWasmExportsListTask>("generateWasmExportsList")
+
+    extensionModules.forEach { module ->
+        val moduleProject = project.findProject(module.projectPath) ?: return@forEach
+        // Force the side-module subproject to be configured before we look up its
+        // `compileWasm` task. Otherwise, the task may not yet be registered.
+        project.evaluationDependsOn(module.projectPath)
+        val moduleCompile = moduleProject.tasks.named<CompileSkikoCppTask>("compileWasm")
+
+        task.configure {
+            dependsOn(moduleCompile)
+            moduleObjectFiles.from(
+                moduleCompile.map { it.outDir.get().asFile.walk()
+                    .filter { f -> f.name.endsWith(".o") }
+                    .toList() }
+            )
+
+            val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+            val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
+            module.ownedStaticLibBaseNames.forEach { baseName ->
+                moduleSkiaArchives.from(skiaBinDir.map { it.resolve("lib$baseName.wasm.a") })
+            }
         }
     }
 }

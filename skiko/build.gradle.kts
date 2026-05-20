@@ -332,6 +332,12 @@ afterEvaluate {
     }
 }
 
+if (supportWeb) {
+    afterEvaluate {
+        skikoProjectContext.configureGenerateWasmExportsList()
+    }
+}
+
 if (supportAwt) {
     afterEvaluate {
         fun configureSymbolsFor(os: OS, arch: Arch) {
