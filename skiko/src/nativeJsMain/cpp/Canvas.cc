@@ -5,6 +5,7 @@
 #include "SkVertices.h"
 #include "hb.h"
 #include "common.h"
+#include "PictureRecorderTrace.h"
 
 static void deleteCanvas(SkCanvas* canvas) {
     // std::cout << "Deleting [SkCanvas " << canvas << "]" << std::endl;
@@ -146,6 +147,7 @@ SKIKO_EXPORT void org_jetbrains_skia_Canvas__1nDrawPicture
   (KNativePointer ptr, KNativePointer picturePtr, KFloat* matrixArr, KNativePointer paintPtr) {
     SkCanvas* canvas   = reinterpret_cast<SkCanvas*>   ((ptr));
     SkPicture* picture = reinterpret_cast<SkPicture*>((picturePtr));
+    skikoRecordPictureDraw(canvas, picture);
     std::unique_ptr<SkMatrix> matrix = skMatrix(matrixArr);
     SkPaint* paint     = reinterpret_cast<SkPaint*>    ((paintPtr));
     canvas->drawPicture(picture, matrix.get(), paint);

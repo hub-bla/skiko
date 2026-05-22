@@ -2,8 +2,136 @@
 #include <jni.h>
 #include "interop.hh"
 #include "SkData.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkDrawable.h"
 #include "SkPicture.h"
 #include "SkShader.h"
+
+namespace {
+
+class ChunkRecordingCanvas final : public SkCanvas {
+public:
+    ChunkRecordingCanvas(SkCanvas* target, int operationStartIndex, int operationEndExclusive)
+        : SkCanvas()
+        , fTarget(target)
+        , fOperationStartIndex(operationStartIndex)
+        , fOperationEndExclusive(operationEndExclusive) {}
+
+    void finish() {
+        fTarget->restoreToCount(1);
+    }
+
+protected:
+    void willSave() override {
+        recordStatefulOperation([this] { fTarget->save(); });
+    }
+
+    SkCanvas::SaveLayerStrategy getSaveLayerStrategy(const SkCanvas::SaveLayerRec& rec) override {
+        recordStatefulOperation([this, &rec] { fTarget->saveLayer(rec); }, false);
+        return SkCanvas::kNoLayer_SaveLayerStrategy;
+    }
+
+    void willRestore() override {
+        recordStatefulOperation([this] {
+            if (fTarget->getSaveCount() > 1) {
+                fTarget->restore();
+            }
+        });
+    }
+
+    void didConcat44(const SkM44& matrix) override {
+        recordStatefulOperation([this, &matrix] { fTarget->concat(matrix); });
+    }
+
+    void didSetM44(const SkM44& matrix) override {
+        recordStatefulOperation([this, &matrix] { fTarget->setMatrix(matrix); });
+    }
+
+    void onClipRect(const SkRect& rect, SkClipOp op, SkCanvas::ClipEdgeStyle edgeStyle) override {
+        recordStatefulOperation([this, &rect, op, edgeStyle] { fTarget->clipRect(rect, op, edgeStyle); });
+    }
+
+    void onClipRRect(const SkRRect& rrect, SkClipOp op, SkCanvas::ClipEdgeStyle edgeStyle) override {
+        recordStatefulOperation([this, &rrect, op, edgeStyle] { fTarget->clipRRect(rrect, op, edgeStyle); });
+    }
+
+    void onClipPath(const SkPath& path, SkClipOp op, SkCanvas::ClipEdgeStyle edgeStyle) override {
+        recordStatefulOperation([this, &path, op, edgeStyle] { fTarget->clipPath(path, op, edgeStyle); });
+    }
+
+    void onDrawPaint(const SkPaint& paint) override {
+        recordDrawOperation([this, &paint] { fTarget->drawPaint(paint); });
+    }
+
+    void onDrawRect(const SkRect& rect, const SkPaint& paint) override {
+        recordDrawOperation([this, &rect, &paint] { fTarget->drawRect(rect, paint); });
+    }
+
+    void onDrawRRect(const SkRRect& rrect, const SkPaint& paint) override {
+        recordDrawOperation([this, &rrect, &paint] { fTarget->drawRRect(rrect, paint); });
+    }
+
+    void onDrawPath(const SkPath& path, const SkPaint& paint) override {
+        recordDrawOperation([this, &path, &paint] { fTarget->drawPath(path, paint); });
+    }
+
+    void onDrawArc(const SkRect& oval, SkScalar startAngle, SkScalar sweepAngle, bool useCenter, const SkPaint& paint) override {
+        recordDrawOperation([this, &oval, startAngle, sweepAngle, useCenter, &paint] {
+            fTarget->drawArc(oval, startAngle, sweepAngle, useCenter, paint);
+        });
+    }
+
+    void onDrawDrawable(SkDrawable* drawable, const SkMatrix* matrix) override {
+        const int currentIndex = fCurrentOperationIndex++;
+        if (currentIndex >= fOperationEndExclusive) {
+            return;
+        }
+        if (drawable == nullptr) {
+            if (currentIndex >= fOperationStartIndex) {
+                fTarget->drawDrawable(drawable, matrix);
+            }
+            return;
+        }
+
+        // Match the recursive drawable trace used by chunk planning: flatten drawable-backed
+        // content into the extracted picture so chunk op ranges stay aligned with traced ops and
+        // do not retain live drawable dependencies.
+        drawable->draw(this, matrix);
+    }
+
+private:
+    template <typename Callback>
+    void recordStatefulOperation(Callback callback, bool supportedInPrefix = true) {
+        const int currentIndex = fCurrentOperationIndex++;
+        if (currentIndex >= fOperationEndExclusive) {
+            return;
+        }
+        if (currentIndex < fOperationStartIndex) {
+            if (supportedInPrefix) {
+                callback();
+            }
+            return;
+        }
+        callback();
+    }
+
+    template <typename Callback>
+    void recordDrawOperation(Callback callback) {
+        const int currentIndex = fCurrentOperationIndex++;
+        if (currentIndex < fOperationStartIndex || currentIndex >= fOperationEndExclusive) {
+            return;
+        }
+        callback();
+    }
+
+    SkCanvas* fTarget;
+    int fOperationStartIndex;
+    int fOperationEndExclusive;
+    int fCurrentOperationIndex = 0;
+};
+
+} // namespace
 
 extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_PictureKt_Picture_1nMakeFromData
   (JNIEnv* env, jclass jclass, jlong dataPtr) {
@@ -92,4 +220,19 @@ extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_PictureKt__1nMakeShad
         shader = instance->makeShader(tmx, tmy, filterMode, localMatrix.get(), nullptr).release();
     }
     return reinterpret_cast<jlong>(shader);
+}
+
+extern "C" JNIEXPORT jlong JNICALL Java_org_jetbrains_skia_PictureKt__1nMakeChunkPicture
+  (JNIEnv* env, jclass jclass, jlong ptr, jint operationStartIndex, jint operationEndExclusive) {
+    SkPicture* instance = reinterpret_cast<SkPicture*>(static_cast<uintptr_t>(ptr));
+    if (operationStartIndex < 0 || operationEndExclusive <= operationStartIndex) {
+        return 0;
+    }
+
+    SkPictureRecorder recorder;
+    SkCanvas* recordingCanvas = recorder.beginRecording(instance->cullRect());
+    ChunkRecordingCanvas chunkCanvas(recordingCanvas, operationStartIndex, operationEndExclusive);
+    instance->playback(&chunkCanvas, nullptr);
+    chunkCanvas.finish();
+    return reinterpret_cast<jlong>(recorder.finishRecordingAsPicture().release());
 }

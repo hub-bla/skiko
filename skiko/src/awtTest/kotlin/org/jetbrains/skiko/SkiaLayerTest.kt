@@ -17,6 +17,7 @@ import org.jetbrains.skiko.redrawer.MetalVSyncer
 import org.jetbrains.skiko.redrawer.Redrawer
 import org.jetbrains.skiko.redrawer.defaultIsTransparentBackgroundSupported
 import org.jetbrains.skiko.swing.SkiaSwingLayer
+import org.jetbrains.skiko.internal.fastForEach
 import org.jetbrains.skiko.util.ScreenshotTestRule
 import org.jetbrains.skiko.util.UiTestScope
 import org.jetbrains.skiko.util.UiTestWindow
@@ -43,6 +44,7 @@ import javax.swing.WindowConstants
 import kotlin.concurrent.thread
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -1424,6 +1426,738 @@ class SkiaLayerTest {
         } finally {
             window.close()
         }
+    }
+
+    @Test
+    fun `picture trace formatter summarizes drawable hotspots`() {
+        val log = formatPictureTraceLog(
+            owner = "layer",
+            width = 128,
+            height = 64,
+            operations = listOf(
+                PictureRecordingOperation(PictureRecordingOperationKind.DRAW_PAINT, 0),
+                PictureRecordingOperation(PictureRecordingOperationKind.DRAW_DRAWABLE, 0),
+                PictureRecordingOperation(PictureRecordingOperationKind.SAVE_LAYER, 1),
+                PictureRecordingOperation(PictureRecordingOperationKind.DRAW_RECT, 1),
+                PictureRecordingOperation(PictureRecordingOperationKind.DRAW_RECT, 1),
+                PictureRecordingOperation(PictureRecordingOperationKind.RESTORE, 0)
+            ),
+            pictures = emptyList(),
+            drawables = listOf(
+                PictureRecordingDrawable(PictureRecordingDrawableKind.RENDER_NODE, 1, 0, IntRange.EMPTY),
+                PictureRecordingDrawable(PictureRecordingDrawableKind.UNKNOWN, 2, 1, 2..4)
+            )
+        )
+
+        assertTrue(log.contains("totalOps=6"))
+        assertTrue(log.contains("drawables: total=2, nonEmpty=1, wrappers=1"))
+        assertTrue(log.contains("graph: roots=1, renderNodes=1, payloadLeaves=1, wrappers=1, maxDrawableDepth=1"))
+        assertTrue(log.contains("wrapperVsLeaf={RENDER_NODE:wrapper=1, UNKNOWN:leaf=1}"))
+        assertTrue(log.contains("UNKNOWN#2@d1 2..4 (3 ops) -> DRAW_RECT=2, SAVE_LAYER=1"))
+        assertTrue(log.contains("UNKNOWN#2@d1 subtree=2..4 (3 ops), direct=3, leaves=1, children=0"))
+        assertTrue(log.contains("chunkPlan(target=1): chunk[0] 0..5 (6 ops) nodes=2 reason=SUBTREE"))
+        assertTrue(log.contains("standaloneChunks: cacheable=1/1, cacheableIndices=[0], rejected={none}"))
+    }
+
+    @Test
+    fun `picture trace formatter keeps empty drawable hotspot summary readable`() {
+        val log = formatPictureTraceLog(
+            owner = "layer",
+            width = 32,
+            height = 32,
+            operations = listOf(PictureRecordingOperation(PictureRecordingOperationKind.DRAW_DRAWABLE, 0)),
+            pictures = emptyList(),
+            drawables = listOf(
+                PictureRecordingDrawable(PictureRecordingDrawableKind.RENDER_NODE, 7, 0, IntRange.EMPTY)
+            )
+        )
+
+        assertTrue(log.contains("drawables: total=1, nonEmpty=0, wrappers=1"))
+        assertTrue(log.contains("graph: roots=1, renderNodes=1, payloadLeaves=0, wrappers=1, maxDrawableDepth=0"))
+        assertTrue(log.contains("subtreeHotspots: none"))
+        assertTrue(log.contains("drawableHotspots: none"))
+        assertTrue(log.contains("chunkPlan(target=1): chunk[0] 0..0 (1 ops) nodes=0 reason=SUBTREE -> DRAW_DRAWABLE=1"))
+        assertTrue(log.contains("standaloneChunks: cacheable=0/1, cacheableIndices=[], rejected={chunk[0] unsupported drawDrawable content}"))
+    }
+
+    @Test
+    fun `picture holder playback uses chunk pictures when all chunks are available`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint().apply { color = Color.RED.rgb })
+        canvas.drawRect(Rect(16f, 16f, 32f, 32f), Paint().apply { color = Color.BLUE.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val chunkPictures = picture.makeChunkPictures(
+            listOf(
+                PictureRecordingChunkCandidate(
+                    orderedIndex = 0,
+                    nodeIndices = emptyList(),
+                    operationIndexRange = 0..0,
+                    operationCount = 1,
+                    stateSetupOperationKinds = emptyList(),
+                    requiresStateSetup = false,
+                    hasUnsupportedPictureState = false,
+                    isSafeStandalonePicture = true,
+                    operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                    dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                    reason = PictureRecordingChunkCandidateReason.LEAF
+                ),
+                PictureRecordingChunkCandidate(
+                    orderedIndex = 1,
+                    nodeIndices = emptyList(),
+                    operationIndexRange = 1..1,
+                    operationCount = 1,
+                    stateSetupOperationKinds = emptyList(),
+                    requiresStateSetup = false,
+                    hasUnsupportedPictureState = false,
+                    isSafeStandalonePicture = true,
+                    operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                    dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                    reason = PictureRecordingChunkCandidateReason.LEAF
+                )
+            )
+        )
+
+        val holder = createPictureHolderForPlayback(picture, 32, 32, chunkPictures)
+        val surface = Surface.makeRasterN32Premul(32, 32)
+        holder.replayPictures.fastForEach(surface.canvas::drawPicture)
+        val bitmap = Bitmap.makeFromImage(surface.makeImageSnapshot())
+
+        assertEquals(2, holder.replayPictures.size)
+        assertEquals(org.jetbrains.skia.Color.RED, bitmap.getColor(8, 8))
+        assertEquals(org.jetbrains.skia.Color.BLUE, bitmap.getColor(24, 24))
+
+        holder.close()
+    }
+
+    @Test
+    fun `picture holder playback falls back to root picture when any chunk is unavailable`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 32f, 32f), Paint().apply { color = Color.GREEN.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val holder = createPictureHolderForPlayback(
+            picture = picture,
+            width = 32,
+            height = 32,
+            chunkPictures = listOf(
+                PictureRecordingChunkPicture(
+                    candidate = PictureRecordingChunkCandidate(
+                        orderedIndex = 0,
+                        nodeIndices = emptyList(),
+                        operationIndexRange = 0..0,
+                        operationCount = 1,
+                        stateSetupOperationKinds = emptyList(),
+                        requiresStateSetup = false,
+                        hasUnsupportedPictureState = true,
+                        isSafeStandalonePicture = false,
+                        operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                        dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                        reason = PictureRecordingChunkCandidateReason.LEAF
+                    ),
+                    picture = null,
+                    failureReason = "unsupported inherited saveLayer state"
+                )
+            )
+        )
+        val surface = Surface.makeRasterN32Premul(32, 32)
+        holder.replayPictures.fastForEach(surface.canvas::drawPicture)
+        val bitmap = Bitmap.makeFromImage(surface.makeImageSnapshot())
+
+        assertEquals(1, holder.replayPictures.size)
+        assertTrue(holder.replayPictures.single() === picture)
+        assertEquals(org.jetbrains.skia.Color.GREEN, bitmap.getColor(16, 16))
+
+        holder.close()
+    }
+
+    @Test
+    fun `picture holder playback falls back to root picture when chunk replay degenerates to one chunk`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 32f, 32f), Paint().apply { color = Color.GREEN.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val chunkPicture = picture.makeChunkPictures(
+            listOf(
+                PictureRecordingChunkCandidate(
+                    orderedIndex = 0,
+                    nodeIndices = emptyList(),
+                    operationIndexRange = 0..0,
+                    operationCount = 1,
+                    stateSetupOperationKinds = emptyList(),
+                    requiresStateSetup = false,
+                    hasUnsupportedPictureState = false,
+                    isSafeStandalonePicture = true,
+                    operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                    dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                    reason = PictureRecordingChunkCandidateReason.SUBTREE
+                )
+            )
+        ).single()
+
+        val holder = createPictureHolderForPlayback(
+            picture = picture,
+            width = 32,
+            height = 32,
+            chunkPictures = listOf(chunkPicture)
+        )
+        val surface = Surface.makeRasterN32Premul(32, 32)
+        holder.replayPictures.fastForEach(surface.canvas::drawPicture)
+        val bitmap = Bitmap.makeFromImage(surface.makeImageSnapshot())
+
+        assertEquals(1, holder.replayPictures.size)
+        assertTrue(holder.replayPictures.single() === picture)
+        assertEquals(org.jetbrains.skia.Color.GREEN, bitmap.getColor(16, 16))
+
+        holder.close()
+    }
+
+    @Test
+    fun `single chunk reuse result does not become active cache replay`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 32f, 32f), Paint().apply { color = Color.GREEN.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val candidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val footprint = PictureRecordingChunkFootprint(
+            fingerprint = 1L,
+            orderedIndex = 0,
+            reason = PictureRecordingChunkCandidateReason.SUBTREE,
+            nodeKinds = emptyList(),
+            wrapperPattern = emptyList(),
+            payloadLeafPattern = emptyList(),
+            relativeDepthProfile = emptyList(),
+            directOpCounts = emptyList(),
+            subtreeOpCounts = emptyList(),
+            subtreeLeafCounts = emptyList(),
+            subtreeNodeCounts = emptyList(),
+            operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false
+        )
+
+        val reuseResult = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(candidate),
+            footprints = listOf(footprint),
+            previousCacheEntries = emptyList()
+        )
+        val holder = createPictureHolderForPlayback(
+            picture = picture,
+            width = 32,
+            height = 32,
+            chunkPictures = reuseResult.chunkPictures
+        )
+
+        assertEquals(0, reuseResult.reusedChunkCount)
+        assertEquals(1, holder.replayPictures.size)
+        assertTrue(holder.replayPictures.single() === picture)
+        assertFalse(shouldUseChunkReplay(reuseResult.chunkPictures))
+
+        holder.close()
+    }
+
+    @Test
+    fun `chunk playback reuse result refuses drawable-backed standalone chunks`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 32f, 32f), Paint().apply { color = Color.GREEN.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val candidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val footprint = PictureRecordingChunkFootprint(
+            fingerprint = 1L,
+            orderedIndex = 0,
+            reason = PictureRecordingChunkCandidateReason.SUBTREE,
+            nodeKinds = emptyList(),
+            wrapperPattern = emptyList(),
+            payloadLeafPattern = emptyList(),
+            relativeDepthProfile = emptyList(),
+            directOpCounts = emptyList(),
+            subtreeOpCounts = emptyList(),
+            subtreeLeafCounts = emptyList(),
+            subtreeNodeCounts = emptyList(),
+            operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false
+        )
+        val cachedPicture = picture.makeChunkPictures(
+            listOf(candidate.copy(operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1), dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT)))
+        ).single().picture!!
+
+        val reuseResult = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(candidate),
+            footprints = listOf(footprint),
+            previousCacheEntries = listOf(PictureRecordingChunkCacheEntry(0, 1L, cachedPicture))
+        )
+        val holder = createPictureHolderForPlayback(
+            picture = picture,
+            width = 32,
+            height = 32,
+            chunkPictures = reuseResult.chunkPictures
+        )
+
+        assertEquals(0, reuseResult.reusedChunkCount)
+        assertNull(reuseResult.chunkPictures.single().picture)
+        assertFalse(shouldUseChunkReplay(reuseResult.chunkPictures))
+        assertTrue(holder.replayPictures.single() === picture)
+
+        holder.close()
+    }
+
+    @Test
+    fun `root fallback retains safe multi-chunk cache entries for future frames`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint().apply { color = Color.RED.rgb })
+        canvas.drawRect(Rect(16f, 16f, 32f, 32f), Paint().apply { color = Color.BLUE.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val safeCandidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val unsupportedCandidate = PictureRecordingChunkCandidate(
+            orderedIndex = 1,
+            nodeIndices = emptyList(),
+            operationIndexRange = 1..1,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val footprints = listOf(
+            PictureRecordingChunkFootprint(
+                fingerprint = 11L,
+                orderedIndex = 0,
+                reason = PictureRecordingChunkCandidateReason.SUBTREE,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            ),
+            PictureRecordingChunkFootprint(
+                fingerprint = 22L,
+                orderedIndex = 1,
+                reason = PictureRecordingChunkCandidateReason.SUBTREE,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            )
+        )
+
+        val result = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(safeCandidate, unsupportedCandidate),
+            footprints = footprints,
+            previousCacheEntries = emptyList()
+        )
+
+        assertFalse(shouldUseChunkReplay(result.chunkPictures))
+        assertEquals(1, result.cacheEntries.size)
+        assertEquals(1, selectNextChunkCacheEntries(result, usingChunkReplay = false).size)
+        assertTrue(selectNextChunkCacheEntries(result, usingChunkReplay = false).single().picture === result.cacheEntries.single().picture)
+
+        picture.close()
+        result.cacheEntries.map(PictureRecordingChunkCacheEntry::picture)
+            .distinctBy { it._ptr }
+            .forEach { cachedPicture ->
+                if (!cachedPicture.isClosed) {
+                    cachedPicture.close()
+                }
+            }
+    }
+
+    @Test
+    fun `chunk playback reuse result matches retained cache entries by ordered chunk index`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 48f, 16f))
+        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint().apply { color = Color.RED.rgb })
+        canvas.drawRect(Rect(16f, 0f, 32f, 16f), Paint().apply { color = Color.GREEN.rgb })
+        canvas.drawRect(Rect(32f, 0f, 48f, 16f), Paint().apply { color = Color.BLUE.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val unsupportedCandidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val reusableCandidate = PictureRecordingChunkCandidate(
+            orderedIndex = 1,
+            nodeIndices = emptyList(),
+            operationIndexRange = 1..1,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val rebuiltCandidate = reusableCandidate.copy(orderedIndex = 2, operationIndexRange = 2..2)
+        val footprints = listOf(
+            PictureRecordingChunkFootprint(
+                fingerprint = 10L,
+                orderedIndex = 0,
+                reason = PictureRecordingChunkCandidateReason.SUBTREE,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_DRAWABLE to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_DRAWABLE),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            ),
+            PictureRecordingChunkFootprint(
+                fingerprint = 20L,
+                orderedIndex = 1,
+                reason = PictureRecordingChunkCandidateReason.SUBTREE,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            ),
+            PictureRecordingChunkFootprint(
+                fingerprint = 30L,
+                orderedIndex = 2,
+                reason = PictureRecordingChunkCandidateReason.SUBTREE,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            )
+        )
+        val cachedPicture = picture.makeChunkPictures(listOf(reusableCandidate)).single().picture!!
+
+        val result = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(unsupportedCandidate, reusableCandidate, rebuiltCandidate),
+            footprints = footprints,
+            previousCacheEntries = listOf(PictureRecordingChunkCacheEntry(1, 20L, cachedPicture))
+        )
+
+        assertEquals(1, result.reusedChunkCount)
+        assertEquals(listOf(1), result.reusedChunkIndices)
+        assertTrue(result.chunkPictures[1].picture === cachedPicture)
+        assertNull(result.chunkPictures[0].picture)
+        assertNotNull(result.chunkPictures[2].picture)
+
+        picture.close()
+        result.chunkPictures.mapNotNull { it.picture }
+            .distinctBy { it._ptr }
+            .forEach { chunkPicture ->
+                if (!chunkPicture.isClosed) {
+                    chunkPicture.close()
+                }
+            }
+    }
+
+    @Test
+    fun `single chunk root fallback does not retain pointless cache entries`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 32f, 32f), Paint().apply { color = Color.GREEN.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val candidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            reason = PictureRecordingChunkCandidateReason.SUBTREE
+        )
+        val footprint = PictureRecordingChunkFootprint(
+            fingerprint = 1L,
+            orderedIndex = 0,
+            reason = PictureRecordingChunkCandidateReason.SUBTREE,
+            nodeKinds = emptyList(),
+            wrapperPattern = emptyList(),
+            payloadLeafPattern = emptyList(),
+            relativeDepthProfile = emptyList(),
+            directOpCounts = emptyList(),
+            subtreeOpCounts = emptyList(),
+            subtreeLeafCounts = emptyList(),
+            subtreeNodeCounts = emptyList(),
+            operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false
+        )
+
+        val result = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(candidate),
+            footprints = listOf(footprint),
+            previousCacheEntries = emptyList()
+        )
+
+        assertFalse(shouldUseChunkReplay(result.chunkPictures))
+        assertTrue(selectNextChunkCacheEntries(result, usingChunkReplay = false).isEmpty())
+
+        picture.close()
+        result.cacheEntries.map(PictureRecordingChunkCacheEntry::picture)
+            .distinctBy { it._ptr }
+            .forEach { cachedPicture ->
+                if (!cachedPicture.isClosed) {
+                    cachedPicture.close()
+                }
+            }
+    }
+
+    @Test
+    fun `chunk playback reuse result keeps exact-match cached pictures and rebuilds mismatches`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint().apply { color = Color.RED.rgb })
+        canvas.drawRect(Rect(16f, 16f, 32f, 32f), Paint().apply { color = Color.BLUE.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+
+        val firstCandidate = PictureRecordingChunkCandidate(
+            orderedIndex = 0,
+            nodeIndices = emptyList(),
+            operationIndexRange = 0..0,
+            operationCount = 1,
+            stateSetupOperationKinds = emptyList(),
+            requiresStateSetup = false,
+            hasUnsupportedPictureState = false,
+            isSafeStandalonePicture = true,
+            operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+            dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+            reason = PictureRecordingChunkCandidateReason.LEAF
+        )
+        val secondCandidate = firstCandidate.copy(orderedIndex = 1, operationIndexRange = 1..1)
+        val baselineFootprints = listOf(
+            PictureRecordingChunkFootprint(
+                fingerprint = 11L,
+                orderedIndex = 0,
+                reason = PictureRecordingChunkCandidateReason.LEAF,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            ),
+            PictureRecordingChunkFootprint(
+                fingerprint = 22L,
+                orderedIndex = 1,
+                reason = PictureRecordingChunkCandidateReason.LEAF,
+                nodeKinds = emptyList(),
+                wrapperPattern = emptyList(),
+                payloadLeafPattern = emptyList(),
+                relativeDepthProfile = emptyList(),
+                directOpCounts = emptyList(),
+                subtreeOpCounts = emptyList(),
+                subtreeLeafCounts = emptyList(),
+                subtreeNodeCounts = emptyList(),
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                stateSetupOperationKinds = emptyList(),
+                requiresStateSetup = false,
+                hasUnsupportedPictureState = false
+            )
+        )
+        val cachedPictures = picture.makeChunkPictures(listOf(firstCandidate, secondCandidate))
+        val cachedEntries = listOf(
+            PictureRecordingChunkCacheEntry(0, baselineFootprints[0].fingerprint, cachedPictures[0].picture!!),
+            PictureRecordingChunkCacheEntry(1, baselineFootprints[1].fingerprint, cachedPictures[1].picture!!)
+        )
+        val nextFootprints = listOf(
+            baselineFootprints[0],
+            baselineFootprints[1].copy(
+                fingerprint = 33L,
+                operationKindSignature = listOf(PictureRecordingOperationKind.DRAW_PATH)
+            )
+        )
+
+        val result = buildChunkPlaybackReuseResult(
+            picture = picture,
+            candidates = listOf(firstCandidate, secondCandidate),
+            footprints = nextFootprints,
+            previousCacheEntries = cachedEntries
+        )
+
+        assertEquals(1, result.reusedChunkCount)
+        assertTrue(result.chunkPictures[0].picture === cachedEntries[0].picture)
+        assertTrue(result.chunkPictures[1].picture !== cachedEntries[1].picture)
+        assertEquals(2, result.cacheEntries.size)
+
+        picture.close()
+        cachedEntries.forEach { it.picture.close() }
+        result.chunkPictures.mapNotNull { it.picture }
+            .distinctBy { it._ptr }
+            .forEach { chunkPicture ->
+                if (!chunkPicture.isClosed) {
+                    chunkPicture.close()
+                }
+            }
+    }
+
+    @Test
+    fun `picture holder close releases root picture even when replaying chunk pictures`() {
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(Rect(0f, 0f, 32f, 32f))
+        canvas.drawRect(Rect(0f, 0f, 16f, 16f), Paint().apply { color = Color.RED.rgb })
+        canvas.drawRect(Rect(16f, 16f, 32f, 32f), Paint().apply { color = Color.BLUE.rgb })
+        val picture = recorder.finishRecordingAsPicture()
+        val chunkPictures = picture.makeChunkPictures(
+            listOf(
+                PictureRecordingChunkCandidate(
+                    orderedIndex = 0,
+                    nodeIndices = emptyList(),
+                    operationIndexRange = 0..0,
+                    operationCount = 1,
+                    stateSetupOperationKinds = emptyList(),
+                    requiresStateSetup = false,
+                    hasUnsupportedPictureState = false,
+                    isSafeStandalonePicture = true,
+                    operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                    dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                    reason = PictureRecordingChunkCandidateReason.LEAF
+                ),
+                PictureRecordingChunkCandidate(
+                    orderedIndex = 1,
+                    nodeIndices = emptyList(),
+                    operationIndexRange = 1..1,
+                    operationCount = 1,
+                    stateSetupOperationKinds = emptyList(),
+                    requiresStateSetup = false,
+                    hasUnsupportedPictureState = false,
+                    isSafeStandalonePicture = true,
+                    operationCounts = mapOf(PictureRecordingOperationKind.DRAW_RECT to 1),
+                    dominantOperationKinds = listOf(PictureRecordingOperationKind.DRAW_RECT),
+                    reason = PictureRecordingChunkCandidateReason.LEAF
+                )
+            )
+        )
+
+        val holder = createPictureHolderForPlayback(picture, 32, 32, chunkPictures)
+        holder.close()
+
+        assertTrue(picture.isClosed)
+        assertTrue(chunkPictures.all { it.picture?.isClosed == true })
     }
 
     private class RectRenderer(

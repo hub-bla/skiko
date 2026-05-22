@@ -87,6 +87,50 @@ class PictureRecorder internal constructor(ptr: NativePointer) : Managed(ptr, _F
     }
 
     /**
+     * Returns a recording canvas that also collects high-level operation kinds and save/restore depth.
+     *
+     * Recorded operations can be retrieved through [recordedOperations] after drawing has happened.
+     */
+    fun beginRecordingWithOperationTrace(bounds: Rect, bbh: BBHFactory? = null): Canvas {
+        return beginRecordingWithOperationTrace(
+            bounds.left,
+            bounds.top,
+            bounds.right,
+            bounds.bottom,
+            bbh
+        )
+    }
+
+    /**
+     * Returns a recording canvas that also collects high-level operation kinds and save/restore depth.
+     *
+     * Recorded operations can be retrieved through [recordedOperations] after drawing has happened.
+     */
+    fun beginRecordingWithOperationTrace(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        bbh: BBHFactory? = null
+    ): Canvas {
+        return try {
+            Stats.onNativeCall()
+            Canvas(
+                _nBeginRecordingWithOperationTrace(
+                    _ptr,
+                    left,
+                    top,
+                    right,
+                    bottom,
+                    getPtr(bbh)
+                ), false, this
+            )
+        } finally {
+            reachabilityBarrier(this)
+        }
+    }
+
+    /**
      * @return  the recording canvas if one is active, or null if recording is not active.
      */
     val recordingCanvas: Canvas?
@@ -97,6 +141,104 @@ class PictureRecorder internal constructor(ptr: NativePointer) : Managed(ptr, _F
         } finally {
             reachabilityBarrier(this)
         }
+
+    /**
+     * Returns operations collected by the most recent tracing recording session started with
+     * [beginRecordingWithOperationTrace].
+     */
+    val recordedOperations: List<PictureRecordingOperation>
+        get() = try {
+            Stats.onNativeCall()
+            val count = _nGetRecordedOperationCount(_ptr)
+            if (count == 0) {
+                emptyList()
+            } else {
+                val repr = withResult(IntArray(count * 2)) {
+                    _nGetRecordedOperations(_ptr, it)
+                }
+                List(count) { index ->
+                    val offset = index * 2
+                    PictureRecordingOperation(
+                        kind = PictureRecordingOperationKind.entries[repr[offset]],
+                        depth = repr[offset + 1]
+                    )
+                }
+            }
+        } finally {
+            reachabilityBarrier(this)
+        }
+
+    /**
+     * Returns explicit [Canvas.drawPicture] calls collected by the most recent tracing recording
+     * session started with [beginRecordingWithOperationTrace].
+     */
+    val recordedPictures: List<PictureRecordingPicture>
+        get() = try {
+            Stats.onNativeCall()
+            val count = _nGetRecordedPictureCount(_ptr)
+            if (count == 0) {
+                emptyList()
+            } else {
+                val repr = withResult(IntArray(count * 2)) {
+                    _nGetRecordedPictures(_ptr, it)
+                }
+                List(count) { index ->
+                    val offset = index * 2
+                    PictureRecordingPicture(
+                        pictureId = repr[offset],
+                        depth = repr[offset + 1]
+                    )
+                }
+            }
+        } finally {
+            reachabilityBarrier(this)
+        }
+
+    /**
+     * Returns drawable draws collected by the most recent tracing recording session started with
+     * [beginRecordingWithOperationTrace].
+     *
+     * Each entry identifies the drawable kind and the range of [recordedOperations] emitted while
+     * that drawable replayed into the recorder canvas.
+     */
+    val recordedDrawables: List<PictureRecordingDrawable>
+        get() = try {
+            Stats.onNativeCall()
+            val count = _nGetRecordedDrawableCount(_ptr)
+            if (count == 0) {
+                emptyList()
+            } else {
+                val repr = withResult(IntArray(count * 5)) {
+                    _nGetRecordedDrawables(_ptr, it)
+                }
+                List(count) { index ->
+                    val offset = index * 5
+                    val operationStart = repr[offset + 3]
+                    val operationEndExclusive = repr[offset + 4]
+                    PictureRecordingDrawable(
+                        kind = PictureRecordingDrawableKind.entries[repr[offset]],
+                        generationId = repr[offset + 1],
+                        depth = repr[offset + 2],
+                        operationIndexRange = if (operationStart >= operationEndExclusive) {
+                            IntRange.EMPTY
+                        } else {
+                            operationStart until operationEndExclusive
+                        }
+                    )
+                }
+            }
+        } finally {
+            reachabilityBarrier(this)
+        }
+
+    val traceGraph: PictureRecordingTraceGraph
+        get() = buildPictureRecordingTraceGraph(
+            operations = recordedOperations,
+            drawables = recordedDrawables
+        )
+
+    fun suggestChunkCandidates(targetChunkCount: Int): List<PictureRecordingChunkCandidate> =
+        traceGraph.suggestChunkCandidates(recordedOperations, targetChunkCount)
 
     /**
      *
@@ -189,8 +331,36 @@ private external fun _nBeginRecording(
     bbh: NativePointer
 ): NativePointer
 
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nBeginRecordingWithOperationTrace")
+private external fun _nBeginRecordingWithOperationTrace(
+    ptr: NativePointer,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    bbh: NativePointer
+): NativePointer
+
 @ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordingCanvas")
 private external fun _nGetRecordingCanvas(ptr: NativePointer): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedOperationCount")
+private external fun _nGetRecordedOperationCount(ptr: NativePointer): Int
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedOperations")
+private external fun _nGetRecordedOperations(ptr: NativePointer, operations: InteropPointer)
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedPictureCount")
+private external fun _nGetRecordedPictureCount(ptr: NativePointer): Int
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedPictures")
+private external fun _nGetRecordedPictures(ptr: NativePointer, pictures: InteropPointer)
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedDrawableCount")
+private external fun _nGetRecordedDrawableCount(ptr: NativePointer): Int
+
+@ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nGetRecordedDrawables")
+private external fun _nGetRecordedDrawables(ptr: NativePointer, drawables: InteropPointer)
 
 @ExternalSymbolName("org_jetbrains_skia_PictureRecorder__1nFinishRecordingAsPicture")
 private external fun _nFinishRecordingAsPicture(ptr: NativePointer): NativePointer

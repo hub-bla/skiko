@@ -71,7 +71,20 @@ expect open class SkiaLayer {
     internal fun draw(canvas: Canvas)
 }
 
-internal class PictureHolder(val instance: Picture, val width: Int, val height: Int)
+internal class PictureHolder(
+    val instance: Picture,
+    val width: Int,
+    val height: Int,
+    val replayPictures: List<Picture> = listOf(instance)
+) {
+    fun allPictures(): List<Picture> = listOf(instance) + replayPictures
+
+    fun close() {
+        allPictures()
+            .distinctBy { it._ptr }
+            .forEach(Picture::close)
+    }
+}
 
 internal class LayerDrawScope(
     val pixelGeometry: PixelGeometry,

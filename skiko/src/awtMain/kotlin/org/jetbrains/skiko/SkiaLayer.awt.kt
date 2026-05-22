@@ -27,6 +27,269 @@ import javax.swing.event.AncestorEvent
 import javax.swing.event.AncestorListener
 import kotlin.math.floor
 
+private fun chunkFailureSummary(candidate: PictureRecordingChunkCandidate): String = when {
+    candidate.operationCounts.isNotEmpty() &&
+        candidate.operationCounts.size == 1 &&
+        candidate.operationCounts.containsKey(PictureRecordingOperationKind.DRAW_DRAWABLE) ->
+        "unsupported drawDrawable content"
+
+    else -> "unsupported inherited saveLayer state"
+}
+
+internal fun formatPictureTraceLog(
+    owner: Any,
+    width: Int,
+    height: Int,
+    operations: List<PictureRecordingOperation>,
+    pictures: List<PictureRecordingPicture>,
+    drawables: List<PictureRecordingDrawable>,
+    targetChunkCount: Int = minOf(4, maxOf(1, drawables.count { !it.operationIndexRange.isEmpty() }))
+): String {
+    fun <T> List<T>.countsSummary(selector: (T) -> Any?): String =
+        groupingBy(selector)
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .joinToString(", ") { (key, count) -> "$key=$count" }
+            .ifEmpty { "none" }
+
+    fun IntRange.describe(): String = if (isEmpty()) {
+        "empty"
+    } else {
+        "$first..$last (${last - first + 1} ops)"
+    }
+
+    fun Map<PictureRecordingOperationKind, Int>.dominantKindsSummary(): String =
+        entries
+            .sortedByDescending { it.value }
+            .take(3)
+            .joinToString(", ") { (kind, count) -> "$kind=$count" }
+            .ifEmpty { "none" }
+
+    val operationSummary = operations.countsSummary { it.kind }
+    val pictureDepthSummary = pictures
+        .groupingBy { it.depth }
+        .eachCount()
+        .entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (depth, count) -> "depth[$depth]=$count" }
+        .ifEmpty { "none" }
+    val pictureIds = pictures
+        .joinToString(prefix = "[", postfix = "]") { it.pictureId.toString() }
+        .ifEmpty { "[]" }
+    val maxDepth = operations.maxOfOrNull { it.depth } ?: 0
+
+    val drawablesByKind = drawables.countsSummary { it.kind }
+    val drawablesByDepth = drawables
+        .groupingBy { it.depth }
+        .eachCount()
+        .entries
+        .sortedBy { it.key }
+        .joinToString(", ") { (depth, count) -> "depth[$depth]=$count" }
+        .ifEmpty { "none" }
+
+    val nonEmptyDrawables = drawables.filterNot { it.operationIndexRange.isEmpty() }
+    val largestDrawables = nonEmptyDrawables
+        .sortedByDescending { it.operationIndexRange.last - it.operationIndexRange.first + 1 }
+        .take(6)
+        .joinToString("; ") { drawable ->
+            val drawableOperations = operations.slice(drawable.operationIndexRange)
+            val dominantKinds = drawableOperations
+                .countsSummary { it.kind }
+                .split(", ")
+                .take(3)
+                .joinToString(", ")
+            "${drawable.kind}#${drawable.generationId}@d${drawable.depth} ${drawable.operationIndexRange.describe()} -> $dominantKinds"
+        }
+        .ifEmpty { "none" }
+
+    val wrapperSummary = drawables
+        .groupingBy { "${it.kind}:${if (it.operationIndexRange.isEmpty()) "wrapper" else "leaf"}" }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
+        .joinToString(", ") { (kind, count) -> "$kind=$count" }
+        .ifEmpty { "none" }
+
+    val traceGraph = buildPictureRecordingTraceGraph(operations, drawables)
+    val hotspotSubtrees = traceGraph.orderedNodes()
+        .filter { it.subtreeOpCount > 0 }
+        .sortedByDescending { it.subtreeOpCount }
+        .take(6)
+        .joinToString("; ") { node ->
+            "${node.kind}#${node.generationId}@d${node.depth} subtree=${node.subtreeOperationIndexRange.describe()}, direct=${node.directOpCount}, leaves=${node.subtreeLeafCount}, children=${node.childDrawableIndices.size}"
+        }
+        .ifEmpty { "none" }
+    val chunkCandidates = traceGraph.suggestChunkCandidates(operations, targetChunkCount)
+    val chunkPlan = chunkCandidates
+        .joinToString("; ") { candidate ->
+            "chunk[${candidate.orderedIndex}] ${candidate.operationIndexRange.describe()} nodes=${candidate.nodeIndices.size} reason=${candidate.reason} -> ${candidate.operationCounts.dominantKindsSummary()}"
+        }
+        .ifEmpty { "none" }
+    val cacheableChunkIndices = chunkCandidates
+        .filter(PictureRecordingChunkCandidate::canMakeStandalonePicture)
+        .map(PictureRecordingChunkCandidate::orderedIndex)
+    val nonCacheableChunks = chunkCandidates
+        .filterNot(PictureRecordingChunkCandidate::canMakeStandalonePicture)
+        .joinToString("; ") { candidate ->
+            "chunk[${candidate.orderedIndex}] ${chunkFailureSummary(candidate)}"
+        }
+        .ifEmpty { "none" }
+
+    return buildString {
+        append("SkiaLayer picture trace for $owner: size=${width}x$height, ")
+        append("totalOps=${operations.size}, pictureDrawOps=${pictures.size}, maxDepth=$maxDepth, ")
+        append("opsByKind={$operationSummary}, picturesByDepth={$pictureDepthSummary}, pictureIds=$pictureIds")
+        append("\n  drawables: total=${drawables.size}, nonEmpty=${nonEmptyDrawables.size}, wrappers=${drawables.size - nonEmptyDrawables.size}, byKind={$drawablesByKind}, byDepth={$drawablesByDepth}, wrapperVsLeaf={$wrapperSummary}")
+        append("\n  graph: roots=${traceGraph.rootNodeIndices.size}, renderNodes=${traceGraph.renderNodeCount}, payloadLeaves=${traceGraph.payloadLeafCount}, wrappers=${traceGraph.wrapperCount}, maxDrawableDepth=${traceGraph.maxDrawableDepth}")
+        append("\n  drawableHotspots: $largestDrawables")
+        append("\n  subtreeHotspots: $hotspotSubtrees")
+        append("\n  chunkPlan(target=$targetChunkCount): $chunkPlan")
+        append("\n  standaloneChunks: cacheable=${cacheableChunkIndices.size}/${chunkCandidates.size}, cacheableIndices=$cacheableChunkIndices, rejected={$nonCacheableChunks}")
+    }
+}
+
+private const val DEFAULT_PICTURE_CHUNK_REPLAY_TARGET_COUNT = 10
+
+internal data class ChunkPlaybackReuseResult(
+    val chunkPictures: List<PictureRecordingChunkPicture>,
+    val cacheEntries: List<PictureRecordingChunkCacheEntry>,
+    val reusedChunkCount: Int,
+    val reusedChunkIndices: List<Int>,
+    val rebuiltChunkIndices: List<Int>
+)
+
+internal fun shouldUseChunkReplay(chunkPictures: List<PictureRecordingChunkPicture>): Boolean =
+    chunkPictures.size > 1 && chunkPictures.all { it.picture != null }
+
+internal fun selectNextChunkCacheEntries(
+    chunkReuseResult: ChunkPlaybackReuseResult?,
+    usingChunkReplay: Boolean
+): List<PictureRecordingChunkCacheEntry> {
+    if (chunkReuseResult == null) {
+        return emptyList()
+    }
+    if (usingChunkReplay) {
+        return chunkReuseResult.cacheEntries
+    }
+    return chunkReuseResult.cacheEntries.takeIf { chunkReuseResult.chunkPictures.size > 1 }.orEmpty()
+}
+
+internal fun buildChunkPlaybackReuseResult(
+    picture: Picture,
+    candidates: List<PictureRecordingChunkCandidate>,
+    footprints: List<PictureRecordingChunkFootprint>,
+    previousCacheEntries: List<PictureRecordingChunkCacheEntry>
+): ChunkPlaybackReuseResult {
+    val previousCacheEntriesByIndex = previousCacheEntries.associateBy(PictureRecordingChunkCacheEntry::orderedIndex)
+    val reusablePicturesByIndex = mutableMapOf<Int, Picture>()
+    candidates.forEachIndexed { index, candidate ->
+        if (!candidate.canMakeStandalonePicture()) {
+            return@forEachIndexed
+        }
+        val previousEntry = previousCacheEntriesByIndex[candidate.orderedIndex]
+        val footprint = footprints[index]
+        if (previousEntry != null && previousEntry.fingerprint == footprint.fingerprint && !previousEntry.picture.isClosed) {
+            reusablePicturesByIndex[candidate.orderedIndex] = previousEntry.picture
+        }
+    }
+
+    val rebuiltChunkPictures = picture.makeChunkPictures(
+        candidates.filterNot { candidate -> reusablePicturesByIndex.containsKey(candidate.orderedIndex) }
+    ).associateBy { it.candidate.orderedIndex }
+
+    val chunkPictures = candidates.map { candidate ->
+        reusablePicturesByIndex[candidate.orderedIndex]?.let { reusedPicture ->
+            PictureRecordingChunkPicture(candidate = candidate, picture = reusedPicture)
+        } ?: rebuiltChunkPictures.getValue(candidate.orderedIndex)
+    }
+
+    val cacheEntries = chunkPictures.mapIndexedNotNull { index, chunkPicture ->
+        chunkPicture.picture?.let { pictureForCache ->
+            PictureRecordingChunkCacheEntry(
+                orderedIndex = chunkPicture.candidate.orderedIndex,
+                fingerprint = footprints[index].fingerprint,
+                picture = pictureForCache
+            )
+        }
+    }
+
+    val reusedChunkIndices = candidates
+        .map(PictureRecordingChunkCandidate::orderedIndex)
+        .filter(reusablePicturesByIndex::containsKey)
+    val rebuiltChunkIndices = candidates
+        .map(PictureRecordingChunkCandidate::orderedIndex)
+        .filterNot(reusablePicturesByIndex::containsKey)
+
+    return ChunkPlaybackReuseResult(
+        chunkPictures = chunkPictures,
+        cacheEntries = cacheEntries,
+        reusedChunkCount = reusablePicturesByIndex.size,
+        reusedChunkIndices = reusedChunkIndices,
+        rebuiltChunkIndices = rebuiltChunkIndices
+    )
+}
+
+private fun logChunkCacheReplay(
+    layer: SkiaLayer,
+    chunkReuseResult: ChunkPlaybackReuseResult?,
+    usingChunkReplay: Boolean,
+    targetChunkCount: Int
+) {
+    if (chunkReuseResult == null) {
+        println(
+            "SkiaLayer chunk cache for $layer: chunk replay unavailable, falling back to root picture " +
+                "(target=$targetChunkCount)"
+        )
+        return
+    }
+
+    val reusedSummary = chunkReuseResult.reusedChunkIndices.joinToString(prefix = "[", postfix = "]")
+        .ifEmpty { "[none]" }
+    val rebuiltSummary = chunkReuseResult.rebuiltChunkIndices.joinToString(prefix = "[", postfix = "]")
+        .ifEmpty { "[none]" }
+    val replayMode = if (usingChunkReplay) "chunk-replay" else "root-fallback"
+    println(
+        "SkiaLayer chunk cache for $layer: mode=$replayMode, target=$targetChunkCount, " +
+            "chunks=${chunkReuseResult.chunkPictures.size}, reused=${chunkReuseResult.reusedChunkCount}" +
+            "/${chunkReuseResult.chunkPictures.size}, reusedIndices=$reusedSummary, rebuiltIndices=$rebuiltSummary"
+    )
+}
+
+private fun closeStalePictures(
+    previousHolder: PictureHolder?,
+    previousCacheEntries: List<PictureRecordingChunkCacheEntry>,
+    nextHolder: PictureHolder?,
+    nextCacheEntries: List<PictureRecordingChunkCacheEntry>
+) {
+    val retainedPointers = buildSet {
+        nextHolder?.allPictures()?.forEach { add(it._ptr) }
+        nextCacheEntries.forEach { add(it.picture._ptr) }
+    }
+    (previousHolder?.allPictures().orEmpty() + previousCacheEntries.map(PictureRecordingChunkCacheEntry::picture))
+        .distinctBy { it._ptr }
+        .filterNot { it._ptr in retainedPointers }
+        .forEach(Picture::close)
+}
+
+internal fun createPictureHolderForPlayback(
+    picture: Picture,
+    width: Int,
+    height: Int,
+    chunkPictures: List<PictureRecordingChunkPicture> = emptyList()
+): PictureHolder {
+    val replayPictures = chunkPictures
+        .mapNotNull { it.picture }
+        .takeIf { shouldUseChunkReplay(chunkPictures) }
+        ?: listOf(picture)
+    return PictureHolder(
+        instance = picture,
+        width = width,
+        height = height,
+        replayPictures = replayPictures
+    )
+}
+
 actual open class SkiaLayer internal constructor(
     accessibleContextProvider: ((Component) -> AccessibleContext)? = null,
     val properties: SkiaLayerProperties,
@@ -365,8 +628,50 @@ actual open class SkiaLayer internal constructor(
 
     @Volatile
     private var picture: PictureHolder? = null
+    private var chunkPictureCacheEntries: List<PictureRecordingChunkCacheEntry> = emptyList()
     private var pictureRecorder: PictureRecorder? = null
     private val pictureLock = Any()
+    @Volatile
+    var isPictureOperationTracingEnabled: Boolean = true
+    @Volatile
+    var isChunkedPictureReplayEnabled: Boolean = true
+    @Volatile
+    var pictureChunkReplayTargetCount: Int = DEFAULT_PICTURE_CHUNK_REPLAY_TARGET_COUNT
+    @Volatile
+    var lastPictureRecordingOperations: List<PictureRecordingOperation> = emptyList()
+        private set
+    @Volatile
+    var lastRecordedPictures: List<PictureRecordingPicture> = emptyList()
+        private set
+    @Volatile
+    var lastRecordedDrawables: List<PictureRecordingDrawable> = emptyList()
+        private set
+    @Volatile
+    var lastChunkFootprints: List<PictureRecordingChunkFootprint> = emptyList()
+        private set
+    @Volatile
+    var lastChunkReuseCount: Int = 0
+        private set
+
+    private fun logPictureTrace(
+        width: Int,
+        height: Int,
+        operations: List<PictureRecordingOperation>,
+        pictures: List<PictureRecordingPicture>,
+        drawables: List<PictureRecordingDrawable>
+    ) {
+        println(
+            formatPictureTraceLog(
+                owner = this,
+                width = width,
+                height = height,
+                operations = operations,
+                pictures = pictures,
+                drawables = drawables,
+                targetChunkCount = pictureChunkReplayTargetCount
+            )
+        )
+    }
 
     private fun init(recreation: Boolean = false) {
         isDisposed = false
@@ -397,8 +702,9 @@ actual open class SkiaLayer internal constructor(
             // we should dispose redrawer first (to cancel `draw` in rendering thread)
             redrawer?.dispose()
             redrawerManager.dispose()
-            picture?.instance?.close()
+            closeStalePictures(picture, chunkPictureCacheEntries, null, emptyList())
             picture = null
+            chunkPictureCacheEntries = emptyList()
             pictureRecorder?.close()
             pictureRecorder = null
             backedLayer.dispose()
@@ -609,7 +915,11 @@ actual open class SkiaLayer internal constructor(
         val intHeight = pictureHeight.toInt()
 
         val pictureRecorder = pictureRecorder!!
-        val canvas = pictureRecorder.beginRecording(0f, 0f, pictureWidth, pictureHeight).apply {
+        val canvas = if (isPictureOperationTracingEnabled) {
+            pictureRecorder.beginRecordingWithOperationTrace(0f, 0f, pictureWidth, pictureHeight)
+        } else {
+            pictureRecorder.beginRecording(0f, 0f, pictureWidth, pictureHeight)
+        }.apply {
             for (component in clipComponents) {
                 cutoutFromClip(component, contentScale)
             }
@@ -635,9 +945,65 @@ actual open class SkiaLayer internal constructor(
         // or even dispose it and pack it again
         if (!isDisposed && !pictureRecorder.isClosed) {
             synchronized(pictureLock) {
-                picture?.instance?.close()
+                val previousHolder = picture
+                val previousCacheEntries = chunkPictureCacheEntries
+                lastPictureRecordingOperations = if (isPictureOperationTracingEnabled) {
+                    pictureRecorder.recordedOperations
+                } else {
+                    emptyList()
+                }
+                lastRecordedPictures = if (isPictureOperationTracingEnabled) {
+                    pictureRecorder.recordedPictures
+                } else {
+                    emptyList()
+                }
+                lastRecordedDrawables = if (isPictureOperationTracingEnabled) {
+                    pictureRecorder.recordedDrawables
+                } else {
+                    emptyList()
+                }
+                if (isPictureOperationTracingEnabled) {
+                    logPictureTrace(intWidth, intHeight, lastPictureRecordingOperations, lastRecordedPictures, lastRecordedDrawables)
+                }
                 val picture = pictureRecorder.finishRecordingAsPicture()
-                this.picture = PictureHolder(picture, intWidth, intHeight)
+                val chunkReuseResult = if (isChunkedPictureReplayEnabled && isPictureOperationTracingEnabled) {
+                    runCatching {
+                        val targetChunkCount = pictureChunkReplayTargetCount.coerceAtLeast(1)
+                        val traceGraph = buildPictureRecordingTraceGraph(lastPictureRecordingOperations, lastRecordedDrawables)
+                        val candidates = traceGraph.suggestChunkCandidates(lastPictureRecordingOperations, targetChunkCount)
+                        val footprints = traceGraph.buildChunkFootprints(candidates, lastPictureRecordingOperations)
+                        lastChunkFootprints = footprints
+                        buildChunkPlaybackReuseResult(
+                            picture = picture,
+                            candidates = candidates,
+                            footprints = footprints,
+                            previousCacheEntries = previousCacheEntries
+                        )
+                    }.getOrNull()
+                } else {
+                    lastChunkFootprints = emptyList()
+                    null
+                }
+                val usingChunkReplay = shouldUseChunkReplay(chunkReuseResult?.chunkPictures.orEmpty())
+                lastChunkReuseCount = chunkReuseResult?.reusedChunkCount ?: 0
+                val nextHolder = createPictureHolderForPlayback(
+                    picture = picture,
+                    width = intWidth,
+                    height = intHeight,
+                    chunkPictures = chunkReuseResult?.chunkPictures.orEmpty()
+                )
+                val nextCacheEntries = selectNextChunkCacheEntries(chunkReuseResult, usingChunkReplay)
+                if (isChunkedPictureReplayEnabled && isPictureOperationTracingEnabled) {
+                    logChunkCacheReplay(
+                        layer = this,
+                        chunkReuseResult = chunkReuseResult,
+                        usingChunkReplay = usingChunkReplay,
+                        targetChunkCount = pictureChunkReplayTargetCount.coerceAtLeast(1)
+                    )
+                }
+                this.picture = nextHolder
+                chunkPictureCacheEntries = nextCacheEntries
+                closeStalePictures(previousHolder, previousCacheEntries, nextHolder, nextCacheEntries)
             }
         }
     }
@@ -674,7 +1040,7 @@ actual open class SkiaLayer internal constructor(
     internal actual fun draw(canvas: Canvas) {
         check(!isDisposed) { "SkiaLayer is disposed" }
         lockPicture {
-            canvas.drawPicture(it.instance)
+            it.replayPictures.fastForEach(canvas::drawPicture)
         }
     }
 
@@ -700,7 +1066,7 @@ actual open class SkiaLayer internal constructor(
             store.setImageInfo(ImageInfo(ci, picture.width, picture.height))
             store.allocN32Pixels(picture.width, picture.height)
             val canvas = Canvas(store)
-            canvas.drawPicture(picture.instance)
+            picture.replayPictures.fastForEach(canvas::drawPicture)
             store.setImmutable()
             store
         }

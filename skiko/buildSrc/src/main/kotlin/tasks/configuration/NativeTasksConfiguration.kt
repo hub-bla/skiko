@@ -2,6 +2,7 @@ package tasks.configuration
 
 import Arch
 import CompileSkikoCppTask
+import HideSkiaSymbolsTask
 import PatchSkiaSymbolsTask
 import OS
 import SkiaBuildType
@@ -254,7 +255,11 @@ fun SkikoProjectContext.configureNativeTarget(
     // inserting the `skiko` namespace into the mangled name; C symbols and
     // unsupported shapes fall back to a "_skiko" suffix.
     val requiresSymbolPatching = os == OS.IOS || os == OS.TVOS
+    // For macOS native we generate an unexported-symbols list so the linker
+    // hides Skia internals from the final binary's export table.
+    val requiresSymbolHiding = os == OS.MacOS
     val patchedLibsDir = layout.buildDirectory.dir("nativeBridges/patched/$targetString").get().asFile
+    val unexportedSymbolsFile = layout.buildDirectory.file("nativeBridges/unexported/$targetString/unexported-symbols.txt")
 
     val allLibraries = if (requiresSymbolPatching) {
         librariesProvider(skiaDir, targetString, buildType).map { lib ->
@@ -268,7 +273,12 @@ fun SkikoProjectContext.configureNativeTarget(
     val linkerFlags = when (os) {
         OS.MacOS -> {
             val macFrameworks = listOfFrameworks("Metal", "CoreGraphics", "CoreText", "CoreServices")
-            configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, macFrameworks)
+            val cinteropLinkerOpts = macFrameworks.toMutableList()
+            if (requiresSymbolHiding) {
+                cinteropLinkerOpts.add("-unexported_symbols_list")
+                cinteropLinkerOpts.add(unexportedSymbolsFile.get().asFile.absolutePath)
+            }
+            configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, cinteropLinkerOpts)
             mutableListOfLinkerOptions(macFrameworks)
         }
         OS.IOS -> {
@@ -360,8 +370,17 @@ fun SkikoProjectContext.configureNativeTarget(
         outputs.dir(outDir)
     }
 
-    // For iOS/tvOS: patch all Skia + skiko-bridge symbols after linking.
-    val compilationDependency = if (requiresSymbolPatching) {
+    // For iOS/tvOS: patch (rename) all Skia + skiko-bridge symbols after linking.
+    // For macOS: generate unexported-symbols list for the linker.
+    val compilationDependency = if (requiresSymbolHiding) {
+        val hideActionName = "hideSkiaSymbols"
+        project.registerSkikoTask<HideSkiaSymbolsTask>(hideActionName, os, arch) {
+            dependsOn(unzipper)
+            dependsOn(linkTask)
+            skiaLibs.set(librariesProvider(skiaDir, targetString, buildType).map { File(it) })
+            unexportedSymbolsList.set(unexportedSymbolsFile)
+        }
+    } else if (requiresSymbolPatching) {
         val patchActionName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim)
         // Extension modules (e.g. skiko-skottie) must build their rename map
         // from the full target symbol universe, not only their owned libraries.

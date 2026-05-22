@@ -289,5 +289,12 @@ private external fun _nMakeShader(
     tileB: Float,
 ): NativePointer
 
+@ExternalSymbolName("org_jetbrains_skia_Picture__1nMakeChunkPicture")
+internal external fun _nMakeChunkPicture(
+    ptr: NativePointer,
+    operationStartIndex: Int,
+    operationEndExclusive: Int
+): NativePointer
+
 @ExternalSymbolName("org_jetbrains_skia_Picture__1nPlayback")
 private external fun _nPlayback(ptr: NativePointer, canvasPtr: NativePointer, data: InteropPointer)

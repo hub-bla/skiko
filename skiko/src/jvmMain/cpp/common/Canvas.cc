@@ -6,6 +6,7 @@
 #include "SkVertices.h"
 #include "hb.h"
 #include "interop.hh"
+#include "PictureRecorderTrace.hh"
 
 static void deleteCanvas(SkCanvas* canvas) {
     // std::cout << "Deleting [SkCanvas " << canvas << "]" << std::endl;
@@ -148,6 +149,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_jetbrains_skia_CanvasKt__1nDrawPictur
   (JNIEnv* env, jclass jclass, jlong ptr, jlong picturePtr, jfloatArray matrixArr, jlong paintPtr) {
     SkCanvas* canvas   = reinterpret_cast<SkCanvas*>   (static_cast<uintptr_t>(ptr));
     SkPicture* picture = reinterpret_cast<SkPicture*>(static_cast<uintptr_t>(picturePtr));
+    skikoRecordPictureDraw(canvas, picture);
     std::unique_ptr<SkMatrix> matrix = skMatrix(env, matrixArr);
     SkPaint* paint     = reinterpret_cast<SkPaint*>    (static_cast<uintptr_t>(paintPtr));
     canvas->drawPicture(picture, matrix.get(), paint);

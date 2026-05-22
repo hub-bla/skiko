@@ -101,4 +101,38 @@ class RenderNodeTest {
         node.close()
         context.close()
     }
+
+    @Test
+    fun canTraceRenderNodeDrawableContents() {
+        val context = RenderNodeContext()
+        val node = RenderNode(context)
+        node.bounds = Rect(0f, 0f, 32f, 32f)
+
+        node.beginRecording().drawRect(
+            Rect(4f, 4f, 12f, 12f),
+            Paint().apply { color = Color.RED }
+        )
+        node.endRecording()
+
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecordingWithOperationTrace(Rect(0f, 0f, 32f, 32f))
+        node.drawInto(canvas)
+        recorder.finishRecordingAsPicture()
+
+        val renderNodeTrace = recorder.recordedDrawables.firstOrNull { it.kind == PictureRecordingDrawableKind.RENDER_NODE }
+        assertTrue(renderNodeTrace != null)
+        assertTrue(renderNodeTrace.operationIndexRange.isEmpty())
+
+        val cachedDrawableTrace = recorder.recordedDrawables.firstOrNull { it.kind == PictureRecordingDrawableKind.UNKNOWN }
+        assertTrue(cachedDrawableTrace != null)
+
+        val cachedDrawableOps = recorder.recordedOperations.filterIndexed { index, _ -> index in cachedDrawableTrace.operationIndexRange }
+        assertEquals(
+            listOf(PictureRecordingOperation(PictureRecordingOperationKind.DRAW_RECT, 0)),
+            cachedDrawableOps
+        )
+
+        node.close()
+        context.close()
+    }
 }
