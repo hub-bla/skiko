@@ -8,8 +8,10 @@ import LinkSkikoTask
 import OS
 import SealAndSignSharedLibraryTask
 import SkiaBuildType
+import SkikoModuleKind
 import SkikoProjectContext
 import compilerForTarget
+import currentSkikoExtensionModuleOrNull
 import dynamicLibExt
 import hostArch
 import hostOs
@@ -31,6 +33,8 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
 import runPkgConfig
+import skikoCoreModule
+import skikoExtensionModules
 import targetId
 import tasks.GenerateSymbolsListTask
 import java.io.File
@@ -78,6 +82,13 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     }
     compiler.set(compilerForTarget(targetOs, targetArch))
     val target = targetId(targetOs, targetArch)
+    val binaryModule = project.currentSkikoExtensionModuleOrNull() ?: skikoCoreModule
+    val moduleBinaryInputs = binaryModule.resolveBinaryInputs(
+        targetOs,
+        targetArch,
+        TargetEnv.JVM,
+        skiaDir.resolve("out/${buildType.id}-$target").absolutePath
+    )
     val osFlags: Array<String>
     when (targetOs) {
         OS.MacOS -> {
@@ -144,7 +155,8 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     flags.set(
         listOf(
             *skiaPreprocessorFlags(targetOs, buildType),
-            *osFlags
+            *osFlags,
+            *moduleBinaryInputs.compileFlags.toTypedArray()
         )
     )
 }
@@ -250,7 +262,7 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
             coreObjectFiles.from(coreObjcCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
         }
 
-        extensionModules.forEach { module ->
+        project.skikoExtensionModules().forEach { module ->
             val proj = project.findProject(module.projectPath) ?: return@forEach
             val mCompileTask = proj.tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
             dependsOn(mCompileTask)
@@ -265,31 +277,14 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
 
         val skiaBinSubdir = "out/${buildType.id}-$target"
         val skiaBinDirProvider = skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }
-        val fileExtension = if (targetOs.isWindows) ".lib" else ".a"
-        val filePrefix = if (targetOs.isWindows) "" else "lib"
-        val ownedLibBaseNames = extensionModules.flatMap { it.ownedStaticLibBaseNames }.toSet()
+        val skiaBinDir = skiaBinDirProvider.get().absolutePath
+        val coreBinaryInputs = skikoCoreModule.resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, skiaBinDir)
+        val extensionModuleBinaryInputs = project.skikoExtensionModules()
+            .map { it.resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, skiaBinDir) }
 
-        skiaLibs.from(skiaBinDirProvider.map { dir ->
-            project.fileTree(dir) {
-                include("*$fileExtension")
-                exclude("${filePrefix}dawn$fileExtension")
-                exclude("${filePrefix}skia_graphite_ext$fileExtension")
-                exclude("${filePrefix}libdawn_combined$fileExtension")
-                exclude("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-                ownedLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
-            }.files
-        })
+        skiaLibs.from(project.files(coreBinaryInputs.staticArchivePaths + coreBinaryInputs.directStaticArchivePaths))
 
-        moduleLibs.from(skiaBinDirProvider.map { dir ->
-            if (ownedLibBaseNames.isEmpty()) {
-                emptySet<File>()
-            } else {
-                project.fileTree(dir) {
-                    // Static libs owned by extension modules
-                    ownedLibBaseNames.forEach { include("$filePrefix$it$fileExtension") }
-                }.files
-            }
-        })
+        moduleLibs.from(project.files(extensionModuleBinaryInputs.flatMap { it.staticArchivePaths }))
     }
 }
 
@@ -306,29 +301,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
     val skiaBinSubdir = "out/${buildType.id}-$target"
     val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
     val osFlags: Array<String>
-    val ownedStaticLibBaseNames = extensionModules.flatMap { it.ownedStaticLibBaseNames }.toSet()
-    val isCore = currentExtensionModule == null
-    libFiles = project.fileTree(skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir) }) {
-        val fileExtension = if (targetOs.isWindows) ".lib" else ".a"
-        val filePrefix = if (targetOs.isWindows) "" else "lib"
-
-        if (isCore) {
-            include("*$fileExtension")
-            exclude("${filePrefix}dawn$fileExtension")
-            exclude("${filePrefix}dawn_combined$fileExtension")
-            exclude("${filePrefix}skia_graphite_dawn_ext$fileExtension")
-            exclude("${filePrefix}skia_graphite_ext$fileExtension")
-            if (targetOs == OS.Linux) {
-                exclude("${filePrefix}skia$fileExtension")
-            }
-            if (targetOs == OS.Linux || targetOs == OS.Android) {
-                exclude("${filePrefix}skia_ganesh_ext$fileExtension")
-            }
-            ownedStaticLibBaseNames.forEach { exclude("$filePrefix$it$fileExtension") }
-        } else {
-            currentExtensionModule?.ownedStaticLibBaseNames.orEmpty().forEach { include("$filePrefix$it$fileExtension") }
-        }
-    }
+    val binaryModule = project.currentSkikoExtensionModuleOrNull() ?: skikoCoreModule
+    val moduleBinaryInputs = binaryModule.resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, skiaBinDir)
+    val isCore = binaryModule.kind == SkikoModuleKind.CORE
+    val linksCore = binaryModule.dependsOnCore
+    libFiles = project.files(moduleBinaryInputs.staticArchivePaths)
 
     dependsOn(compileTask)
     objectFiles = project.fileTree(compileTask.map { it.outDir.get() }) {
@@ -348,7 +325,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             objectFiles += project.fileTree(objcCompileTask.map { it.outDir.get() }) {
                 include("**/*.o")
             }
-            val additionalFlags = if (libBaseName != "skiko") {
+            val additionalFlags = if (linksCore) {
                 val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                 val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                 dependsOn(coreLinkTask)
@@ -363,19 +340,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-arch", if (targetArch == Arch.Arm64) "arm64" else "x86_64",
                 "-shared",
                 "-dead_strip",
-                "-lobjc",
                 "-install_name", "./${libOutputFileName.get()}",
                 "-current_version", skiko.planeDeployVersion,
-                "-framework", "AppKit",
-                "-framework", "CoreFoundation",
-                "-framework", "CoreGraphics",
-                "-framework", "CoreServices",
-                "-framework", "CoreText",
-                "-framework", "Foundation",
-                "-framework", "IOKit",
-                "-framework", "Metal",
-                "-framework", "OpenGL",
-                "-framework", "QuartzCore" // for CoreAnimation
             ) + additionalFlags
         }
         OS.Linux -> {
@@ -386,24 +352,15 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         // `libstdc++.so.6.*` binaries are forward-compatible and used from GCC 3.4 to 16+,
                         // so do not use `-static-libstdc++` to avoid issues with complex setup.
                         "-static-libgcc",
-                        "-lGL",
-                        "-lX11",
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
                         "-Wl,-z,relro,-z,now",
                     )
                 )
-                if (isCore) {
-                    if (targetArch == Arch.Arm64) {
-                        add("-lEGL")
-                    }
-                    add("-lfontconfig")
-                    add("-lexpat")
-                    add("-Wl,--allow-multiple-definition")
-                } else {
-                    // Hack to fix problem with linker not always finding certain declarations.
-                    addAll(currentExtensionModule?.jvmExtraStaticArchivePaths(targetOs, skiaBinDir).orEmpty())
-                    currentExtensionModule?.jvmExtraDynamicLibNames(targetOs)?.forEach { add("-l$it") }
+                moduleBinaryInputs.dynamicLibNames.forEach { add("-l$it") }
+                if (linksCore) {
+                    // Cleaner dependency picking driven entirely by our module matrix definitions
+                    addAll(moduleBinaryInputs.staticArchivePaths)
                     val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                     val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                     dependsOn(coreLinkTask)
@@ -441,7 +398,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     )
                 )
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
-                if (!isCore) {
+                if (linksCore) {
                     val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
                     val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
                     dependsOn(coreLinkTask)
@@ -462,10 +419,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
             )
             linker.set(project.androidClangFor(targetArch))
             if (isCore) {
-                androidFlags += arrayOf(
-                    "-lEGL",
-                    "-Wl,--allow-multiple-definition",
-                )
+                moduleBinaryInputs.dynamicLibNames.forEach { androidFlags.add("-l$it") }
             }
             osFlags = androidFlags.toTypedArray()
         }
@@ -474,6 +428,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
         }
     }
     flags.set(listOf(*osFlags))
+    flags.addAll(moduleBinaryInputs.linkFlags)
 
     if (isCore) {
         flags.addAll(project.provider {
@@ -498,15 +453,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                                 .filter { it.isNotEmpty() }
                                 .forEach { result.add("-Wl,-u,$it") }
                         }
-                        result.addAll(
-                            arrayOf(
-                                "$skiaBinDir/libskia_ganesh_ext.a",
-                                "$skiaBinDir/libskshaper.a",
-                                "$skiaBinDir/libskunicode_icu.a",
-                                "$skiaBinDir/libskunicode_core.a",
-                                "$skiaBinDir/libskia.a",
-                            )
-                        )
+                        result.addAll(moduleBinaryInputs.directStaticArchivePaths)
                     }
                     OS.Windows -> {
                         val defFile = maybeSignedDir.resolve("symbols.def")
@@ -544,7 +491,7 @@ fun SkikoProjectContext.createDownloadCodeSignClientDarwinTask(
 
     doLast {
         val downloadedFile = project.layout.buildDirectory.get().asFile.resolve(hostArch.darwinSignClientName)
-         downloadedFile.setExecutable(true)
+        downloadedFile.setExecutable(true)
     }
 }
 

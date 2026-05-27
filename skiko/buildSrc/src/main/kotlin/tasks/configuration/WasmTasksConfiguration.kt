@@ -7,6 +7,7 @@ import LinkSkikoWasmTask
 import OS
 import SkikoProjectContext
 import compilerForTarget
+import currentSkikoExtensionModuleOrNull
 import linkerForTarget
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
@@ -23,6 +24,8 @@ import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsTargetDsl
 import projectDirs
 import registerOrGetSkiaDirProvider
+import skikoCoreModule
+import skikoExtensionModules
 import supportWeb
 import targetId
 import tasks.GenerateWasmExportsListTask
@@ -52,8 +55,16 @@ fun SkikoProjectContext.declareWasmTasks(
     }
 
     val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
+    val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
     val compileWasm by project.tasks.registering(CompileSkikoCppTask::class) {
         dependsOn(skiaWasmDir)
+        val binaryModule = project.currentSkikoExtensionModuleOrNull() ?: skikoCoreModule
+        val moduleBinaryInputs = binaryModule.resolveBinaryInputs(
+            OS.Wasm,
+            Arch.Wasm,
+            TargetEnv.WASM,
+            skiaBinDir.get().absolutePath
+        )
 
         compiler.set(compilerForTarget(OS.Wasm, Arch.Wasm))
         buildTargetOS.set(OS.Wasm)
@@ -71,6 +82,9 @@ fun SkikoProjectContext.declareWasmTasks(
         extraIncludeDirs.forEach {
             includeHeadersNonRecursive(it)
         }
+        moduleBinaryInputs.includeDirs.forEach {
+            includeHeadersNonRecursive(it)
+        }
 
         includeHeadersNonRecursive(skiaHeadersDirs(skiaWasmDir.get()))
 
@@ -84,43 +98,24 @@ fun SkikoProjectContext.declareWasmTasks(
                 add("-fvisibility=hidden")
                 add("-fvisibility-inlines-hidden")
                 if (skiko.isWasmBuildWithProfiling) add("--profiling")
+                addAll(moduleBinaryInputs.compileFlags)
             }
         )
     }
     // TODO: experimental creation of uber skia static archive
     // throws duplicate object files which prevents duplicate errors/warning
-    val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
-    val mainModuleSkiaLibraries = listOf(
-        "libskia.wasm.a",
-        "libskia_ganesh_ext.wasm.a",
-        "libsvg.wasm.a",
-        "libskparagraph.wasm.a",
-        "libskshaper.wasm.a",
-        "libskunicode_core.wasm.a",
-        "libskunicode_icu.wasm.a",
-        "libicu.wasm.a",
-        "libharfbuzz.wasm.a",
-        "libbentleyottmann.wasm.a",
-        "libskresources.wasm.a",
-        "libfreetype2.wasm.a",
-        "libpng.wasm.a",
-        "libjpeg.wasm.a",
-        "libjpeg12.wasm.a",
-        "libjpeg16.wasm.a",
-        "libwebp.wasm.a",
-        "libwebp_sse41.wasm.a",
-        "libwuffs.wasm.a",
-        "libskcms.wasm.a",
-        "libzlib.wasm.a",
-        "libexpat.wasm.a",
-        "libbrotli.wasm.a",
-    )
+    val mainModuleSkiaLibraries = skiaBinDir.map { dir ->
+        skikoCoreModule
+            .resolveBinaryInputs(OS.Wasm, Arch.Wasm, TargetEnv.WASM, dir.absolutePath)
+            .staticArchivePaths
+            .map(::File)
+    }
     val mergedSkiaWasmArchiveFile = project.layout.buildDirectory.file(
         "out/skia-wasm-main-module/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}/libskia-main-module.wasm.a"
     )
     val mergeSkiaWasmMainModuleArchive = if (isSideModule) null else project.tasks.register("mergeSkiaWasmMainModuleArchive") {
         dependsOn(skiaWasmDir)
-        inputs.files(skiaBinDir.map { dir -> mainModuleSkiaLibraries.map { dir.resolve(it) } })
+        inputs.files(mainModuleSkiaLibraries)
         outputs.file(mergedSkiaWasmArchiveFile)
 
         doLast {
@@ -132,8 +127,7 @@ fun SkikoProjectContext.declareWasmTasks(
             project.delete(workDir)
             workDir.mkdirs()
 
-            mainModuleSkiaLibraries.forEachIndexed { archiveIndex, libraryName ->
-                val inputArchive = skiaBinDir.get().resolve(libraryName)
+            mainModuleSkiaLibraries.get().forEachIndexed { archiveIndex, inputArchive ->
                 val extractDir = workDir.resolve("extract-$archiveIndex")
                 val memberNamesOutput = ByteArrayOutputStream()
 
@@ -187,9 +181,7 @@ fun SkikoProjectContext.declareWasmTasks(
                     .filter { f -> f.name.endsWith(".o") }
                     .toList() }
             )
-            mainModuleSkiaLibraries.forEach { libName ->
-                coreSkiaArchives.from(skiaBinDir.map { it.resolve(libName) })
-            }
+            coreSkiaArchives.from(mainModuleSkiaLibraries)
         }
 
     fun LinkSkikoWasmTask.configureCommon(prefixPath: String) {
@@ -207,8 +199,16 @@ fun SkikoProjectContext.declareWasmTasks(
         buildTargetArch.set(Arch.Wasm)
         buildVariant.set(buildType)
 
+        val moduleInputs = (project.currentSkikoExtensionModuleOrNull() ?: skikoCoreModule).resolveBinaryInputs(
+            OS.Wasm,
+            Arch.Wasm,
+            TargetEnv.WASM,
+            skiaBinDir.get().absolutePath
+        )
+
         libFiles = if (isSideModule) {
-            project.files(extraLibraries)
+            val moduleLibs = moduleInputs.staticArchivePaths
+            project.files(moduleLibs + extraLibraries)
         } else {
             project.files(mergedSkiaWasmArchiveFile, *extraLibraries.toTypedArray())
         }
@@ -231,15 +231,7 @@ fun SkikoProjectContext.declareWasmTasks(
                     "-s", "SIDE_MODULE=1",
                 ))
             } else {
-                addAll(listOf(
-                    "-s", "MAIN_MODULE=2",
-                    "-s", "MAX_WEBGL_VERSION=2",
-                    "-s", "MIN_WEBGL_VERSION=2",
-                    "-s", "MODULARIZE=1",
-                    "-s", "EXPORT_NAME=loadSkikoWASM",
-                    "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports, loadDynamicLibrary, LDSO, locateFile, HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAPF64]\"",
-                    "--bind",
-                ))
+                addAll(moduleInputs.linkFlags)
             }
 
             addAll(
@@ -343,18 +335,10 @@ fun SkikoProjectContext.declareWasmTasks(
     }
 }
 
-/**
- * Wires every Skiko extension WASM side module (currently only `:skiko-skottie`)
- * into the core's `generateWasmExportsList` task as additional input
- * (object files + Skia static archives owned by the side module).
- *
- * Must be called from the core (`:skiko`) project after evaluation, so the
- * extension subprojects' `compileWasm` task is already registered.
- */
 fun SkikoProjectContext.configureGenerateWasmExportsList() {
     val task = project.tasks.named<GenerateWasmExportsListTask>("generateWasmExportsList")
 
-    extensionModules.forEach { module ->
+    project.skikoExtensionModules().forEach { module ->
         val moduleProject = project.findProject(module.projectPath) ?: return@forEach
         // Force the side-module subproject to be configured before we look up its
         // `compileWasm` task. Otherwise, the task may not yet be registered.
@@ -371,7 +355,7 @@ fun SkikoProjectContext.configureGenerateWasmExportsList() {
 
             val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
             val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
-            module.ownedStaticLibBaseNames.forEach { baseName ->
+            module.resolveBinaryInputs(OS.Wasm, Arch.Wasm, TargetEnv.WASM, skiaBinDir.get().absolutePath).staticLibBaseNames.forEach { baseName ->
                 moduleSkiaArchives.from(skiaBinDir.map { it.resolve("lib$baseName.wasm.a") })
             }
         }

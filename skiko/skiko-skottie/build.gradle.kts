@@ -43,7 +43,6 @@ val skikoSkottieProjectContext = SkikoProjectContext(
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
     additionalRuntimeLibraries = emptyList(),
-    currentExtensionModule = skikoSkottieModule
 )
 
 fun configureSkottieNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) {
@@ -52,13 +51,7 @@ fun configureSkottieNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget)
         os,
         arch,
         target
-    ) { skiaDir, targetString, currentBuildType ->
-        skikoSkottieModule.staticLibraryPaths(
-            skiaDir = skiaDir,
-            targetString = targetString,
-            buildType = currentBuildType
-        )
-    }
+    )
 }
 
 repositories {
@@ -73,7 +66,6 @@ kotlin {
     }
 
     applyHierarchyTemplate(skikoSourceSetHierarchyTemplate)
-    skikoSkottieProjectContext.declareSkiaTasks()
 
     if (supportAwt) {
         jvm("awt") {
@@ -108,11 +100,6 @@ kotlin {
 
         skikoSkottieProjectContext.declareWasmTasks(
             isSideModule = true,
-            extraLibraries = skikoSkottieModule.staticLibraryPaths(
-                skiaDir = skiaWasmDir.get().absolutePath,
-                targetString = "wasm-wasm",
-                buildType = buildType
-            ),
             extraIncludeDirs = listOf(
                 project(":").projectDir.resolve("src/nativeJsMain/cpp"),
                 project(":").projectDir.resolve("src/commonMain/cpp/common/include")

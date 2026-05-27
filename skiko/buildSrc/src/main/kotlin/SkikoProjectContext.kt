@@ -17,8 +17,6 @@ class SkikoProjectContext(
     val windowsSdkPathProvider: () -> WindowsSdkPaths,
     val createChecksumsTask: (OS, Arch, Provider<File>) -> TaskProvider<*>,
     val additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
-    val extensionModules: List<SkikoExtensionModule> = project.skikoExtensionModules(),
-    val currentExtensionModule: SkikoExtensionModule? = null,
 ) {
 
     val buildType = skiko.buildType
@@ -51,10 +49,8 @@ fun SkikoProjectContext.declareSkiaTasks() {
             val skiaBaseUrl = "https://github.com/hub-bla/skia/releases/download/$skiaReleaseTag"
 
             val artifactId = "Skia-${skiaReleaseTag}-${config}-$buildType-${arch}"
-
             val rootProject = project.rootProject
-
-            val downloadSkiaTask = rootProject.tasks.registerOrGetTask<Download>("downloadSkia$buildType$taskNameSuffix") {
+            val downloadSkiaTask = rootProject.tasks.register<Download>("downloadSkia$buildType$taskNameSuffix") {
                 group = "Skia Binaries"
 
                 val skiaUrl = "$skiaBaseUrl/$artifactId.zip"
@@ -67,7 +63,7 @@ fun SkikoProjectContext.declareSkiaTasks() {
                 )
             }
 
-            rootProject.tasks.registerOrGetTask<Copy>("unzipSkia$buildType$taskNameSuffix") {
+            rootProject.tasks.register<Copy>("unzipSkia$buildType$taskNameSuffix") {
                 group = "Skia Binaries"
 
                 val outputDir = skiko.dependenciesDir.resolve("skia/$skiaReleaseTag/$artifactId")
@@ -76,6 +72,23 @@ fun SkikoProjectContext.declareSkiaTasks() {
                 dependsOn(downloadSkiaTask)
                 from(rootProject.zipTree(downloadSkiaTask.get().dest))
                 into(outputDir)
+
+
+                if (config == "windows") {
+                    doLast {
+                        outputDir.walkTopDown().forEach { file ->
+                            if (file.isFile && file.name.startsWith("lib") && file.name.endsWith(".lib")) {
+                                val newName = file.name.removePrefix("lib")
+                                val renamedFile = File(file.parentFile, newName)
+
+                                if (file.renameTo(renamedFile)) {
+                                    // Using logger.info so it doesn't spam standard output unless requested
+                                    logger.info("Normalized Windows lib: ${file.name} -> $newName")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
