@@ -637,7 +637,7 @@ fun SkikoProjectContext.createSkikoJvmJarTask(
         os,
         arch,
         commonJar,
-        libBaseName = "skiko",
+        libBaseName = libBaseName,
         includeIcu = true
     )
 

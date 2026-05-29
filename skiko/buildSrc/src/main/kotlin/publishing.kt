@@ -26,18 +26,14 @@ private val awtRuntimeTargets = listOf(
 
 private class SkikoPublishingContext(
     val projectContext: SkikoProjectContext,
-    val moduleSuffix: String? = null,
 ) {
     val project = projectContext.project
     val kotlin = projectContext.kotlin
     val skiko = projectContext.skiko
     val additionalRuntimeLibraries = projectContext.additionalRuntimeLibraries
+    val skikoArtifacts = projectContext.artifacts
 
     val pomNameForPublication: MutableMap<String, String> = HashMap()
-
-    val moduleLabel: String = if (moduleSuffix != null) "Skiko ${toTitleCase(moduleSuffix)}" else "Skiko"
-
-    val moduleSuffixTitle: String = if (moduleSuffix != null) toTitleCase(moduleSuffix) else ""
 
     fun publishing(configure: PublishingExtension.() -> Unit) {
         projectContext.publishing.apply(configure)
@@ -48,8 +44,8 @@ private class SkikoPublishingContext(
     }
 }
 
-fun SkikoProjectContext.declarePublications(moduleSuffix: String? = null) {
-    val ctx = SkikoPublishingContext(this, moduleSuffix)
+fun SkikoProjectContext.declarePublications() {
+    val ctx = SkikoPublishingContext(this)
     ctx.configurePublishingRepositories()
     ctx.configurePublicationDefaults()
     ctx.configureAllJvmRuntimeJarPublications()
@@ -99,21 +95,21 @@ private fun SkikoPublishingContext.configurePublishingRepositories() {
 }
 
 private fun SkikoPublishingContext.configurePublicationDefaults() {
-    pomNameForPublication["kotlinMultiplatform"] = "$moduleLabel KMP"
+    pomNameForPublication["kotlinMultiplatform"] = "${skikoArtifacts.displayName} KMP"
     kotlin.targets.forEach {
-        pomNameForPublication[it.name] = "$moduleLabel ${toTitleCase(it.name)}"
+        pomNameForPublication[it.name] = "${skikoArtifacts.displayName} ${toTitleCase(it.name)}"
     }
 
     publishing {
         publications.configureEach {
             this as MavenPublication
-            groupId = SkikoArtifacts.groupId
+            groupId = SkikoArtifacts.DEFAULT_GROUP_ID
 
             // Necessary for publishing to Maven Central
             artifact(emptyJavadocJar)
 
             pom {
-                description.set("Kotlin Skia bindings")
+                description.set(skikoArtifacts.pomDescription)
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -145,8 +141,8 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
         val os = entry.key.first
         val arch = entry.key.second
         create("skikoJvmRuntime${toTitleCase(os.id)}${toTitleCase(arch.id)}", MavenPublication::class.java) {
-            pomNameForPublication[name] = "$moduleLabel JVM Runtime for ${os.name} ${arch.name}"
-            artifactId = SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix)
+            pomNameForPublication[name] = "${skikoArtifacts.displayName} JVM Runtime for ${os.name} ${arch.name}"
+            artifactId = skikoArtifacts.jvmRuntimeArtifactIdFor(os, arch)
             project.afterEvaluate {
                 artifact(entry.value.map { it.archiveFile.get() })
                 artifact(emptySourcesJar)
@@ -154,8 +150,8 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
             pom.withXml {
                 asNode().appendNode("dependencies")
                     .appendNode("dependency").apply {
-                        appendNode("groupId", SkikoArtifacts.groupId)
-                        appendNode("artifactId", SkikoArtifacts.jvmArtifactId(moduleSuffix))
+                        appendNode("groupId", SkikoArtifacts.DEFAULT_GROUP_ID)
+                        appendNode("artifactId", skikoArtifacts.jvmArtifactId)
                         appendNode("version", "[${skiko.deployVersion}]")
                         appendNode("scope", "compile")
                     }
@@ -196,7 +192,7 @@ private fun SkikoPublishingContext.configureAllJvmRuntimeJarPublications() = pub
  */
 private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
     val allJvmRuntimeVariants = awtRuntimeTargets.map { (os, arch) ->
-        val configName = "awtRuntimeElements${moduleSuffixTitle}-${targetId(os, arch)}"
+        val configName = "awtRuntimeElements-${targetId(os, arch)}"
         project.configurations.create(configName).apply {
 
             /* Setup default attributes */
@@ -241,8 +237,8 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
              */
             dependencies.add(
                 project.dependencies.create(
-                    SkikoArtifacts.groupId,
-                    SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix),
+                    SkikoArtifacts.DEFAULT_GROUP_ID,
+                    skikoArtifacts.jvmRuntimeArtifactIdFor(os, arch),
                     skiko.deployVersion
                 )
             )
@@ -250,7 +246,7 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
     }
 
     /* Create a new software component and add all variants */
-    val componentName = "awtRuntimeElements${moduleSuffixTitle}"
+    val componentName = "awtRuntimeElements"
     val component = project.serviceOf<SoftwareComponentFactory>().adhoc(componentName)
     allJvmRuntimeVariants.forEach { variant ->
         component.addVariantsFromConfiguration(variant) {
@@ -262,9 +258,9 @@ private fun SkikoPublishingContext.configureAwtRuntimeJarPublication() {
     publications {
         create("awtRuntimeElements", MavenPublication::class.java) {
             from(component)
-            pomNameForPublication[name] = "$moduleLabel JVM Runtime"
-            groupId = SkikoArtifacts.groupId
-            artifactId = SkikoArtifacts.jvmRuntimeArtifactId(moduleSuffix)
+            pomNameForPublication[name] = "${skikoArtifacts.displayName} JVM Runtime"
+            groupId = SkikoArtifacts.DEFAULT_GROUP_ID
+            artifactId = skikoArtifacts.jvmRuntimeArtifactId
             version = skiko.deployVersion
 
             /*
@@ -301,7 +297,7 @@ private fun SkikoPublishingContext.configureAwtPublicationConstraints() {
             // Add constraint for the uber runtime artifact
             config.dependencyConstraints.add(
                 project.dependencies.constraints.create(
-                    "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactId(moduleSuffix)}:${skiko.deployVersion}!!"
+                    "${SkikoArtifacts.DEFAULT_GROUP_ID}:${skikoArtifacts.jvmRuntimeArtifactId}:${skiko.deployVersion}!!"
                 )
             )
             
@@ -309,7 +305,7 @@ private fun SkikoPublishingContext.configureAwtPublicationConstraints() {
             awtRuntimeTargets.forEach { (os, arch) ->
                 config.dependencyConstraints.add(
                     project.dependencies.constraints.create(
-                        "${SkikoArtifacts.groupId}:${SkikoArtifacts.jvmRuntimeArtifactIdFor(os, arch, moduleSuffix)}:${skiko.deployVersion}!!"
+                        "${SkikoArtifacts.DEFAULT_GROUP_ID}:${skikoArtifacts.jvmRuntimeArtifactIdFor(os, arch)}:${skiko.deployVersion}!!"
                     )
                 )
             }
@@ -328,15 +324,15 @@ private fun SkikoPublishingContext.configureWebPublication() = publications {
 
     val wasmJarTask = project.tasks.findByName("skikoWasmJar") ?: return@publications
     create("skikoWasmRuntime", MavenPublication::class.java) {
-        pomNameForPublication[name] = "$moduleLabel WASM Runtime"
-        artifactId = SkikoArtifacts.jsWasmArtifactId(moduleSuffix)
+        pomNameForPublication[name] = "${skikoArtifacts.displayName} WASM Runtime"
+        artifactId = skikoArtifacts.jsWasmArtifactId
         artifact(wasmJarTask)
         artifact(emptySourcesJar)
     }
 }
 private fun SkikoPublishingContext.configureAndroidPublication() = publications {
     if (!project.supportAndroid) return@publications
-    pomNameForPublication["androidRelease"] = "$moduleLabel Android Runtime"
+    pomNameForPublication["androidRelease"] = "${skikoArtifacts.displayName} Android Runtime"
 }
 
 private fun SkikoPublishingContext.configurePomNames() = publications {

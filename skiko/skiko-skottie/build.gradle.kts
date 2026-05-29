@@ -27,6 +27,10 @@ if (supportAndroid) {
 apply<SideWasmImportsGeneratorPlugin>()
 
 val skiko = SkikoProperties(rootProject)
+val skikoSkottieArtifacts = SkikoArtifacts(
+    artifactIdPrefix = "skiko-skottie",
+    displayName = "Skiko Skottie",
+)
 val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
@@ -43,6 +47,7 @@ val skikoSkottieProjectContext = SkikoProjectContext(
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
     additionalRuntimeLibraries = emptyList(),
+    artifacts = skikoSkottieArtifacts,
 )
 
 fun configureSkottieNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) {
@@ -342,7 +347,7 @@ afterEvaluate {
     }
 }
 
-skikoSkottieProjectContext.declarePublications("skottie")
+skikoSkottieProjectContext.declarePublications()
 
 val mavenCentral = MavenCentralProperties(project)
 if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {

@@ -17,9 +17,13 @@ class SkikoProjectContext(
     val windowsSdkPathProvider: () -> WindowsSdkPaths,
     val createChecksumsTask: (OS, Arch, Provider<File>) -> TaskProvider<*>,
     val additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
+    val artifacts: SkikoArtifacts = SkikoArtifacts(),
 ) {
 
     val buildType = skiko.buildType
+    val libBaseName = artifacts.artifactIdPrefix
+    val nativeBridgesLibPrefix = artifacts.artifactIdPrefix
+    val cinteropName = artifacts.artifactIdPrefix
 
     val windowsSdkPaths: WindowsSdkPaths by lazy {
         windowsSdkPathProvider()

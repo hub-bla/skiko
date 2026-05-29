@@ -35,6 +35,7 @@ apply<MainWasmImportsGeneratorPlugin>()
 apply<WasmTestImportsGeneratorPlugin>()
 
 val skiko = SkikoProperties(rootProject)
+val skikoArtifacts = SkikoArtifacts()
 val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
@@ -49,11 +50,12 @@ val skikoProjectContext = SkikoProjectContext(
     createChecksumsTask = { targetOs: OS, targetArch: Arch, fileToChecksum: Provider<File> ->
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
-    additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko)
+    additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoArtifacts),
+    artifacts = skikoArtifacts
 )
 
 allprojects {
-    group = SkikoArtifacts.groupId
+    group = SkikoArtifacts.DEFAULT_GROUP_ID
     version = skiko.deployVersion
 }
 
