@@ -74,25 +74,18 @@ fun SkikoProjectContext.declareSkiaTasks() {
                 description = "unzips to $outputDir"
 
                 dependsOn(downloadSkiaTask)
-                from(rootProject.zipTree(downloadSkiaTask.get().dest))
-                into(outputDir)
-
-
-                if (config == "windows") {
-                    doLast {
-                        outputDir.walkTopDown().forEach { file ->
-                            if (file.isFile && file.name.startsWith("lib") && file.name.endsWith(".lib")) {
-                                val newName = file.name.removePrefix("lib")
-                                val renamedFile = File(file.parentFile, newName)
-
-                                if (file.renameTo(renamedFile)) {
-                                    // Using logger.info so it doesn't spam standard output unless requested
-                                    logger.info("Normalized Windows lib: ${file.name} -> $newName")
-                                }
+                from(rootProject.zipTree(downloadSkiaTask.get().dest)) {
+                    if (config == "windows") {
+                        rename { name ->
+                            if (name.startsWith("lib") && name.endsWith(".lib")) {
+                                name.removePrefix("lib")
+                            } else {
+                                name
                             }
                         }
                     }
                 }
+                into(outputDir)
             }
         }
     }
