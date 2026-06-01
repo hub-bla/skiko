@@ -44,7 +44,7 @@ internal fun generateVersionScript(symbolsTxt: Path, output: Path) {
         appendLine("{")
         appendLine("  global:")
         symbols.forEach { symbol ->
-            appendLine("    \"$symbol\";")
+            appendLine("    $symbol;")
         }
         appendLine("  local:")
         appendLine("    *;")
@@ -88,9 +88,9 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
             "generateSymbolsList: targetOs=${os.name}, targetArch=${arch.name}, coreObjects=${coreObjectFiles.files.size}, moduleObjects=${moduleObjectFiles.files.size}, skiaLibs=${skiaLibs.files.size}, moduleLibs=${moduleLibs.files.size}"
         )
 
-        val coreExports       = outDir.resolve("core_exports.txt")
-        val extImports        = outDir.resolve("ext_imports.txt")
-        val symbolsFiltered   = outDir.resolve("symbols_filtered.txt")
+        val coreExports = outDir.resolve("core_exports.txt")
+        val extImports = outDir.resolve("ext_imports.txt")
+        val symbolsFiltered = outDir.resolve("symbols_filtered.txt")
         val symbolsUnexported = outDir.resolve("symbols_unexported.txt")
 
         // 1. core exports
@@ -98,7 +98,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         coreExports.writeText(coreExportedList.sorted().joinToString("\n"))
 
         // 2. all ext imports
-        val extImportedList = extractSymbols(moduleObjectFiles.files.toList() + moduleLibs.files.toList(), false).toMutableList()
+        val extImportedList =
+            extractSymbols(moduleObjectFiles.files.toList() + moduleLibs.files.toList(), false).toMutableList()
 
         // Keep JVM/JNI infrastructure globals
         extImportedList.addAll(coreExportedList.filter(::isJniInfrastructureSymbol))
@@ -114,6 +115,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val unexportedSet = coreExportsSet - keepSet
         symbolsUnexported.writeText(unexportedSet.sorted().joinToString("\n"))
 
+        // Create export files for linux or windows. MacOS uses the raw txt file
         if (os.isLinux) {
             val versionScript = outDir.resolve("symbols.map")
             generateVersionScript(symbolsFiltered.toPath(), versionScript.toPath())
@@ -129,26 +131,26 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {
         val os = targetOs.get()
-        val arch = targetArch.get()
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
-        val executableCandidates = resolveExecutableCandidates(os, arch)
+        val executable = executableCandidates(os)
         logger.lifecycle(
-            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols using candidates ${executableCandidates} from ${files.size} files"
+            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols using candidates $executable from ${files.size} files"
         )
 
         when {
             os.isMacOs || os.isLinux -> {
                 val nmFlags = nmFlags(os, exported)
-                val output = run(executables = executableCandidates, args = nmFlags, files = files)
+                val output = run(executable = executable, args = nmFlags, files = files)
                 val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
                 parseNmPosix(output)
                     .filter { it.type == wanted }
                     .forEach { result.add(it.name) }
             }
+
             else -> {
-                val output = run(executables = executableCandidates, args = listOf("/SYMBOLS"), files = files)
+                val output = run(executable = executable, args = listOf("/SYMBOLS"), files = files)
                 val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
                 parseDumpbinSymbols(output)
                     .filter { it.type == wanted }
@@ -159,106 +161,63 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         return result.toList()
     }
 
-    private fun run(executables: List<String>, args: List<String>, files: List<File>): String {
-        var activeExecutableIndex = 0
-        var executable = executables[activeExecutableIndex]
-
-        // Filter out directories immediately to prevent command failures
+    private fun run(executable: String, args: List<String>, files: List<File>): String {
         val actualFiles = files.filter { it.isFile }
+        if (actualFiles.isEmpty()) return ""
 
-        while (true) {
-            val combinedOutput = StringBuilder()
-            val errorOutputBuilder = StringBuilder()
-            var batchFailed = false
-            var thrownException: Throwable? = null
+        var lastException: Throwable?
+        var lastStderr: String
 
-            try {
-                actualFiles.chunked(100).forEachIndexed { index, batch ->
-                    val outStream = ByteArrayOutputStream()
-                    val errStream = ByteArrayOutputStream()
+        val outStream = ByteArrayOutputStream()
+        val errStream = ByteArrayOutputStream()
 
-                    execOperations.exec {
-                        this.executable = executable
-                        this.args = args + batch.map { it.absolutePath }
-                        this.standardOutput = outStream
-                        this.errorOutput = errStream
-                    }
-                    combinedOutput.append(outStream.toString())
-                    errorOutputBuilder.append(errStream.toString())
-                }
-            } catch (t: Throwable) {
-                batchFailed = true
-                thrownException = t
+        try {
+            execOperations.exec {
+                this.executable = executable
+                this.args = args + actualFiles.map { it.absolutePath }
+                this.standardOutput = outStream
+                this.errorOutput = errStream
             }
 
-            if (!batchFailed) {
-                return combinedOutput.toString()
-            }
-
-            if (activeExecutableIndex < executables.lastIndex) {
-                val previous = executable
-                activeExecutableIndex += 1
-                executable = executables[activeExecutableIndex]
-                logger.warn("generateSymbolsList: failed with '$previous'; retrying with '$executable'. Error was: ${thrownException?.message}")
-                continue
-            }
-
-            val firstFile = actualFiles.firstOrNull()?.absolutePath.orEmpty()
+            return outStream.toString()
+        } catch (t: Throwable) {
+            lastException = t
+            lastStderr = errStream.toString()
             logger.error(
-                "generateSymbolsList: FATAL. Exhausted all executables. Last attempt failed to run '$executable'. \n" +
-                        "Args=$args\n" +
-                        "FirstFile=$firstFile\n" +
-                        "Stderr Output=${errorOutputBuilder}\n" +
-                        "PATH=${System.getenv("PATH")}",
-                thrownException
+                "generateSymbolsList: failed with '$executable'. Error was: ${t.message}"
             )
-            throw thrownException ?: RuntimeException("Execution failed without an exception")
         }
+
+        logger.error(
+            "generateSymbolsList: FATAL. Exhausted all executables.\n" +
+                    "Executables=$executable\n" +
+                    "Args=$args\n" +
+                    "Files=${actualFiles.size}\n" +
+                    "FirstFile=${actualFiles.firstOrNull()?.absolutePath.orEmpty()}\n" +
+                    "Stderr Output=$lastStderr\n" +
+                    "PATH=${System.getenv("PATH")}",
+            lastException
+        )
+
+        throw lastException ?: RuntimeException("Execution failed without an exception")
     }
 
 
-    private fun nmFlags(os: OS, exported: Boolean, dynamic: Boolean = false): List<String> {
+    private fun nmFlags(os: OS, exported: Boolean): List<String> {
         // Always use POSIX format (`-P`) so output is column-stable across
         // GNU binutils nm, LLVM nm, BSD/macOS nm, and aarch64-linux-gnu-nm.
         return when {
             !exported -> listOf("-P", "-u")
             os.isMacOs -> listOf("-P", "-g", "-U")
-            dynamic -> listOf("-P", "-D", "--defined-only")  // shared objects: use dynamic symbol table
             else -> listOf("-P", "-g", "--defined-only")
         }
     }
 
-    private fun executableCandidates(os: OS, arch: Arch): List<String> = when (os) {
-        OS.Windows -> listOf("dumpbin")
-        OS.Linux -> when {
-            arch == Arch.Arm64 && hostArch != Arch.Arm64 -> listOf("aarch64-linux-gnu-nm", "nm")
-            else -> listOf("nm")
-        }
-        OS.MacOS -> listOf("nm")
-        OS.Android -> listOf("llvm-nm", "nm")
+    private fun executableCandidates(os: OS): String = when (os) {
+        OS.Windows -> "dumpbin"
+        OS.Linux -> "nm"
+        OS.MacOS -> "nm"
+        OS.Android -> "llvm-nm"
         OS.IOS, OS.TVOS, OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
-    }
-
-    private fun resolveExecutableCandidates(os: OS, arch: Arch): List<String> {
-        return executableCandidates(os, arch)
-            .map { candidate -> findExecutableInPath(candidate) ?: candidate }
-            .distinct()
-    }
-
-    private fun findExecutableInPath(name: String): String? {
-        val pathValue = System.getenv("PATH").orEmpty()
-        val executableNames = if (name.endsWith(".exe")) listOf(name) else listOf(name, "$name.exe")
-        return pathValue
-            .split(File.pathSeparator)
-            .asSequence()
-            .filter { it.isNotBlank() }
-            .flatMap { dir -> executableNames.asSequence().map { execName -> Paths.get(dir, execName) } }
-            .firstOrNull { candidate -> isExecutableFile(candidate) }
-            ?.toAbsolutePath()
-            ?.toString()
-    }
-
-    private fun isExecutableFile(path: Path): Boolean {
-        return Files.isRegularFile(path) && Files.isExecutable(path)
     }
 }
