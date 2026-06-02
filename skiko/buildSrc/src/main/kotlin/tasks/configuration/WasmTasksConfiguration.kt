@@ -28,7 +28,6 @@ import skikoCoreModule
 import skikoExtensionModules
 import supportWeb
 import targetId
-import tasks.GenerateWasmExportsListTask
 import wasmImport
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -168,30 +167,11 @@ fun SkikoProjectContext.declareWasmTasks(
         }
     }
 
-    val generateWasmExportsList: TaskProvider<GenerateWasmExportsListTask>? =
-        if (isSideModule) null else project.tasks.register<GenerateWasmExportsListTask>("generateWasmExportsList") {
-            dependsOn(compileWasm)
-            outputDir.set(
-                project.layout.buildDirectory.dir(
-                    "wasm-exports/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}"
-                )
-            )
-            coreObjectFiles.from(
-                compileWasm.map { it.outDir.get().asFile.walk()
-                    .filter { f -> f.name.endsWith(".o") }
-                    .toList() }
-            )
-            coreSkiaArchives.from(mainModuleSkiaLibraries)
-        }
-
     fun LinkSkikoWasmTask.configureCommon(prefixPath: String) {
         dependsOn(compileWasm)
         dependsOn(skiaWasmDir)
         if (mergeSkiaWasmMainModuleArchive != null) {
             dependsOn(mergeSkiaWasmMainModuleArchive)
-        }
-        if (generateWasmExportsList != null) {
-            dependsOn(generateWasmExportsList)
         }
 
         linker.set(linkerForTarget(OS.Wasm, Arch.Wasm))
@@ -248,13 +228,6 @@ fun SkikoProjectContext.declareWasmTasks(
 
             if (skiko.isWasmBuildWithProfiling) add("--profiling")
         })
-
-        if (generateWasmExportsList != null) {
-            val exportedFunctionsFile = generateWasmExportsList
-                .flatMap { it.outputDir.file("exported_functions.txt") }
-            flags.add("-s")
-            flags.add(exportedFunctionsFile.map { "EXPORTED_FUNCTIONS=@${it.asFile.absolutePath}" })
-        }
 
         doLast {
             // skiko.mjs is referenced in karma.config.d/*/config.js
@@ -335,30 +308,35 @@ fun SkikoProjectContext.declareWasmTasks(
     }
 }
 
-fun SkikoProjectContext.configureGenerateWasmExportsList() {
-    val task = project.tasks.named<GenerateWasmExportsListTask>("generateWasmExportsList")
-
+fun SkikoProjectContext.configureWasmMainModuleSideModuleInputs() {
     project.skikoExtensionModules().forEach { module ->
         val moduleProject = project.findProject(module.projectPath) ?: return@forEach
         // Force the side-module subproject to be configured before we look up its
-        // `compileWasm` task. Otherwise, the task may not yet be registered.
+        // link tasks. Otherwise, the tasks may not yet be registered.
         project.evaluationDependsOn(module.projectPath)
-        val moduleCompile = moduleProject.tasks.named<CompileSkikoCppTask>("compileWasm")
 
-        task.configure {
-            dependsOn(moduleCompile)
-            moduleObjectFiles.from(
-                moduleCompile.map { it.outDir.get().asFile.walk()
-                    .filter { f -> f.name.endsWith(".o") }
-                    .toList() }
-            )
+        configureSideModuleInput(
+            mainLinkTaskName = "linkWasm",
+            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasm")
+        )
+        configureSideModuleInput(
+            mainLinkTaskName = "linkWasmD8WithES6",
+            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasmD8WithES6")
+        )
+    }
+}
 
-            val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
-            val skiaBinDir = skiaWasmDir.map { it.resolve("out/${buildType.id}-${targetId(OS.Wasm, Arch.Wasm)}") }
-            module.resolveBinaryInputs(OS.Wasm, Arch.Wasm, TargetEnv.WASM, skiaBinDir.get().absolutePath).staticLibBaseNames.forEach { baseName ->
-                moduleSkiaArchives.from(skiaBinDir.map { it.resolve("lib$baseName.wasm.a") })
-            }
-        }
+private fun SkikoProjectContext.configureSideModuleInput(
+    mainLinkTaskName: String,
+    sideLinkTask: TaskProvider<LinkSkikoWasmTask>
+) {
+    val sideModuleWasmFile = sideLinkTask.flatMap { task ->
+        task.outDir.file(task.libOutputFileName)
+    }
+
+    project.tasks.named<LinkSkikoWasmTask>(mainLinkTaskName).configure {
+        dependsOn(sideLinkTask)
+        libFiles += project.files(sideModuleWasmFile)
     }
 }
 

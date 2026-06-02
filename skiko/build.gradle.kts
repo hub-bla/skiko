@@ -12,9 +12,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import java.io.File
-import java.nio.file.Path
-import CompileSkikoCppTask
-import CompileSkikoObjCTask
 import tasks.configuration.*
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -336,7 +333,7 @@ afterEvaluate {
 
 if (supportWeb) {
     afterEvaluate {
-        skikoProjectContext.configureGenerateWasmExportsList()
+        skikoProjectContext.configureWasmMainModuleSideModuleInputs()
     }
 }
 

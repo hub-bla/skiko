@@ -1,5 +1,6 @@
 package tasks.symbols
 
+// TODO: add example line for it
 private val WHITESPACE = Regex("""\s+""")
 
 internal fun parseNmPosix(
