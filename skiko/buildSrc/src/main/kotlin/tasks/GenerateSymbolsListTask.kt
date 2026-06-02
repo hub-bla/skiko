@@ -177,41 +177,27 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val actualFiles = files.filter { it.isFile }
         if (actualFiles.isEmpty()) return ""
 
-        var lastException: Throwable?
-        var lastStderr: String
-
         val outStream = ByteArrayOutputStream()
         val errStream = ByteArrayOutputStream()
 
-        try {
-            execOperations.exec {
-                this.executable = executable
-                this.args = args + actualFiles.map { it.absolutePath }
-                this.standardOutput = outStream
-                this.errorOutput = errStream
-            }
+        val result = execOperations.exec {
+            this.executable = executable
+            this.args = args + actualFiles.map { it.absolutePath }
+            this.standardOutput = outStream
+            this.errorOutput = errStream
+        }
 
-            return outStream.toString()
-        } catch (t: Throwable) {
-            lastException = t
-            lastStderr = errStream.toString()
-            logger.error(
-                "generateSymbolsList: failed with '$executable'. Error was: ${t.message}"
+        if (result.exitValue != 0) {
+            error(
+                """
+                Command failed with exit code ${result.exitValue}
+                stderr:
+                $errStream
+                """.trimIndent()
             )
         }
 
-        logger.error(
-            "generateSymbolsList: FATAL. Exhausted all executables.\n" +
-                    "Executable=$executable\n" +
-                    "Args=$args\n" +
-                    "Files=${actualFiles.size}\n" +
-                    "FirstFile=${actualFiles.firstOrNull()?.absolutePath.orEmpty()}\n" +
-                    "Stderr Output=$lastStderr\n" +
-                    "PATH=${System.getenv("PATH")}",
-            lastException
-        )
-
-        throw lastException ?: RuntimeException("Execution failed without an exception")
+        return outStream.toString()
     }
 
 

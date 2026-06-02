@@ -1,7 +1,7 @@
 package tasks.symbols
 
 /**
- * A linker-visible symbol parsed from a tool output (`nm`, `dumpbin`, `.tbd`).
+ * A linker-visible symbol parsed from a tool output (`nm`, `dumpbin`).
  */
 internal data class Symbol(
     val name: String,

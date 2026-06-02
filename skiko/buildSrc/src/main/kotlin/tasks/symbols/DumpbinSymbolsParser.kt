@@ -25,9 +25,9 @@ private fun isCompilerGeneratedName(name: String): Boolean =
 
 
 /**
- * Parser for `dumpbin /SYMBOLS` output (Windows COFF object files / static libs).
+ * Parser for `dumpbin /SYMBOLS` output (Windows COFF object files / static libs)
  *
- * Each symbol row uses the documented column layout, e.g.:
+ * Each symbol row uses the following layout:
  * ```
  * 000 00000000 SECT1  notype       External     | SymbolName
  * 001 00000000 UNDEF  notype ()    External     | OtherSymbol

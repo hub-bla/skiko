@@ -1,8 +1,15 @@
 package tasks.symbols
 
-// TODO: add example line for it
 private val WHITESPACE = Regex("""\s+""")
 
+/**
+ * Parser for `nm` output
+ *
+ * Each symbol row uses the following layout:
+ * ```
+ * <name> <type> [<value>]
+ * ```
+ **/
 internal fun parseNmPosix(
     output: String,
 ): Sequence<Symbol> =
