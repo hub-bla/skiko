@@ -2,7 +2,6 @@ package tasks
 
 import OS
 import Arch
-import hostArch
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
@@ -10,14 +9,11 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.process.ExecOperations
 import tasks.symbols.SymbolType
-import tasks.symbols.isJniInfrastructureSymbol
 import tasks.symbols.parseDumpbinSymbols
 import tasks.symbols.parseNmPosix
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import javax.inject.Inject
 import kotlin.io.path.readLines
 import kotlin.io.path.writeText
@@ -61,6 +57,10 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
     @get:Input
     abstract val targetArch: Property<Arch>
+
+    @get:Optional
+    @get:Input
+    abstract val androidLlvmNm: Property<String>
 
     @get:InputFiles
     abstract val coreObjectFiles: ConfigurableFileCollection
@@ -115,8 +115,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val unexportedSet = coreExportsSet - keepSet
         symbolsUnexported.writeText(unexportedSet.sorted().joinToString("\n"))
 
-        // Create export files for linux or windows. MacOS uses the raw txt file
-        if (os.isLinux) {
+        // Create export files for Linux or Windows. MacOS uses the raw txt file
+        if (os.isLinux || os == OS.Android) {
             val versionScript = outDir.resolve("symbols.map")
             generateVersionScript(symbolsFiltered.toPath(), versionScript.toPath())
         }
@@ -138,7 +138,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
             OS.Windows -> "dumpbin"
             OS.Linux -> "nm"
             OS.MacOS -> "nm"
-            OS.Android -> "llvm-nm"
+            OS.Android -> androidLlvmNm.get()
             OS.IOS, OS.TVOS, OS.Wasm ->
                 throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
         }
@@ -150,7 +150,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         )
 
         when {
-            os.isMacOs || os.isLinux -> {
+            os.isMacOs || os.isLinux || os == OS.Android -> {
                 val nmFlags = nmFlags(os, exported)
                 val output = run(executable = executable, args = nmFlags, files = files)
                 val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
@@ -166,7 +166,8 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                     .filter { it.type == wanted }
                     .forEach { result.add(it.name) }
             }
-            else ->  throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
+
+            else -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
         }
 
         return result.toList()
@@ -214,13 +215,18 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
     }
 
 
-    private fun nmFlags(os: OS, exported: Boolean): List<String> {
-        // Always use POSIX format (`-P`) so output is column-stable across
-        // GNU binutils nm, LLVM nm, BSD/macOS nm, and aarch64-linux-gnu-nm.
-        return when {
-            !exported -> listOf("-P", "-u")
-            os.isMacOs -> listOf("-P", "-g", "-U")
-            else -> listOf("-P", "-g", "--defined-only")
-        }
+    private fun nmFlags(os: OS, exported: Boolean): List<String> = when {
+        !exported -> listOf("-P", "-u")
+        os.isMacOs -> listOf("-P", "-g", "-U")
+        else -> listOf("-P", "-g", "--defined-only")
     }
+
+    private fun isJniInfrastructureSymbol(name: String): Boolean {
+        val symbol = name.removePrefix("_")
+
+        return symbol.startsWith("Java_") ||
+                symbol.startsWith("JNI") ||
+                symbol.startsWith("jvm")
+    }
+
 }

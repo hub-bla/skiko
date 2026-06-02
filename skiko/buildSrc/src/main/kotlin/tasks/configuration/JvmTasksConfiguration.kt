@@ -50,8 +50,10 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     // Prefer 'java.home' system property to simplify overriding from Intellij.
     // When used from command-line, it is effectively equal to JAVA_HOME.
     if (JavaVersion.current() < JavaVersion.VERSION_17) {
-        error("JDK 17+ is required, but Gradle JVM is ${JavaVersion.current()}. " +
-                "Check JAVA_HOME (CLI) or Gradle settings (Intellij).")
+        error(
+            "JDK 17+ is required, but Gradle JVM is ${JavaVersion.current()}. " +
+                    "Check JAVA_HOME (CLI) or Gradle settings (Intellij)."
+        )
     }
     val jdkHome = File(System.getProperty("java.home") ?: error("'java.home' is null"))
     dependsOn(skiaJvmBindingsDir)
@@ -105,6 +107,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-fvisibility-inlines-hidden"
             )
         }
+
         OS.Linux -> {
             includeHeadersNonRecursive(jdkHome.resolve("include/linux"))
             includeHeadersNonRecursive(runPkgConfig("dbus-1"))
@@ -123,6 +126,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 *archFlags,
             )
         }
+
         OS.Windows -> {
             includeHeadersNonRecursive(windowsSdkPaths.includeDirs)
             includeHeadersNonRecursive(jdkHome.resolve("include/win32"))
@@ -139,6 +143,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 *targetArgs,
             )
         }
+
         OS.Android -> {
             compiler.set(project.androidClangFor(targetArch))
             osFlags = arrayOf(
@@ -149,6 +154,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-fPIC"
             )
         }
+
         OS.Wasm, OS.IOS, OS.TVOS -> error("Should not reach here")
     }
 
@@ -164,18 +170,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
 fun Provider<String>.orEmpty(): Provider<String> =
     orElse("")
 
-fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<String> {
-    val androidArch = when (targetArch) {
-        Arch.Arm64 -> "aarch64"
-        Arch.X64 -> "x86_64"
-        else -> throw GradleException("unsupported $targetArch")
-    }
-    val hostOsArch = when (hostOs) {
-        OS.MacOS -> "darwin-x86_64"
-        OS.Linux -> "linux-x86_64"
-        OS.Windows -> "windows-x86_64"
-        else -> throw GradleException("unsupported $hostOs")
-    }
+fun Project.androidNdkPath(): Provider<String> {
     val ndkPathProvider = project.providers
         .environmentVariable("ANDROID_NDK_HOME")
         .orEmpty()
@@ -191,12 +186,43 @@ fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<
                 "$androidHome/$ndkVersion"
             }
         }
-    return ndkPathProvider.map { ndkPath ->
+    return ndkPathProvider
+}
+
+fun Project.androidLlvmBinPath(): Provider<String> {
+    val hostOsArch = when (hostOs) {
+        OS.MacOS -> "darwin-x86_64"
+        OS.Linux -> "linux-x86_64"
+        OS.Windows -> "windows-x86_64"
+        else -> throw GradleException("unsupported $hostOs")
+    }
+    return androidNdkPath().map { ndkPath ->
+        "$ndkPath/toolchains/llvm/prebuilt/$hostOsArch/bin"
+    }
+}
+
+fun Project.androidClangFor(targetArch: Arch, version: String = "30"): Provider<String> {
+    val androidArch = when (targetArch) {
+        Arch.Arm64 -> "aarch64"
+        Arch.X64 -> "x86_64"
+        else -> throw GradleException("unsupported $targetArch")
+    }
+    return androidLlvmBinPath().map { llvmBinPath ->
         var clangBinaryName = "$androidArch-linux-android$version-clang++"
         if (hostOs.isWindows) {
             clangBinaryName += ".cmd"
         }
-        "$ndkPath/toolchains/llvm/prebuilt/$hostOsArch/bin/$clangBinaryName"
+        "$llvmBinPath/$clangBinaryName"
+    }
+}
+
+fun Project.androidLlvmNm(): Provider<String> {
+    return androidLlvmBinPath().map { llvmBinPath ->
+        var nmBinaryName = "llvm-nm"
+        if (hostOs.isWindows) {
+            nmBinaryName += ".exe"
+        }
+        "$llvmBinPath/$nmBinaryName"
     }
 }
 
@@ -250,28 +276,38 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
     project.tasks.register<GenerateSymbolsListTask>("generateSymbolsList$suffix") {
         this.targetOs.set(targetOs)
         this.targetArch.set(targetArch)
-
+        if (targetOs == OS.Android) {
+            this.androidLlvmNm.set(project.androidLlvmNm())
+        }
         val target = targetId(targetOs, targetArch)
         val maybeSignedDir = project.layout.buildDirectory.dir("maybe-signed-$target")
         outputDir.set(maybeSignedDir)
 
         dependsOn(coreCompile)
-        coreObjectFiles.from(coreCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList() })
+        coreObjectFiles.from(coreCompile.map {
+            it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList()
+        })
         if (coreObjcCompile != null) {
             dependsOn(coreObjcCompile)
-            coreObjectFiles.from(coreObjcCompile.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
+            coreObjectFiles.from(coreObjcCompile.map {
+                it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList()
+            })
         }
 
         project.skikoExtensionModules().forEach { module ->
             val proj = project.findProject(module.projectPath) ?: return@forEach
             val mCompileTask = proj.tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
             dependsOn(mCompileTask)
-            moduleObjectFiles.from(mCompileTask.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList() })
+            moduleObjectFiles.from(mCompileTask.map {
+                it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") || it.name.endsWith(".obj") }.toList()
+            })
 
             if (targetOs.isMacOs) {
                 val mObjcTask = proj.tasks.named<CompileSkikoObjCTask>("objcCompile$suffix")
                 dependsOn(mObjcTask)
-                moduleObjectFiles.from(mObjcTask.map { it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList() })
+                moduleObjectFiles.from(mObjcTask.map {
+                    it.outDir.get().asFile.walk().filter { it.name.endsWith(".o") }.toList()
+                })
             }
         }
 
@@ -295,7 +331,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
     compileTask: TaskProvider<CompileSkikoCppTask>,
     objcCompileTask: TaskProvider<CompileSkikoObjCTask>?,
     libBaseName: String = "skiko",
-    taskSuffix:String = ""
+    taskSuffix: String = ""
 ) = project.registerSkikoTask<LinkSkikoTask>("linkJvmBindings$taskSuffix", targetOs, targetArch) {
     val target = targetId(targetOs, targetArch)
     val skiaBinSubdir = "out/${buildType.id}-$target"
@@ -344,6 +380,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-current_version", skiko.planeDeployVersion,
             ) + additionalFlags
         }
+
         OS.Linux -> {
             osFlags = mutableListOf<String>().apply {
                 addAll(
@@ -370,6 +407,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 }
             }.toTypedArray()
         }
+
         OS.Windows -> {
             libDirs.set(windowsSdkPaths.libDirs)
 
@@ -407,6 +445,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 }
             }.toTypedArray()
         }
+
         OS.Android -> {
             val androidFlags = mutableListOf(
                 "-shared",
@@ -418,11 +457,17 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "$skiaBinDir/libskia_ganesh_ext.a"
             )
             linker.set(project.androidClangFor(targetArch))
-            if (isCore) {
-                moduleBinaryInputs.dynamicLibNames.forEach { androidFlags.add("-l$it") }
+            moduleBinaryInputs.dynamicLibNames.forEach { androidFlags.add("-l$it") }
+            if (linksCore) {
+                val coreLinkTaskName = "linkJvmBindings" + joinToTitleCamelCase(targetOs.id, targetArch.id)
+                val coreLinkTask = project.rootProject.tasks.named<LinkSkikoTask>(coreLinkTaskName)
+                dependsOn(coreLinkTask)
+                androidFlags.add("-L${coreLinkTask.get().outDir.get().asFile.absolutePath}")
+                androidFlags.add("-lskiko-${targetOs.id}-${targetArch.id}")
             }
             osFlags = androidFlags.toTypedArray()
         }
+
         OS.Wasm, OS.IOS, OS.TVOS -> {
             throw GradleException("This task shalln't be used with $targetOs")
         }
@@ -437,8 +482,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
             val exportedSymbols = maybeSignedDir.resolve("symbols_filtered.txt")
             if (unexportedSymbols.exists()) {
                 when (targetOs) {
-                    OS.MacOS -> {result.add("-Wl,-exported_symbols_list,${exportedSymbols.absolutePath}")}
-                    OS.Linux -> {
+                    OS.MacOS -> {
+                        result.add("-Wl,-exported_symbols_list,${exportedSymbols.absolutePath}")
+                    }
+
+                    OS.Linux, OS.Android -> {
                         val versionScript = maybeSignedDir.resolve("symbols.map")
                         if (versionScript.exists()) {
                             result.add("-Wl,--version-script=${versionScript.absolutePath}")
@@ -455,12 +503,14 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         }
                         result.addAll(moduleBinaryInputs.directStaticArchivePaths)
                     }
+
                     OS.Windows -> {
                         val defFile = maybeSignedDir.resolve("symbols.def")
                         if (defFile.exists()) {
                             result.add("/DEF:${defFile.absolutePath}")
                         }
                     }
+
                     else -> {}
                 }
             }
@@ -479,7 +529,11 @@ private val Arch.darwinSignClientName: String
 fun SkikoProjectContext.createDownloadCodeSignClientDarwinTask(
     targetOs: OS,
     hostArch: Arch
-) = project.registerSkikoTask<de.undercouch.gradle.tasks.download.Download>("downloadCodeSignClient", targetOs, hostArch) {
+) = project.registerSkikoTask<de.undercouch.gradle.tasks.download.Download>(
+    "downloadCodeSignClient",
+    targetOs,
+    hostArch
+) {
     val fileUrl = "https://codesign-distribution.labs.jb.gg/${hostArch.darwinSignClientName}"
 
     src(fileUrl)
@@ -499,7 +553,7 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     targetOs: OS,
     targetArch: Arch,
     linkJvmBindings: Provider<LinkSkikoTask>,
-    taskSuffix: String =""
+    taskSuffix: String = ""
 ) = project.registerSkikoTask<SealAndSignSharedLibraryTask>("maybeSign$taskSuffix", targetOs, targetArch) {
     dependsOn(linkJvmBindings)
 
@@ -646,7 +700,7 @@ fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
     targetArch: Arch,
     runtimeJars: List<Provider<Jar>>,
     additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
-) = project.registerSkikoTask<Copy>("skikoRuntimeDirForTests$${project.name}", targetOs, targetArch)  {
+) = project.registerSkikoTask<Copy>("skikoRuntimeDirForTests$${project.name}", targetOs, targetArch) {
     dependsOn(runtimeJars)
 
     runtimeJars.forEach { jarProvider ->
@@ -677,8 +731,10 @@ fun SkikoProjectContext.setupJvmTestTask(
     extraRuntimeJars: List<TaskProvider<Jar>> = emptyList(),
     includeIcu: Boolean = true
 ) = with(project) {
-    val skikoAwtRuntimeJarForTests = createJvmJar(targetOs, targetArch, skikoAwtJarForTests, libBaseName = project.name,
-        includeIcu = includeIcu)
+    val skikoAwtRuntimeJarForTests = createJvmJar(
+        targetOs, targetArch, skikoAwtJarForTests, libBaseName = project.name,
+        includeIcu = includeIcu
+    )
     val jars = listOf(skikoAwtJarForTests, skikoAwtRuntimeJarForTests) + extraRuntimeJars
     val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(targetOs, targetArch, jars, additionalRuntimeLibraries)
     val skikoJarForTests = skikoJarForTestsTask(skikoRuntimeDirForTests)
@@ -692,8 +748,14 @@ fun SkikoProjectContext.setupJvmTestTask(
             val jar = skikoJarForTests.get().outputs.files.files.single { it.name.endsWith(".jar") }
             systemProperty("skiko.jar.path", jar.absolutePath)
 
-            systemProperty("skiko.test.screenshots.dir", File(project.projectDir, "src/jvmTest/screenshots").absolutePath)
-            systemProperty("skiko.test.font.dir", File(project.projectDir, "src/commonTest/resources/fonts").absolutePath)
+            systemProperty(
+                "skiko.test.screenshots.dir",
+                File(project.projectDir, "src/jvmTest/screenshots").absolutePath
+            )
+            systemProperty(
+                "skiko.test.font.dir",
+                File(project.projectDir, "src/commonTest/resources/fonts").absolutePath
+            )
 
             val testingOnCI = System.getProperty("skiko.test.onci", "false").toBoolean()
             val canRunPerformanceTests = testingOnCI
@@ -702,9 +764,15 @@ fun SkikoProjectContext.setupJvmTestTask(
                 "skiko.test.performance.enabled",
                 System.getProperty("skiko.test.performance.enabled", canRunPerformanceTests.toString())
             )
-            systemProperty("skiko.test.ui.enabled", System.getProperty("skiko.test.ui.enabled", canRunUiTests.toString()))
+            systemProperty(
+                "skiko.test.ui.enabled",
+                System.getProperty("skiko.test.ui.enabled", canRunUiTests.toString())
+            )
             systemProperty("skiko.test.ui.renderApi", System.getProperty("skiko.test.ui.renderApi", "all"))
-            systemProperty("skiko.test.ui.renderApi.ignoreAssertsFor", System.getProperty("skiko.test.ui.renderApi.ignoreAssertsFor", "OPENGL"))
+            systemProperty(
+                "skiko.test.ui.renderApi.ignoreAssertsFor",
+                System.getProperty("skiko.test.ui.renderApi.ignoreAssertsFor", "OPENGL")
+            )
             systemProperty("skiko.test.debug", buildType == SkiaBuildType.DEBUG)
 
             // Tests should be deterministic, so disable scaling.
