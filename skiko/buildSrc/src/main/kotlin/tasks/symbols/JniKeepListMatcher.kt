@@ -15,9 +15,10 @@ package tasks.symbols
  * Replaces the previous Linux-vs-non-Linux `contains(...)` branch which never
  * matched the no-underscore Windows-x64 names.
  */
-private val JNI_REGEX = Regex(
-    "^_?(Java_|JNI_OnLoad|JNI_OnUnload|JNICALL\\b|JNI[A-Za-z]|jvm[A-Za-z_])"
-)
+internal fun isJniInfrastructureSymbol(name: String): Boolean {
+    val symbol = name.removePrefix("_")
 
-internal fun isJniInfrastructureSymbol(name: String): Boolean =
-    JNI_REGEX.containsMatchIn(name)
+    return symbol.startsWith("Java_") ||
+            symbol.startsWith("JNI") ||
+            symbol.startsWith("jvm")
+}

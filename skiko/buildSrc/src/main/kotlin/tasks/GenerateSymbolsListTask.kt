@@ -134,9 +134,19 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val result = mutableSetOf<String>()
         if (files.isEmpty()) return emptyList()
 
-        val executable = executableCandidates(os)
+        val executable = when (os) {
+            OS.Windows -> "dumpbin"
+            OS.Linux -> "nm"
+            OS.MacOS -> "nm"
+            OS.Android -> "llvm-nm"
+            OS.IOS, OS.TVOS, OS.Wasm ->
+                throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
+        }
+
         logger.lifecycle(
-            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} symbols using candidates $executable from ${files.size} files"
+            "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} " +
+                    "symbols using candidates $executable " +
+                    "from ${files.size} files"
         )
 
         when {
@@ -149,13 +159,14 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
                     .forEach { result.add(it.name) }
             }
 
-            else -> {
+            os.isWindows -> {
                 val output = run(executable = executable, args = listOf("/SYMBOLS"), files = files)
                 val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
                 parseDumpbinSymbols(output)
                     .filter { it.type == wanted }
                     .forEach { result.add(it.name) }
             }
+            else ->  throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
         }
 
         return result.toList()
@@ -190,7 +201,7 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
         logger.error(
             "generateSymbolsList: FATAL. Exhausted all executables.\n" +
-                    "Executables=$executable\n" +
+                    "Executable=$executable\n" +
                     "Args=$args\n" +
                     "Files=${actualFiles.size}\n" +
                     "FirstFile=${actualFiles.firstOrNull()?.absolutePath.orEmpty()}\n" +
@@ -211,13 +222,5 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
             os.isMacOs -> listOf("-P", "-g", "-U")
             else -> listOf("-P", "-g", "--defined-only")
         }
-    }
-
-    private fun executableCandidates(os: OS): String = when (os) {
-        OS.Windows -> "dumpbin"
-        OS.Linux -> "nm"
-        OS.MacOS -> "nm"
-        OS.Android -> "llvm-nm"
-        OS.IOS, OS.TVOS, OS.Wasm -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} targets")
     }
 }
