@@ -21,7 +21,8 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.android.enabled=true \
-              :skiko:publishToMavenLocal
+              :skiko:publishToMavenLocal \
+              :skiko:skiko-skottie:publishToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check Android Sample'
@@ -31,6 +32,14 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               packageRelease
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Android Maven Repo'
+        with:
+          name: skiko-publish-dry-run-android
+          path: ~/.m2/repository/org/jetbrains/skiko
+          if-no-files-found: error
+          retention-days: 14
 
   Web:
     name: 'Web Publish Dry Run'
@@ -49,7 +58,16 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.wasm.enabled=true \
-              :skiko:publishToMavenLocal
+              :skiko:publishToMavenLocal \
+              :skiko:skiko-skottie:publishToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Web Maven Repo'
+        with:
+          name: skiko-publish-dry-run-web
+          path: ~/.m2/repository/org/jetbrains/skiko
+          if-no-files-found: error
+          retention-days: 14
 
   Linux:
     name: 'Linux Publish Dry Run'
@@ -71,7 +89,10 @@ jobs:
               -Pskiko.awt.enabled=true \
               :skiko:publishKotlinMultiplatformPublicationToMavenLocal \
               :skiko:publishAwtPublicationToMavenLocal \
-              :skiko:publishAwtRuntimeElementsPublicationToMavenLocal
+              :skiko:publishAwtRuntimeElementsPublicationToMavenLocal \
+              :skiko:skiko-skottie:publishKotlinMultiplatformPublicationToMavenLocal \
+              :skiko:skiko-skottie:publishAwtPublicationToMavenLocal \
+              :skiko:skiko-skottie:publishAwtRuntimeElementsPublicationToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Publish Native Maven Local'
@@ -82,7 +103,9 @@ jobs:
               -Pskiko.native.enabled=true \
               -Pskiko.awt.enabled=false \
               :skiko:publishLinuxArm64PublicationToMavenLocal \
-              :skiko:publishLinuxX64PublicationToMavenLocal
+              :skiko:publishLinuxX64PublicationToMavenLocal \
+              :skiko:skiko-skottie:publishLinuxArm64PublicationToMavenLocal \
+              :skiko:skiko-skottie:publishLinuxX64PublicationToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check AWT Sample'
@@ -91,6 +114,14 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               :SkiaAwtSample:installDist
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Linux Maven Repo'
+        with:
+          name: skiko-publish-dry-run-linux
+          path: ~/.m2/repository/org/jetbrains/skiko
+          if-no-files-found: error
+          retention-days: 14
 
   macOS:
     name: 'macOS Publish Dry Run'
@@ -113,13 +144,22 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace \
             -Pskiko.native.enabled=true \
-            :skiko:publishToMavenLocal
+            :skiko:publishToMavenLocal \
+            :skiko:skiko-skottie:publishToMavenLocal
 
       - shell: bash
         name: 'Check AWT Sample'
         run: |
           ./gradlew --no-daemon --stacktrace \
             :SkiaAwtSample:installDist
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload macOS Maven Repo'
+        with:
+          name: skiko-publish-dry-run-macos
+          path: ~/.m2/repository/org/jetbrains/skiko
+          if-no-files-found: error
+          retention-days: 14
 
   Windows:
     name: 'Windows Publish Dry Run'
@@ -146,10 +186,19 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace \
             -Pskiko.native.enabled=true \
-             :skiko:publishToMavenLocal
+            :skiko:publishToMavenLocal \
+            :skiko:skiko-skottie:publishToMavenLocal
 
       - shell: bash
         name: 'Check AWT Sample'
         run: |
           ./gradlew --no-daemon --stacktrace \
             :SkiaAwtSample:installDist
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Windows Maven Repo'
+        with:
+          name: skiko-publish-dry-run-windows
+          path: ~/.m2/repository/org/jetbrains/skiko
+          if-no-files-found: error
+          retention-days: 14
