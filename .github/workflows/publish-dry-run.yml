@@ -73,6 +73,18 @@ jobs:
                :skiko:publishToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
+        name: 'Publish arm64 Maven Local'
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew --no-daemon --stacktrace \
+              -Pskiko.native.enabled=true \
+              -Pskiko.awt.enabled=true \
+              -Pskiko.arch=arm64 \
+               :skiko:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
+
+
+      - uses: ./.github/actions/docker-skiko-run
         name: 'Publish Native Maven Local'
         with:
           image_name: linux-amd64

@@ -410,7 +410,7 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     if (targetOs == OS.Linux) {
         // Linux requires additional sealing to run on wider set of platforms.
         // See https://github.com/olonho/sealer.
-        when (targetArch) {
+        when (hostArch) {
             Arch.X64 -> sealer.set(toolsDir.file("sealer-x64"))
             Arch.Arm64 -> sealer.set(toolsDir.file("sealer-arm64"))
             else -> error("Unexpected combination of '$targetArch' and '$targetOs'")

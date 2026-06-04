@@ -1,6 +1,17 @@
 # Multi-architecture Dockerfile for building Skiko on Linux, compatible with GLIBC 2.26
 # Supports both amd64 (x64) and arm64 architectures
 
+FROM --platform=linux/arm64 amazonlinux:2 AS arm64-libs
+RUN yum install -y \
+    fontconfig fontconfig-devel \
+    freetype freetype-devel \
+    mesa-libGL mesa-libGL-devel \
+    mesa-libGLU mesa-libGLU-devel \
+    libX11 libX11-devel \
+    libXrandr libXrandr-devel \
+    dbus-libs dbus-devel && \
+    yum clean all
+
 FROM amazonlinux:2
 ARG TARGETARCH
 
@@ -102,10 +113,16 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     ln -s $ARM_TOOLCHAIN_PATH/bin/aarch64-none-linux-gnu-ar /usr/local/bin/aarch64-linux-gnu-ar; \
     fi
 
+RUN mkdir -p "$ARM_TOOLCHAIN_SYSROOT/usr/lib64" \
+             "$ARM_TOOLCHAIN_SYSROOT/usr/lib" \
+             "$ARM_TOOLCHAIN_SYSROOT/usr/include"
+COPY --from=arm64-libs /usr/lib64/ $ARM_TOOLCHAIN_SYSROOT/usr/lib64/
+COPY --from=arm64-libs /usr/lib/ $ARM_TOOLCHAIN_SYSROOT/usr/lib/
+COPY --from=arm64-libs /usr/include/ $ARM_TOOLCHAIN_SYSROOT/usr/include/
+
 # Copy development headers to ARM64 sysroot
 ENV ARM_SYSROOT_HEADERS="fontconfig freetype2 GL X11 KHR"
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-    mkdir -p $ARM_TOOLCHAIN_SYSROOT/usr/include && \
     for dir in $ARM_SYSROOT_HEADERS; do \
         cp -r /usr/include/$dir $ARM_TOOLCHAIN_SYSROOT/usr/include/ || exit 1; \
     done; \
