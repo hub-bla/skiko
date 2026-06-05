@@ -29,29 +29,21 @@ private fun parseNmPosixLine(line: String): Symbol? {
     if (typeText.length != 1) return null
 
     val typeLetter = typeText[0]
-    val type = classifyNmSymbolType(typeLetter)
+    val type = classifyNmSymbolType(typeLetter) ?: return null
 
     return Symbol(
         name = name,
         type = type,
-        defined = type == SymbolType.DefinedGlobal,
     )
 }
 
 private fun classifyNmSymbolType(
     typeLetter: Char,
-): SymbolType =
+): SymbolType? =
     when {
         typeLetter == 'U' -> SymbolType.Undefined
-        typeLetter == 'w' || typeLetter == 'v' -> SymbolType.UndefinedWeak
         typeLetter.isUpperCase() -> SymbolType.DefinedGlobal
-
         // GNU unique global symbol.
         typeLetter == 'u' -> SymbolType.DefinedGlobal
-
-        // GNU IFUNC may be printed as lowercase `i`.
-        // Treat it as exported only if caller already used `nm -g`.
-        typeLetter == 'i' -> SymbolType.DefinedGlobal
-
-        else -> SymbolType.Other
+        else -> null
     }

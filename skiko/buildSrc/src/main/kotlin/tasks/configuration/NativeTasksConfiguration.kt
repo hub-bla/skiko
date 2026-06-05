@@ -9,6 +9,7 @@ import SkikoExtensionModule
 import SkikoModuleKind
 import SkikoProjectContext
 import WriteCInteropDefFile
+import HideSkiaSymbolsTask
 import compilerForTarget
 import currentSkikoExtensionModuleOrNull
 import hostArch
@@ -264,19 +265,63 @@ fun SkikoProjectContext.configureNativeTarget(
     } else {
         baseLibraries + bridgesLibraryPath
     }
+    val hiddenSymbolsFile = layout.buildDirectory.file(
+        "nativeHiddenSymbols/$targetString/${if (os.isLinux) "symbols.map" else "symbols.txt"}"
+    )
+    val coreSkiaLibraries = skiaStaticLibraries(os, arch, skiaDir, targetString, buildType)
+    val hiddenSymbolSources = if (requiresSymbolPatching) {
+        val patchedBaseLibraries = baseLibraries.map { lib -> "${patchedLibsDir.absolutePath}/${File(lib).name}" }
+        val patchedBridgeLibrary = "${patchedLibsDir.absolutePath}/${libPrefix}-$targetString.a"
+        val patchedCoreSymbolSources = if (isCore) {
+            emptyList()
+        } else {
+            val corePatchedLibsDir = project.rootProject.layout.buildDirectory
+                .dir("nativeBridges/patched/$targetString")
+                .get().asFile
+            coreSkiaLibraries.map { lib -> "${corePatchedLibsDir.absolutePath}/${File(lib).name}" } +
+                    "${corePatchedLibsDir.absolutePath}/skiko-native-bridges-$targetString.a"
+        }
+        patchedBaseLibraries + patchedBridgeLibrary + patchedCoreSymbolSources
+    } else {
+        if (isCore) baseLibraries else baseLibraries + coreSkiaLibraries
+    }
+    val hideSkiaSymbols = project.registerSkikoTask<HideSkiaSymbolsTask>(
+        "hideSkiaSymbols".withSuffix(isUikitSim = isUikitSim),
+        os,
+        arch
+    ) {
+        targetOs.set(os)
+        symbolSourceLibraries.from(hiddenSymbolSources.map { File(it) })
+        outputFile.set(hiddenSymbolsFile)
+    }
 
     val linkerFlags = when (os) {
         OS.MacOS -> {
             configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, moduleBinaryInputs.linkFlags)
-            mutableListOfLinkerOptions(moduleBinaryInputs.linkFlags)
+            mutableListOfLinkerOptions(
+                moduleBinaryInputs.linkFlags + listOf(
+                    "-unexported_symbols_list",
+                    hiddenSymbolsFile.get().asFile.absolutePath
+                )
+            )
         }
         OS.IOS -> {
             configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, moduleBinaryInputs.linkFlags)
-            mutableListOfLinkerOptions(moduleBinaryInputs.linkFlags)
+            mutableListOfLinkerOptions(
+                moduleBinaryInputs.linkFlags + listOf(
+                    "-unexported_symbols_list",
+                    hiddenSymbolsFile.get().asFile.absolutePath
+                )
+            )
         }
         OS.TVOS -> {
             configureCinterop(cinteropNameProvider(os), os, arch, target, targetString, moduleBinaryInputs.linkFlags)
-            mutableListOfLinkerOptions(moduleBinaryInputs.linkFlags)
+            mutableListOfLinkerOptions(
+                moduleBinaryInputs.linkFlags + listOf(
+                    "-unexported_symbols_list",
+                    hiddenSymbolsFile.get().asFile.absolutePath
+                )
+            )
         }
         OS.Linux -> {
             val options = mutableListOf(
@@ -303,6 +348,7 @@ fun SkikoProjectContext.configureNativeTarget(
                 options.add(1, "-L/opt/arm-gnu-toolchain/aarch64-none-linux-gnu/libc/usr/lib64")
             }
 
+            options.add("--version-script=${hiddenSymbolsFile.get().asFile.absolutePath}")
             mutableListOfLinkerOptions(options)
         }
         else -> mutableListOf()
@@ -398,10 +444,21 @@ fun SkikoProjectContext.configureNativeTarget(
     } else {
         linkTask
     }
+    hideSkiaSymbols.configure {
+        dependsOn(unzipper)
+        dependsOn(compilationDependency)
+        if (requiresSymbolPatching) {
+            if (!isCore) {
+                val corePatchTaskName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim) +
+                        joinToTitleCamelCase(os.id, arch.id)
+                dependsOn(project.rootProject.tasks.named(corePatchTaskName))
+            }
+        }
+    }
 
     target.compilations.all {
         compileTaskProvider.configure {
-            dependsOn(compilationDependency)
+            dependsOn(hideSkiaSymbols)
         }
     }
 }

@@ -8,45 +8,13 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
 import org.gradle.process.ExecOperations
+import tasks.symbols.SymbolExtractor
 import tasks.symbols.SymbolType
-import tasks.symbols.parseDumpbinSymbols
-import tasks.symbols.parseNmPosix
-import java.io.ByteArrayOutputStream
+import tasks.symbols.generateDefFile
+import tasks.symbols.generateVersionScript
+import tasks.symbols.isJniInfrastructureSymbol
 import java.io.File
-import java.nio.file.Path
 import javax.inject.Inject
-import kotlin.io.path.readLines
-import kotlin.io.path.writeText
-
-internal fun generateDefFile(exportedTxt: Path, output: Path) {
-    val symbols = exportedTxt.readLines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-
-    output.writeText(buildString {
-        appendLine("EXPORTS")
-        symbols.forEach { symbol ->
-            appendLine("    $symbol")
-        }
-    })
-}
-
-internal fun generateVersionScript(symbolsTxt: Path, output: Path) {
-    val symbols = symbolsTxt.readLines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-
-    output.writeText(buildString {
-        appendLine("{")
-        appendLine("  global:")
-        symbols.forEach { symbol ->
-            appendLine("    $symbol;")
-        }
-        appendLine("  local:")
-        appendLine("    *;")
-        appendLine("};")
-    })
-}
 
 abstract class GenerateSymbolsListTask : DefaultTask() {
     @get:Inject
@@ -83,6 +51,9 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
         val arch = targetArch.get()
         val outDir = outputDir.get().asFile
         outDir.mkdirs()
+        if (os == OS.IOS || os == OS.TVOS || os == OS.Wasm) {
+            throw IllegalStateException("generateSymbolsList does not support ${os.name} target")
+        }
 
         logger.lifecycle(
             "generateSymbolsList: targetOs=${os.name}, targetArch=${arch.name}, coreObjects=${coreObjectFiles.files.size}, moduleObjects=${moduleObjectFiles.files.size}, skiaLibs=${skiaLibs.files.size}, moduleLibs=${moduleLibs.files.size}"
@@ -131,88 +102,17 @@ abstract class GenerateSymbolsListTask : DefaultTask() {
 
     private fun extractSymbols(files: List<File>, exported: Boolean): List<String> {
         val os = targetOs.get()
-        val result = mutableSetOf<String>()
-        if (files.isEmpty()) return emptyList()
-
-        val executable = when (os) {
-            OS.Windows -> "dumpbin"
-            OS.Linux -> "nm"
-            OS.MacOS -> "nm"
-            OS.Android -> androidLlvmNm.get()
-            OS.IOS, OS.TVOS, OS.Wasm ->
-                throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
-        }
-
         logger.lifecycle(
             "generateSymbolsList: extracting ${if (exported) "exported" else "undefined"} " +
-                    "symbols using candidates $executable " +
                     "from ${files.size} files"
         )
 
-        when {
-            os.isMacOs || os.isLinux || os == OS.Android -> {
-                val nmFlags = nmFlags(os, exported)
-                val output = run(executable = executable, args = nmFlags, files = files)
-                val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
-                parseNmPosix(output)
-                    .filter { it.type == wanted }
-                    .forEach { result.add(it.name) }
-            }
-
-            os.isWindows -> {
-                val output = run(executable = executable, args = listOf("/SYMBOLS"), files = files)
-                val wanted = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
-                parseDumpbinSymbols(output)
-                    .filter { it.type == wanted }
-                    .forEach { result.add(it.name) }
-            }
-
-            else -> throw IllegalStateException("generateSymbolsList is JVM-only and does not support ${os.name} target")
-        }
-
-        return result.toList()
-    }
-
-    private fun run(executable: String, args: List<String>, files: List<File>): String {
-        val actualFiles = files.filter { it.isFile }
-        if (actualFiles.isEmpty()) return ""
-
-        val outStream = ByteArrayOutputStream()
-        val errStream = ByteArrayOutputStream()
-
-        val result = execOperations.exec {
-            this.executable = executable
-            this.args = args + actualFiles.map { it.absolutePath }
-            this.standardOutput = outStream
-            this.errorOutput = errStream
-        }
-
-        if (result.exitValue != 0) {
-            error(
-                """
-                Command failed with exit code ${result.exitValue}
-                stderr:
-                $errStream
-                """.trimIndent()
-            )
-        }
-
-        return outStream.toString()
-    }
-
-
-    private fun nmFlags(os: OS, exported: Boolean): List<String> = when {
-        !exported -> listOf("-P", "-u")
-        os.isMacOs -> listOf("-P", "-g", "-U")
-        else -> listOf("-P", "-g", "--defined-only")
-    }
-
-    private fun isJniInfrastructureSymbol(name: String): Boolean {
-        val symbol = name.removePrefix("_")
-
-        return symbol.startsWith("Java_") ||
-                symbol.startsWith("JNI") ||
-                symbol.startsWith("jvm")
+        val type = if (exported) SymbolType.DefinedGlobal else SymbolType.Undefined
+        return SymbolExtractor(
+            execOperations = execOperations,
+            os = os,
+            androidLlvmNm = if (os == OS.Android) androidLlvmNm.get() else null,
+        ).extract(files, type).toList()
     }
 
 }

@@ -61,7 +61,6 @@ internal fun parseDumpbinSymbols(output: String): Sequence<Symbol> = sequence {
             Symbol(
                 name = name,
                 type = if (defined) SymbolType.DefinedGlobal else SymbolType.Undefined,
-                defined = defined,
             )
         )
     }
