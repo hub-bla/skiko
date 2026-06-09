@@ -14,13 +14,12 @@ export const registerSkikoWasmReadyHook = (hook) => {
 
 const extensionLoadPromises = new Map();
 
-export const loadSkikoExtension = (url) => {
-    const filename = url.split("/").pop();
+export const loadSkikoExtension = (filename) => {
     if (extensionLoadPromises.has(filename)) return extensionLoadPromises.get(filename);
     const loadPromise = awaitSkikoCore.then(async (module) => {
         const absoluteUrl = typeof globalThis.location !== "undefined"
-            ? new URL(url, globalThis.location.href).toString()
-            : url;
+            ? new URL(filename, globalThis.location.href).toString()
+            : filename;
 
         const originalLocateFile = module.locateFile;
         module.locateFile = (path, prefix) => {
@@ -28,22 +27,26 @@ export const loadSkikoExtension = (url) => {
             return originalLocateFile ? originalLocateFile(path, prefix) : prefix + path;
         };
 
-        try {
-            await module.loadDynamicLibrary(filename, {
-                loadAsync: true,
-                global: true,
-                nodeJS: false
-            });
+        const sideModuleExports = {};
 
-            const ldsoEntry = module.LDSO.loadedLibsByName[filename];
-            if (ldsoEntry?.exports && typeof ldsoEntry.exports === 'object') {
-                Object.assign(loadedWasm._, ldsoEntry.exports);
-            } else {
-                throw new Error(`No exports found for ${filename}`);
-            }
-        } finally {
-            module.locateFile = originalLocateFile;
-        }
+        await module.loadDynamicLibrary(filename, {
+            loadAsync: true,
+            global: false,
+            nodelete: true,
+            nodeJS: false
+        }, sideModuleExports);
+
+        Object.assign(loadedWasm._, sideModuleExports);
+
+        await module.loadDynamicLibrary(filename, {
+            loadAsync: true,
+            global: true,
+            nodelete: true,
+            nodeJS: false
+        });
+
+        module.locateFile = originalLocateFile;
+
     }).catch((error) => {
         extensionLoadPromises.delete(filename);
         throw error;

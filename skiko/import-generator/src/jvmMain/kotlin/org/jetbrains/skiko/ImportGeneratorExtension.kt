@@ -55,7 +55,7 @@ internal class ImportGeneratorExtension(
             "export const api = { awaitSkiko: wasmApi.awaitSkiko }",
         )
         val SIDE_MODULE_REEXPORT_HEADER = listOf(
-            "export const reexportSymbolsLoaded = true;",
+            "export const isSideModuleLoaded = () => wasmApi.isSideModuleLoaded();",
         )
     }
 }

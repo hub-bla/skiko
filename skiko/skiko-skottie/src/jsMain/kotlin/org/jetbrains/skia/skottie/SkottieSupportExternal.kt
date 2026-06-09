@@ -1,11 +1,6 @@
-@file:JsModule("./skiko-skottie.mjs")
+@file:JsModule("./js-skiko-skottie-reexport-symbols.mjs")
 @file:JsNonModule
 package org.jetbrains.skia.skottie
 
-import kotlin.js.Promise
-
-@JsName("loadSkikoExtension")
-internal external fun loadSkikoExtension(url: String): Promise<Unit>
-
-@JsName("skottieSetupRegistered")
-internal external val skottieSetupRegistered: Boolean
+@JsName("isSideModuleLoaded")
+internal external fun isSkottieModuleLoaded(): Boolean
