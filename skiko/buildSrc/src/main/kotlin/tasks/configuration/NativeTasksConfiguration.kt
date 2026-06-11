@@ -5,6 +5,7 @@ import CompileSkikoCppTask
 import PatchSkiaSymbolsTask
 import OS
 import SkiaBuildType
+import SkikoModuleKind
 import SkikoProjectContext
 import WriteCInteropDefFile
 import compilerForTarget
@@ -161,6 +162,11 @@ fun SkikoProjectContext.compileNativeBridgesTask(
 
         includeHeadersNonRecursive(projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
+        if (kind == SkikoModuleKind.EXTENSION) {
+            val coreProjectDir = project.rootProject.projectDir
+            includeHeadersNonRecursive(coreProjectDir.resolve("src/nativeJsMain/cpp"))
+            includeHeadersNonRecursive(coreProjectDir.resolve("src/commonMain/cpp/common/include"))
+        }
         includeHeadersNonRecursive(skiaHeadersDirs(unpackedSkia))
     }
 }

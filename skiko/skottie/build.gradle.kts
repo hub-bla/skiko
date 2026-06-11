@@ -71,6 +71,7 @@ val skikoSkottieProjectContext = SkikoProjectContext(
     additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoSkottieArtifacts),
     configureDependencies = coreDependencies
 )
+extensions.add(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME, skikoSkottieProjectContext)
 
 repositories {
     mavenCentral()

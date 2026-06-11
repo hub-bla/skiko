@@ -480,7 +480,7 @@ fun configureSymbolsFor(os: OS, arch: Arch) {
 }
 
 if (supportAwt) {
-    afterEvaluate {
+    gradle.projectsEvaluated {
         configureSymbolsFor(targetOs, targetArch)
 
         if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
@@ -490,7 +490,7 @@ if (supportAwt) {
 }
 
 if (supportAndroid) {
-    afterEvaluate {
+    gradle.projectsEvaluated {
         for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
             configureSymbolsFor(OS.Android, arch)
         }
