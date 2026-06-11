@@ -8,6 +8,8 @@ import LinkSkikoTask
 import OS
 import SealAndSignSharedLibraryTask
 import SkiaBuildType
+import SKIKO_PROJECT_CONTEXT_EXTENSION_NAME
+import SkikoModuleKind
 import SkikoProjectContext
 import dsl.TargetEnv
 import compilerForTarget
@@ -70,6 +72,12 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/common"))
     includeHeadersNonRecursive(projectDir.resolve("src/jvmMain/cpp/include"))
     includeHeadersNonRecursive(projectDir.resolve("src/commonMain/cpp/common/include"))
+    if (kind == SkikoModuleKind.EXTENSION) {
+        val coreProjectDir = project.rootProject.projectDir
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/jvmMain/cpp/common"))
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/jvmMain/cpp/include"))
+        includeHeadersNonRecursive(coreProjectDir.resolve("src/commonMain/cpp/common/include"))
+    }
 
     compiler.set(compilerForTarget(targetOs, targetArch))
 
@@ -139,6 +147,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
     flags.set(
         listOf(
             *skiaPreprocessorFlags(targetOs, buildType),
+            *if (kind == SkikoModuleKind.CORE) arrayOf("-DSKIKO_JVM_BUILDING_CORE") else emptyArray(),
             *osFlags,
         )
     )
@@ -282,7 +291,36 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
 
         skiaLibs.from(project.files(coreBinaryInputs.staticArchivePaths + coreBinaryInputs.directStaticArchivePaths))
 
-        moduleLibs.from(project.files(emptyList<File>()))
+        project.rootProject.subprojects
+            .mapNotNull { subProject ->
+                subProject.extensions.findByName(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME) as? SkikoProjectContext
+            }
+            .filter { it.kind == SkikoModuleKind.EXTENSION }
+            .forEach { moduleContext ->
+                val moduleProject = moduleContext.project
+                val moduleCompileTaskName = "compileJvmBindings$suffix"
+                if (moduleCompileTaskName !in moduleProject.tasks.names) {
+                    return@forEach
+                }
+                val moduleCompile = moduleProject.tasks.named<CompileSkikoCppTask>(moduleCompileTaskName)
+
+                dependsOn(moduleCompile)
+                moduleObjectFiles.from(moduleCompile.map {
+                    it.outDir.get().asFile.walk()
+                        .filter { file -> file.name.endsWith(".o") || file.name.endsWith(".obj") }
+                        .toList()
+                })
+
+                val moduleBinaryInputs = moduleContext.resolveBinaryInputs(
+                    targetOs,
+                    targetArch,
+                    TargetEnv.JVM,
+                    skiaBinDir
+                )
+                moduleLibs.from(
+                    project.files(moduleBinaryInputs.staticArchivePaths + moduleBinaryInputs.directStaticArchivePaths)
+                )
+            }
     }
 }
 
@@ -297,11 +335,22 @@ fun SkikoProjectContext.createLinkJvmBindings(
     val skiaBinSubdir = "out/${buildType.id}-$target"
     val skiaBinDir = skiaJvmBindingsDir.get().absolutePath + "/" + skiaBinSubdir
     val resolvedBinaryInputs = resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, skiaBinDir)
+    val linksCore = kind == SkikoModuleKind.EXTENSION && dependsOnCore
+    val coreLinkTask = if (linksCore) {
+        project.rootProject.tasks.named<LinkSkikoTask>(
+            "linkJvmBindings${joinToTitleCamelCase(targetOs.id, targetArch.id)}"
+        )
+    } else {
+        null
+    }
     val osFlags: Array<String>
 
     libFiles = project.files((resolvedBinaryInputs.staticArchivePaths).distinct())
 
     dependsOn(compileTask)
+    if (coreLinkTask != null) {
+        dependsOn(coreLinkTask)
+    }
     objectFiles = project.fileTree(compileTask.map { it.outDir.get() }) {
         include("**/*.o")
     }
@@ -327,7 +376,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-install_name", "./${libOutputFileName.get()}",
                 "-current_version", skiko.planeDeployVersion,
                 *resolvedBinaryInputs.linkFlags.toTypedArray(),
-                *resolvedBinaryInputs.frameworks.toTypedArray()
+                *resolvedBinaryInputs.frameworks.toTypedArray(),
+                *if (coreLinkTask != null) arrayOf(
+                    "-L${coreLinkTask.get().outDir.get().asFile.absolutePath}",
+                    "-lskiko-${targetOs.id}-${targetArch.id}",
+                ) else emptyArray()
             )
         }
         OS.Linux -> {
@@ -346,6 +399,11 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 addAll(resolvedBinaryInputs.dynamicLibNames.map { "-l$it" })
                 addAll(resolvedBinaryInputs.directStaticArchivePaths)
                 addAll(resolvedBinaryInputs.linkFlags)
+                if (coreLinkTask != null) {
+                    add("-L${coreLinkTask.get().outDir.get().asFile.absolutePath}")
+                    add("-lskiko-${targetOs.id}-${targetArch.id}")
+                    add("-Wl,-rpath,\$ORIGIN")
+                }
             }.toTypedArray()
         }
         OS.Windows -> {
@@ -376,6 +434,10 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 if (buildType == SkiaBuildType.DEBUG) add("dxgi.lib")
                 addAll(resolvedBinaryInputs.dynamicLibNames.map { "$it.lib" })
                 addAll(resolvedBinaryInputs.linkFlags)
+                if (coreLinkTask != null) {
+                    add("/LIBPATH:${coreLinkTask.get().outDir.get().asFile.absolutePath}")
+                    add("skiko-${targetOs.id}-${targetArch.id}.lib")
+                }
             }.toTypedArray()
         }
         OS.Android -> {
@@ -389,6 +451,10 @@ fun SkikoProjectContext.createLinkJvmBindings(
             androidFlags.addAll(resolvedBinaryInputs.dynamicLibNames.map { "-l$it" })
             androidFlags.addAll(resolvedBinaryInputs.directStaticArchivePaths)
             androidFlags.addAll(resolvedBinaryInputs.linkFlags)
+            if (coreLinkTask != null) {
+                androidFlags.add("-L${coreLinkTask.get().outDir.get().asFile.absolutePath}")
+                androidFlags.add("-lskiko-${targetOs.id}-${targetArch.id}")
+            }
             osFlags = androidFlags.toTypedArray()
             linker.set(project.androidClangFor(targetArch))
         }
@@ -563,10 +629,15 @@ fun SkikoProjectContext.skikoRuntimeDirForTestsTask(
     skikoJvmJar: Provider<Jar>,
     skikoJvmRuntimeJar: Provider<Jar>,
     additionalRuntimeLibraries: List<AdditionalRuntimeLibrary>,
+    additionalRuntimeJars: List<Provider<Jar>> = emptyList(),
 ) = project.registerSkikoTask<Copy>("skikoRuntimeDirForTests", targetOs, targetArch) {
     dependsOn(skikoJvmJar, skikoJvmRuntimeJar)
     from(project.zipTree(skikoJvmJar.flatMap { it.archiveFile }))
     from(project.zipTree(skikoJvmRuntimeJar.flatMap { it.archiveFile }))
+    additionalRuntimeJars.forEach { runtimeJar ->
+        dependsOn(runtimeJar)
+        from(project.zipTree(runtimeJar.flatMap { it.archiveFile }))
+    }
     additionalRuntimeLibraries.forEach { lib ->
         from(project.zipTree(lib.jarTask.flatMap { it.archiveFile }))
     }
@@ -589,7 +660,23 @@ fun SkikoProjectContext.setupJvmTestTask(
     targetArch: Arch
 ) = with(project) {
     val skikoAwtRuntimeJarForTests = createSkikoJvmJarTask(targetOs, targetArch, skikoAwtJarForTests)
-    val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(targetOs, targetArch, skikoAwtJarForTests, skikoAwtRuntimeJarForTests, additionalRuntimeLibraries)
+    val coreRuntimeJarForTests = if (kind == SkikoModuleKind.EXTENSION && dependsOnCore) {
+        listOf(
+            project.rootProject.tasks.named<Jar>(
+                "skikoJvmRuntimeJar${joinToTitleCamelCase(targetOs.id, targetArch.id)}"
+            )
+        )
+    } else {
+        emptyList()
+    }
+    val skikoRuntimeDirForTests = skikoRuntimeDirForTestsTask(
+        targetOs,
+        targetArch,
+        skikoAwtJarForTests,
+        skikoAwtRuntimeJarForTests,
+        additionalRuntimeLibraries,
+        coreRuntimeJarForTests
+    )
     val skikoJarForTests = skikoJarForTestsTask(skikoRuntimeDirForTests)
 
     tasks.withType<Test>().configureEach {

@@ -13,6 +13,8 @@ import dsl.*
 
 enum class SkikoModuleKind { CORE, EXTENSION }
 
+const val SKIKO_PROJECT_CONTEXT_EXTENSION_NAME = "skikoContext"
+
 class SkikoProjectContext(
     val project: Project,
     val skiko: SkikoProperties,
@@ -25,10 +27,9 @@ class SkikoProjectContext(
     configureDependencies: (SkikoDependencyScope.() -> Unit)
 ) {
     val dependencyRegistry = BinaryRegistry()
-
-    init {
-        SkikoDependencyScope(dependencyRegistry).configureDependencies()
-    }
+    val dependsOnCore = SkikoDependencyScope(dependencyRegistry)
+        .also { it.configureDependencies() }
+        .dependsOnCore
 
     val buildType = skiko.buildType
 
@@ -167,7 +168,7 @@ fun SkikoProjectContext.registerOrGetSkiaDirProvider(
             skiaDir.absoluteFile
         }
     } else {
-        project.tasks.withType<Copy>().named("unzipSkia$taskNameSuffix").map { it.destinationDir.absoluteFile }
+        project.rootProject.tasks.withType<Copy>().named("unzipSkia$taskNameSuffix").map { it.destinationDir.absoluteFile }
     }
 }
 
