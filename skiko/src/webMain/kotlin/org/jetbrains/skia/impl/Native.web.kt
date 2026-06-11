@@ -6,6 +6,10 @@ import org.jetbrains.skiko.InternalSkikoApi
 actual abstract class Native actual constructor(ptr: NativePointer) {
     actual var _ptr: NativePointer
 
+    @InternalSkikoApi
+    actual val nativePtr: NativePointer
+        get() = _ptr
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (null == other) return false
@@ -42,8 +46,10 @@ actual typealias NativePointer = Int
 @InternalSkikoApi
 actual typealias InteropPointer = Int
 
-private val INTEROP_SCOPE = InteropScope()
-private var interopScopeCounter = 0
+@OptIn(InternalSkikoApi::class)
+val INTEROP_SCOPE = InteropScope()
+@OptIn(InternalSkikoApi::class)
+var interopScopeCounter = 0
 
 @InternalSkikoApi
 actual inline fun <T> interopScope(block: InteropScope.() -> T): T {
@@ -211,4 +217,3 @@ internal fun fromWasm(src: NativePointer, result: DoubleArray) {
         address += Double.SIZE_BYTES
     }
 }
-
