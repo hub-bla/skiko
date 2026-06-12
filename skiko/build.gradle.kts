@@ -59,9 +59,6 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "webp_sse41",
                 "zlib",
                 "expat",
-                "skottie",
-                "sksg",
-                "jsonreader"
             )
         }
         jvm {
@@ -89,13 +86,11 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
             linux {
                 // Hack to fix problem with linker not always finding certain declarations.
                 directStaticSkiaLibs(
-                    "sksg",
                     "skia",
                     "skia_ganesh_ext",
                     "skunicode_core",
                     "skunicode_icu",
                     "skshaper",
-                    "jsonreader"
                 )
                 dynamicSystemLibs("GL", "X11", "fontconfig")
                 arm64 { dynamicSystemLibs("EGL") }
@@ -116,9 +111,6 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
             linux {
                 // Hack to fix problem with linker not always finding certain declarations.
                 directStaticSkiaLibs(
-                    "skottie",
-                    "jsonreader",
-                    "sksg",
                     "skshaper",
                     "skunicode_core",
                     "skunicode_icu",
@@ -167,12 +159,13 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "brotli",
             )
             linkFlags(
-                "-l", "GL",
+                "-s", "MAIN_MODULE=2",
+                "-s", "AUTOLOAD_DYLIBS=0",
                 "-s", "MAX_WEBGL_VERSION=2",
                 "-s", "MIN_WEBGL_VERSION=2",
                 "-s", "MODULARIZE=1",
                 "-s", "EXPORT_NAME=loadSkikoWASM",
-                "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports]\"",
+                "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports, loadDynamicLibrary, HEAPU8]\"",
                 "--bind",
             )
         }

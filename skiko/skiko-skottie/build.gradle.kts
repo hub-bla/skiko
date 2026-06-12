@@ -54,6 +54,11 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "jsonreader"
             )
         }
+        wasm {
+            linkFlags(
+                "-s", "SIDE_MODULE=2",
+            )
+        }
     }
 }
 val skikoSkottieProjectContext = SkikoProjectContext(
@@ -114,7 +119,6 @@ kotlin {
 
     if (supportWeb) {
         skikoSkottieProjectContext.declareWasmTasks(
-            isSideModule = true,
             extraIncludeDirs = listOf(
                 rootProject.projectDir.resolve("src/nativeJsMain/cpp"),
                 rootProject.projectDir.resolve("src/commonMain/cpp/common/include")
