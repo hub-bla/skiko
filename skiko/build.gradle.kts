@@ -165,7 +165,7 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "-s", "MIN_WEBGL_VERSION=2",
                 "-s", "MODULARIZE=1",
                 "-s", "EXPORT_NAME=loadSkikoWASM",
-                "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports, loadDynamicLibrary, HEAPU8]\"",
+                "-s", "EXPORTED_RUNTIME_METHODS=\"[GL, wasmExports, loadDynamicLibrary, LDSO, HEAPU8]\"",
                 "--bind",
             )
         }
@@ -187,6 +187,7 @@ val skikoProjectContext = SkikoProjectContext(
     additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoArtifacts),
     configureDependencies = coreDependencies
 )
+extensions.add(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME, skikoProjectContext)
 
 allprojects {
     group = SkikoArtifacts.DEFAULT_GROUP_ID
@@ -260,7 +261,7 @@ kotlin {
                 dependsOn(test.compileTaskProvider, tasks["compileTestKotlinWasmJs"])
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(skikoArtifacts.artifactIdPrefix, isSideModule = skikoProjectContext.kind == SkikoModuleKind.EXTENSION)
         }
 
 
@@ -283,7 +284,7 @@ kotlin {
                 dependsOn(test.compileTaskProvider, tasks["compileTestKotlinJs"])
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(skikoArtifacts.artifactIdPrefix, isSideModule = false)
         }
     }
 
@@ -487,6 +488,12 @@ if (supportAndroid) {
         for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
             configureSymbolsFor(OS.Android, arch)
         }
+    }
+}
+
+if (supportWeb) {
+    afterEvaluate {
+        skikoProjectContext.configureWasmMainModuleSideModuleInputs()
     }
 }
 

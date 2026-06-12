@@ -85,6 +85,13 @@ class SkikoProjectContext(
     }
 }
 
+fun Project.skikoExtensionModules(): List<SkikoProjectContext> =
+    rootProject.subprojects.mapNotNull { subProject ->
+        evaluationDependsOn(subProject.path)
+        (subProject.extensions.findByName(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME) as? SkikoProjectContext)
+            ?.takeIf { it.kind == SkikoModuleKind.EXTENSION }
+    }
+
 fun SkikoProjectContext.declareSkiaTasks() {
     mapOf(
         "android" to listOf("arm64", "x64"),

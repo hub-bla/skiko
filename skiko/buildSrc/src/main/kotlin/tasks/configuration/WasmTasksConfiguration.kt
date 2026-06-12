@@ -5,14 +5,17 @@ import CompileSkikoCppTask
 import IMPORT_GENERATOR
 import LinkSkikoWasmTask
 import OS
+import SkikoModuleKind
 import SkikoProjectContext
 import compilerForTarget
 import dsl.TargetEnv
 import linkerForTarget
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.kotlin.dsl.get
+import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.getValue
 import org.gradle.kotlin.dsl.getting
 import org.gradle.kotlin.dsl.provideDelegate
@@ -23,21 +26,29 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import supportWeb
 import wasmImport
+import skikoExtensionModules
 import java.io.File
 
 private val Project.setupMjs
     get() = wasmImport("setup.mjs")
 
-private val Project.setupReexportMjs
-    get() = wasmImport("js-reexport-symbols.mjs")
+private fun Project.sideModuleSetupMjs(libBaseName: String) =
+    wasmImport("$libBaseName.mjs")
 
-private val Project.skikoTestMjs
-    get() = wasmImport("skiko-test.mjs")
+private fun Project.setupReexportMjs(libBaseName: String) =
+    wasmImport("js-$libBaseName-reexport-symbols.mjs")
 
-fun SkikoProjectContext.declareWasmTasks() {
+private fun Project.skikoTestMjs(libBaseName: String) =
+    wasmImport("$libBaseName-test.mjs")
+
+fun SkikoProjectContext.declareWasmTasks(
+    extraIncludeDirs: List<File> = emptyList()
+) {
     if (!project.supportWeb) {
         return
     }
+    val isSideModule = kind == SkikoModuleKind.EXTENSION
+    val moduleBaseName = libBaseName
 
     val skiaWasmDir = registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
     val compileWasm by project.tasks.registering(CompileSkikoCppTask::class) {
@@ -54,6 +65,11 @@ fun SkikoProjectContext.declareWasmTasks() {
         includeHeadersNonRecursive(project.projectDir.resolve("src/nativeJsMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/webMain/cpp"))
         includeHeadersNonRecursive(project.projectDir.resolve("src/commonMain/cpp/common/include"))
+
+        extraIncludeDirs.forEach {
+            includeHeadersNonRecursive(it)
+        }
+
         includeHeadersNonRecursive(skiaHeadersDirs(skiaWasmDir.get()))
 
         flags.set(
@@ -62,6 +78,7 @@ fun SkikoProjectContext.declareWasmTasks() {
                 addAll(buildType.clangFlags)
                 add("-fno-rtti")
                 add("-fno-exceptions")
+                add("-fPIC")
                 if (skiko.isWasmBuildWithProfiling) add("--profiling")
             }
         )
@@ -85,7 +102,7 @@ fun SkikoProjectContext.declareWasmTasks() {
 
         externPostJs.from(
             // the order matters
-            project.layout.projectDirectory.file("src/webMain/resources/skikoCallbacks.js"),
+            project.rootProject.layout.projectDirectory.file("src/webMain/resources/skikoCallbacks.js"),
             project.layout.projectDirectory.file(prefixPath)
         )
 
@@ -110,6 +127,9 @@ fun SkikoProjectContext.declareWasmTasks() {
             // skiko.mjs is referenced in karma.config.d/*/config.js
             // so symbols must be replaced right after linking
             val jsFile = outDir.asFile.get().walk().first { it.name == jsOutputFileName.get() }
+            if (jsFile.extension != "mjs") {
+                return@doLast
+            }
 
             val isEnvironmentNodeCheckRegex = Regex(
                 // spacing is different in release and debug builds
@@ -130,10 +150,10 @@ fun SkikoProjectContext.declareWasmTasks() {
         )
 
         buildSuffix.set("es6")
-        jsOutputFileName.set("skiko.mjs") // this determines the name .wasm file too
-        libOutputFileName.set("skiko.wasm")
+        jsOutputFileName.set(if (isSideModule) "$moduleBaseName.wasm" else "skiko.mjs") // this determines the name .wasm file too
+        libOutputFileName.set("$moduleBaseName.wasm")
 
-        configureCommon(project.setupMjs.normalize().absolutePath)
+        configureCommon(if (isSideModule) project.sideModuleSetupMjs(moduleBaseName).normalize().absolutePath else project.setupMjs.normalize().absolutePath)
     }
 
     val linkWasmD8WithES6 by project.tasks.registering(LinkSkikoWasmTask::class) {
@@ -143,19 +163,23 @@ fun SkikoProjectContext.declareWasmTasks() {
         )
 
         buildSuffix.set("d8")
-        jsOutputFileName.set("skikod8.mjs") // this determines the name .wasm file too
-        libOutputFileName.set("skikod8.wasm")
+        jsOutputFileName.set(if (isSideModule) "${moduleBaseName}d8.wasm" else "skikod8.mjs") // this determines the name .wasm file too
+        libOutputFileName.set("${moduleBaseName}d8.wasm")
 
         flags.addAll(listOf("-s", "ENVIRONMENT=shell"))
 
-        configureCommon(project.setupMjs.normalize().absolutePath)
+        configureCommon(if (isSideModule) project.sideModuleSetupMjs(moduleBaseName).normalize().absolutePath else project.setupMjs.normalize().absolutePath)
     }
 
     // skikoWasmJar is used by task name
     val skikoWasmJar by project.tasks.registering(Jar::class) {
         // We produce jar that contains .js of wrapper/bindings and .wasm with Skia + bindings.
-        from(project.setupReexportMjs.parentFile) {
-            include(project.setupReexportMjs.name)
+        from(project.setupReexportMjs(moduleBaseName).parentFile) {
+            include(project.setupReexportMjs(moduleBaseName).name)
+
+            if (isSideModule) {
+                include(project.sideModuleSetupMjs(moduleBaseName).name)
+            }
         }
 
         from(linkWasm) {
@@ -166,7 +190,12 @@ fun SkikoProjectContext.declareWasmTasks() {
         from(linkWasmD8WithES6) {
             include("*.mjs")
             filesMatching("*.mjs") {
-                filter { it.replace("skikod8.wasm", "skiko.wasm") }
+                filter {
+                    it.replace(
+                        "${moduleBaseName}d8.wasm",
+                        "$moduleBaseName.wasm"
+                    )
+                }
             }
         }
 
@@ -177,11 +206,40 @@ fun SkikoProjectContext.declareWasmTasks() {
     }
 }
 
+fun SkikoProjectContext.configureWasmMainModuleSideModuleInputs() {
+    project.skikoExtensionModules().forEach { module ->
+        val moduleProject = module.project
+        configureSideModuleInput(
+            mainLinkTaskName = "linkWasm",
+            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasm")
+        )
+        configureSideModuleInput(
+            mainLinkTaskName = "linkWasmD8WithES6",
+            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasmD8WithES6")
+        )
+    }
+}
+
+private fun SkikoProjectContext.configureSideModuleInput(
+    mainLinkTaskName: String,
+    sideLinkTask: TaskProvider<LinkSkikoWasmTask>
+) {
+    val sideModuleWasmFile = sideLinkTask.flatMap { task ->
+        task.outDir.file(task.libOutputFileName)
+    }
+    // This context is the core (main module), so the main link lives in this project.
+    project.tasks.named<LinkSkikoWasmTask>(mainLinkTaskName).configure {
+        dependsOn(sideLinkTask)
+        libFiles += project.files(sideModuleWasmFile)
+    }
+}
+
 abstract class AbstractImportGeneratorCompilerPluginSupportPlugin(
     val compilationName: String,
     private val outputFileProvider: (Project) -> File,
     private val prefixFileProvider: (Project) -> File,
-    private val reexportFileProvider: ((Project) -> File)?
+    private val reexportFileProvider: ((Project) -> File)?,
+    private val moduleNameProvider: (Project) -> String
 ) : KotlinCompilerPluginSupportPlugin {
     override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> {
         val project = kotlinCompilation.target.project
@@ -189,14 +247,16 @@ abstract class AbstractImportGeneratorCompilerPluginSupportPlugin(
         val outputFile = outputFileProvider(project)
         val prefixFile = prefixFileProvider(project)
         val reexportFile = reexportFileProvider?.invoke(project)
+        val moduleName = moduleNameProvider(project)
 
         return project.provider {
             buildList {
                 add(SubpluginOption("import-generator-path", outputFile.normalize().absolutePath))
-                add(SubpluginOption("import-generator-prefix", prefixFile.normalize().absolutePath),)
+                add(SubpluginOption("import-generator-prefix", prefixFile.normalize().absolutePath))
                 if (reexportFile != null) {
                     add(SubpluginOption("import-generator-reexport-path", reexportFile.normalize().absolutePath))
                 }
+                add(SubpluginOption("import-generator-module-name", moduleName))
             }
         }
     }
@@ -216,26 +276,42 @@ class WasmImportsGeneratorCompilerPluginSupportPlugin : AbstractImportGeneratorC
     KotlinCompilation.MAIN_COMPILATION_NAME,
     { it.setupMjs },
     { it.projectDir.resolve("src/webMain/resources/pre-setup.mjs") },
-    { it.setupReexportMjs }
+    { it.setupReexportMjs(it.name) },
+    { it.name }
 )
 
 class WasmImportsGeneratorForTestCompilerPluginSupportPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
     KotlinCompilation.TEST_COMPILATION_NAME,
-    { it.skikoTestMjs },
-    { it.projectDir.resolve("src/webMain/resources/pre-skiko-test.mjs") },
-    null
+    { it.skikoTestMjs(it.name) },
+    {
+        val preludeFileName = "pre-${it.name}-test.mjs"
+        it.projectDir.resolve("src/webMain/resources/$preludeFileName")
+    },
+    null,
+    { it.name }
 )
 
-fun KotlinJsTargetDsl.setupImportsGeneratorPlugin() {
+class SideWasmImportsGeneratorPlugin : AbstractImportGeneratorCompilerPluginSupportPlugin(
+    KotlinCompilation.MAIN_COMPILATION_NAME,
+    { it.sideModuleSetupMjs(it.name) },
+    { it.projectDir.resolve("src/webMain/resources/pre-${it.name}.mjs") },
+    { it.setupReexportMjs(it.name) },
+    { it.name }
+)
+
+fun KotlinJsTargetDsl.setupImportsGeneratorPlugin(
+    libBaseName: String,
+    isSideModule: Boolean
+) {
     val main by compilations.getting
     val test by compilations.getting
 
     main.compileTaskProvider.configure {
-        outputs.file(project.setupMjs)
+        outputs.file(if (isSideModule) project.sideModuleSetupMjs(libBaseName) else project.setupMjs)
     }
 
     test.compileTaskProvider.configure {
-        outputs.file(project.skikoTestMjs)
+        outputs.file(project.skikoTestMjs(libBaseName))
     }
 
     listOf(main, test).forEach {

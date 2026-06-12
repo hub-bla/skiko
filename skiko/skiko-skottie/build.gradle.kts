@@ -150,7 +150,7 @@ kotlin {
                 )
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(skikoSkottieArtifacts.artifactIdPrefix, isSideModule = skikoSkottieProjectContext.kind == SkikoModuleKind.EXTENSION)
         }
 
         @OptIn(ExperimentalWasmDsl::class)
@@ -178,7 +178,7 @@ kotlin {
                 )
             }
 
-            setupImportsGeneratorPlugin()
+            setupImportsGeneratorPlugin(skikoSkottieArtifacts.artifactIdPrefix, isSideModule = true)
         }
     }
 

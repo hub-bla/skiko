@@ -1,13 +1,14 @@
 // see https://kotlinlang.org/docs/js-project-setup.html#webpack-configuration-file
 
 const path = require("path");
+const fs = require("fs");
 
 config.browserConsoleLogOptions.level = "debug";
 
 const basePath = config.basePath;
 const projectPath = path.resolve(basePath, "..", "..", "..", "..");
-const wasmPath = path.resolve(projectPath, "build", "out", "link", "Release-wasm-wasm")
-const skottieWasmPath = path.resolve(projectPath, "skiko-skottie", "build", "out", "link", "Release-wasm-wasm")
+const wasmPath = path.resolve(basePath, "kotlin")
+const skottieWasmPath = path.resolve(basePath, "kotlin", "skiko-skottie.wasm")
 const generatedAssetsPath = path.resolve(projectPath, "build", "karma-webpack-out")
 
 const debug = message => console.log(`[karma-config] ${message}`);
@@ -19,6 +20,7 @@ debug(`karma generatedAssetsPath: ${generatedAssetsPath}`);
 config.proxies = {
     "/wasm/": wasmPath,
     "/resources": path.resolve(basePath, "kotlin"),
+    "/skiko-skottie.wasm": skottieWasmPath,
 }
 
 config.webpack.output = Object.assign(config.webpack.output || {}, {
@@ -40,14 +42,18 @@ config.webpack.module.rules.push(
     },
 );
 
-config.files = [
-    path.resolve(wasmPath, "skiko.js"),
+const files = [
     {pattern: path.resolve(wasmPath, "skiko.wasm"), included: false, served: true, watched: false},
-    {pattern: path.resolve(skottieWasmPath, "skiko-skottie.wasm"), included: false, served: true, watched: false},
     {pattern: path.resolve(generatedAssetsPath, "**/*"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.png"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.gif"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.ttf"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.txt"), included: false, served: true, watched: false},
     {pattern: path.resolve(basePath, "kotlin", "**/*.json"), included: false, served: true, watched: false},
-].concat(config.files);
+];
+
+if (fs.existsSync(skottieWasmPath)) {
+    files.push({pattern: skottieWasmPath, included: false, served: true, watched: false});
+}
+
+config.files = files.concat(config.files);
