@@ -76,7 +76,6 @@ val skikoSkottieProjectContext = SkikoProjectContext(
     additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoSkottieArtifacts),
     configureDependencies = coreDependencies
 )
-extensions.add(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME, skikoSkottieProjectContext)
 
 repositories {
     mavenCentral()
@@ -293,6 +292,10 @@ kotlin {
     }
 }
 
+if (supportWeb) {
+    skikoSkottieProjectContext.provideWasmSideModules()
+}
+
 if (supportAndroid) {
     val os = OS.Android
     kotlin.targets.getByName("android").generateVersion(os, Arch.Arm64, skiko)
@@ -302,6 +305,7 @@ if (supportAndroid) {
     }
     for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
         skikoSkottieProjectContext.createSkikoJvmJarTask(os, arch, skikoSkottieAndroidArtifact)
+        skikoSkottieProjectContext.provideJvmRequiredSymbols(os, arch)
     }
 
     tasks.withType<JavaCompile>().configureEach {
@@ -330,6 +334,10 @@ if (supportAwt) {
         from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
     }
     skikoSkottieProjectContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch)
+    skikoSkottieProjectContext.provideJvmRequiredSymbols(targetOs, targetArch)
+    if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
+        skikoSkottieProjectContext.provideJvmRequiredSymbols(OS.MacOS, Arch.X64)
+    }
 }
 
 afterEvaluate {

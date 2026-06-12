@@ -187,7 +187,6 @@ val skikoProjectContext = SkikoProjectContext(
     additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoArtifacts),
     configureDependencies = coreDependencies
 )
-extensions.add(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME, skikoProjectContext)
 
 allprojects {
     group = SkikoArtifacts.DEFAULT_GROUP_ID
@@ -435,6 +434,28 @@ if (supportAwt) {
     skikoProjectContext.setupJvmTestTask(skikoAwtJarForTests, targetOs, targetArch)
 }
 
+val jvmRequiredSymbols = if (supportAwt || supportAndroid) {
+    configurations.create("jvmRequiredSymbols") {
+        isCanBeConsumed = false
+        isCanBeResolved = false
+    }.also {
+        dependencies.add(it.name, project(":skiko-skottie"))
+    }
+} else {
+    null
+}
+
+val wasmSideModules = if (supportWeb) {
+    configurations.create("wasmSideModules") {
+        isCanBeConsumed = false
+        isCanBeResolved = false
+    }.also {
+        dependencies.add(it.name, project(":skiko-skottie"))
+    }
+} else {
+    null
+}
+
 afterEvaluate {
     tasks.configureEach {
         if (group == "publishing") {
@@ -463,9 +484,14 @@ fun configureSymbolsFor(os: OS, arch: Arch) {
     val skiaBindingsDir = skikoProjectContext.registerOrGetSkiaDirProvider(os, arch)
     val coreCompile = tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
     val coreObjcCompile = if (os.isMacOs) tasks.named<CompileSkikoObjCTask>("objcCompile$suffix") else null
+    val requiredSymbolFiles = skikoProjectContext.jvmRequiredSymbolsFrom(
+        os,
+        arch,
+        jvmRequiredSymbols ?: error("jvmRequiredSymbols must be configured for $os $arch")
+    )
 
     skikoProjectContext.configureGenerateSymbolsList(
-        os, arch, skiaBindingsDir, coreCompile, coreObjcCompile
+        os, arch, skiaBindingsDir, coreCompile, coreObjcCompile, requiredSymbolFiles
     )
 
     tasks.named("linkJvmBindings$suffix") {
@@ -474,27 +500,23 @@ fun configureSymbolsFor(os: OS, arch: Arch) {
 }
 
 if (supportAwt) {
-    gradle.projectsEvaluated {
-        configureSymbolsFor(targetOs, targetArch)
+    configureSymbolsFor(targetOs, targetArch)
 
-        if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
-            configureSymbolsFor(OS.MacOS, Arch.X64)
-        }
+    if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
+        configureSymbolsFor(OS.MacOS, Arch.X64)
     }
 }
 
 if (supportAndroid) {
-    gradle.projectsEvaluated {
-        for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
-            configureSymbolsFor(OS.Android, arch)
-        }
+    for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
+        configureSymbolsFor(OS.Android, arch)
     }
 }
 
 if (supportWeb) {
-    afterEvaluate {
-        skikoProjectContext.configureWasmMainModuleSideModuleInputs()
-    }
+    skikoProjectContext.configureWasmMainModuleSideModuleInputs(
+        wasmSideModules ?: error("wasmSideModules must be configured when Web support is enabled")
+    )
 }
 
 skikoProjectContext.declarePublications()

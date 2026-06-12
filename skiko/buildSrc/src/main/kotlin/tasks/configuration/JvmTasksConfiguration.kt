@@ -8,7 +8,6 @@ import LinkSkikoTask
 import OS
 import SealAndSignSharedLibraryTask
 import SkiaBuildType
-import SKIKO_PROJECT_CONTEXT_EXTENSION_NAME
 import SkikoModuleKind
 import SkikoProjectContext
 import dsl.TargetEnv
@@ -21,6 +20,9 @@ import linkerForTarget
 import org.gradle.api.GradleException
 import org.gradle.api.JavaVersion
 import org.gradle.api.Project
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.Copy
@@ -34,9 +36,16 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import registerSkikoTask
 import runPkgConfig
+import symbols.GenerateRequiredSymbolsTask
 import symbols.GenerateSymbolsListTask
 import targetId
 import java.io.File
+
+private fun jvmRequiredSymbolsConfigurationName(targetOs: OS, targetArch: Arch) =
+    "jvmRequiredSymbols${joinToTitleCamelCase(targetOs.id, targetArch.id)}"
+
+private fun jvmRequiredSymbolsElementsConfigurationName(targetOs: OS, targetArch: Arch) =
+    "jvmRequiredSymbolsElements${joinToTitleCamelCase(targetOs.id, targetArch.id)}"
 
 fun SkikoProjectContext.createCompileJvmBindingsTask(
     targetOs: OS,
@@ -256,7 +265,8 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
     targetArch: Arch,
     skiaJvmBindingsDir: Provider<File>,
     coreCompile: TaskProvider<CompileSkikoCppTask>,
-    coreObjcCompile: TaskProvider<CompileSkikoObjCTask>?
+    coreObjcCompile: TaskProvider<CompileSkikoObjCTask>?,
+    requiredSymbolFiles: ConfigurableFileCollection
 ) {
     val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
     project.tasks.register<GenerateSymbolsListTask>("generateSymbolsList$suffix") {
@@ -290,38 +300,87 @@ fun SkikoProjectContext.configureGenerateSymbolsList(
         val coreBinaryInputs = resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, skiaBinDir)
 
         skiaLibs.from(project.files(coreBinaryInputs.staticArchivePaths + coreBinaryInputs.directStaticArchivePaths))
-
-        project.rootProject.subprojects
-            .mapNotNull { subProject ->
-                subProject.extensions.findByName(SKIKO_PROJECT_CONTEXT_EXTENSION_NAME) as? SkikoProjectContext
-            }
-            .filter { it.kind == SkikoModuleKind.EXTENSION }
-            .forEach { moduleContext ->
-                val moduleProject = moduleContext.project
-                val moduleCompileTaskName = "compileJvmBindings$suffix"
-                if (moduleCompileTaskName !in moduleProject.tasks.names) {
-                    return@forEach
-                }
-                val moduleCompile = moduleProject.tasks.named<CompileSkikoCppTask>(moduleCompileTaskName)
-
-                dependsOn(moduleCompile)
-                moduleObjectFiles.from(moduleCompile.map {
-                    it.outDir.get().asFile.walk()
-                        .filter { file -> file.name.endsWith(".o") || file.name.endsWith(".obj") }
-                        .toList()
-                })
-
-                val moduleBinaryInputs = moduleContext.resolveBinaryInputs(
-                    targetOs,
-                    targetArch,
-                    TargetEnv.JVM,
-                    skiaBinDir
-                )
-                moduleLibs.from(
-                    project.files(moduleBinaryInputs.staticArchivePaths + moduleBinaryInputs.directStaticArchivePaths)
-                )
-            }
+        this.requiredSymbolFiles.from(requiredSymbolFiles)
     }
+}
+
+fun SkikoProjectContext.provideJvmRequiredSymbols(
+    targetOs: OS,
+    targetArch: Arch,
+) {
+    val suffix = joinToTitleCamelCase(targetOs.id, targetArch.id)
+    val skiaJvmBindingsDir = registerOrGetSkiaDirProvider(targetOs, targetArch)
+    val compileTask = project.tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
+    val requiredSymbols = createGenerateRequiredSymbolsTask(targetOs, targetArch, skiaJvmBindingsDir, compileTask)
+    configureRequiredSymbolsElements(targetOs, targetArch, requiredSymbols)
+}
+
+private fun SkikoProjectContext.createGenerateRequiredSymbolsTask(
+    targetOs: OS,
+    targetArch: Arch,
+    skiaJvmBindingsDir: Provider<File>,
+    compileTask: TaskProvider<CompileSkikoCppTask>
+) = project.registerSkikoTask<GenerateRequiredSymbolsTask>("generateRequiredJvmSymbols", targetOs, targetArch) {
+    this.targetOs.set(targetOs)
+    this.symbolExtractorCommand.set(
+        when (targetOs) {
+            OS.Android -> project.androidLlvmNm().map { listOf(it) }
+            OS.Windows -> project.provider { listOf(windowsSdkPaths.dumpbin.absolutePath) }
+            else -> project.provider { listOf("nm") }
+        }
+    )
+
+    dependsOn(compileTask)
+    objectFiles.from(compileTask.map {
+        it.outDir.get().asFile.walk()
+            .filter { file -> file.name.endsWith(".o") || file.name.endsWith(".obj") }
+            .toList()
+    })
+
+    val target = targetId(targetOs, targetArch)
+    val skiaBinSubdir = "out/${buildType.id}-$target"
+    val skiaBinDir = skiaJvmBindingsDir.map { it.resolve(skiaBinSubdir).absolutePath }
+    val binaryInputs = skiaBinDir.map {
+        resolveBinaryInputs(targetOs, targetArch, TargetEnv.JVM, it)
+    }
+    libs.from(project.files(binaryInputs.map { it.staticArchivePaths + it.directStaticArchivePaths }))
+    outputFile.set(project.layout.buildDirectory.file("jvm-required-symbols/$target/required-symbols.txt"))
+}
+
+private fun SkikoProjectContext.configureRequiredSymbolsElements(
+    targetOs: OS,
+    targetArch: Arch,
+    generateRequiredSymbols: TaskProvider<GenerateRequiredSymbolsTask>
+) = with(project) {
+    configurations.create(jvmRequiredSymbolsElementsConfigurationName(targetOs, targetArch)) {
+        isCanBeConsumed = true
+        isCanBeResolved = false
+        outgoing.artifact(generateRequiredSymbols.flatMap { it.outputFile })
+    }
+}
+
+fun SkikoProjectContext.jvmRequiredSymbolsFrom(
+    targetOs: OS,
+    targetArch: Arch,
+    declaredSymbols: Configuration,
+): ConfigurableFileCollection = with(project) {
+    val configurationName = jvmRequiredSymbolsConfigurationName(targetOs, targetArch)
+    val configuration = configurations.create(configurationName) {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+    declaredSymbols.dependencies.withType(ProjectDependency::class.java).forEach { dependency ->
+        dependencies.add(
+            configurationName,
+            dependencies.project(
+                mapOf(
+                    "path" to dependency.path,
+                    "configuration" to jvmRequiredSymbolsElementsConfigurationName(targetOs, targetArch)
+                )
+            )
+        )
+    }
+    files(configuration)
 }
 
 fun SkikoProjectContext.createLinkJvmBindings(

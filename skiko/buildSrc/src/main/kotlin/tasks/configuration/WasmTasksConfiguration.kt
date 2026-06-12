@@ -10,9 +10,11 @@ import SkikoProjectContext
 import compilerForTarget
 import dsl.TargetEnv
 import linkerForTarget
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.Project
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.provider.Provider
-import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.named
@@ -26,7 +28,6 @@ import projectDirs
 import registerOrGetSkiaDirProvider
 import supportWeb
 import wasmImport
-import skikoExtensionModules
 import java.io.File
 
 private val Project.setupMjs
@@ -40,6 +41,12 @@ private fun Project.setupReexportMjs(libBaseName: String) =
 
 private fun Project.skikoTestMjs(libBaseName: String) =
     wasmImport("$libBaseName-test.mjs")
+
+private fun wasmSideModulesConfigurationName(mainLinkTaskName: String) =
+    "wasmSideModules${mainLinkTaskName.replaceFirstChar { it.titlecase() }}"
+
+private fun wasmSideModuleElementsConfigurationName(mainLinkTaskName: String) =
+    "wasmSideModuleElements${mainLinkTaskName.replaceFirstChar { it.titlecase() }}"
 
 fun SkikoProjectContext.declareWasmTasks(
     extraIncludeDirs: List<File> = emptyList()
@@ -206,31 +213,63 @@ fun SkikoProjectContext.declareWasmTasks(
     }
 }
 
-fun SkikoProjectContext.configureWasmMainModuleSideModuleInputs() {
-    project.skikoExtensionModules().forEach { module ->
-        val moduleProject = module.project
-        configureSideModuleInput(
-            mainLinkTaskName = "linkWasm",
-            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasm")
-        )
-        configureSideModuleInput(
-            mainLinkTaskName = "linkWasmD8WithES6",
-            sideLinkTask = moduleProject.tasks.named<LinkSkikoWasmTask>("linkWasmD8WithES6")
+fun SkikoProjectContext.provideWasmSideModules() {
+    provideWasmSideModule(mainLinkTaskName = "linkWasm")
+    provideWasmSideModule(mainLinkTaskName = "linkWasmD8WithES6")
+}
+
+private fun SkikoProjectContext.provideWasmSideModule(mainLinkTaskName: String) = with(project) {
+    val sideLinkTask = tasks.named<LinkSkikoWasmTask>(mainLinkTaskName)
+    configurations.create(wasmSideModuleElementsConfigurationName(mainLinkTaskName)) {
+        isCanBeConsumed = true
+        isCanBeResolved = false
+        outgoing.artifact(sideLinkTask.flatMap { task ->
+            task.outDir.file(task.libOutputFileName)
+        })
+    }
+}
+
+fun SkikoProjectContext.configureWasmMainModuleSideModuleInputs(sideModules: Configuration) {
+    configureSideModuleInput(
+        mainLinkTaskName = "linkWasm",
+        sideModuleFiles = wasmSideModulesFrom("linkWasm", sideModules)
+    )
+    configureSideModuleInput(
+        mainLinkTaskName = "linkWasmD8WithES6",
+        sideModuleFiles = wasmSideModulesFrom("linkWasmD8WithES6", sideModules)
+    )
+}
+
+private fun SkikoProjectContext.wasmSideModulesFrom(
+    mainLinkTaskName: String,
+    declaredSideModules: Configuration
+): ConfigurableFileCollection = with(project) {
+    val configurationName = wasmSideModulesConfigurationName(mainLinkTaskName)
+    val configuration = configurations.create(configurationName) {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+    declaredSideModules.dependencies.withType(ProjectDependency::class.java).forEach { dependency ->
+        dependencies.add(
+            configurationName,
+            dependencies.project(
+                mapOf(
+                    "path" to dependency.path,
+                    "configuration" to wasmSideModuleElementsConfigurationName(mainLinkTaskName)
+                )
+            )
         )
     }
+    files(configuration)
 }
 
 private fun SkikoProjectContext.configureSideModuleInput(
     mainLinkTaskName: String,
-    sideLinkTask: TaskProvider<LinkSkikoWasmTask>
+    sideModuleFiles: ConfigurableFileCollection
 ) {
-    val sideModuleWasmFile = sideLinkTask.flatMap { task ->
-        task.outDir.file(task.libOutputFileName)
-    }
     // This context is the core (main module), so the main link lives in this project.
     project.tasks.named<LinkSkikoWasmTask>(mainLinkTaskName).configure {
-        dependsOn(sideLinkTask)
-        libFiles += project.files(sideModuleWasmFile)
+        libFiles += sideModuleFiles
     }
 }
 
