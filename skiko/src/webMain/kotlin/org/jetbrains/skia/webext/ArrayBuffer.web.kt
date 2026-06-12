@@ -12,8 +12,7 @@ import org.khronos.webgl.ArrayBuffer
 import kotlin.js.JsAny
 import kotlin.js.js
 
-internal fun skikoArrayBuffer(skikoWasm: JsAny): ArrayBuffer =
-    js("skikoWasm.wasmExports.memory.buffer")
+internal fun skikoArrayBuffer(skikoWasm: JsAny): ArrayBuffer = js("skikoWasm.HEAPU8.buffer")
 
 internal suspend fun copyBufferToSkiko(
     src: ArrayBuffer

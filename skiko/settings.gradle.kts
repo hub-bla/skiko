@@ -19,4 +19,4 @@ rootProject.name = "skiko"
 include("ci")
 include("import-generator")
 include("test-utils")
-include("skottie")
+include("skiko-skottie")

@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.gradle.kotlin.dsl.withType
+import org.gradle.kotlin.dsl.named
 import tasks.configuration.*
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import dsl.SkikoDependencyScope
@@ -30,8 +31,7 @@ if (supportAndroid) {
     apply(plugin = "com.android.kotlin.multiplatform.library")
 }
 
-apply<WasmImportsGeneratorCompilerPluginSupportPlugin>()
-apply<WasmImportsGeneratorForTestCompilerPluginSupportPlugin>()
+apply<SideWasmImportsGeneratorPlugin>()
 
 // TODO: investigate this
 val skiko = SkikoProperties(rootProject)
@@ -112,73 +112,71 @@ kotlin {
         }
     }
 
-//    if (supportWeb) {
-//        val skiaWasmDir = skikoSkottieProjectContext.registerOrGetSkiaDirProvider(OS.Wasm, Arch.Wasm, false)
-//
-//        skikoSkottieProjectContext.declareWasmTasks(
-//            isSideModule = true,
-//            extraIncludeDirs = listOf(
-//                project(":").projectDir.resolve("src/nativeJsMain/cpp"),
-//                project(":").projectDir.resolve("src/commonMain/cpp/common/include")
-//            )
-//        )
-//
-//        js {
-//            outputModuleName.set("skiko-skottie-kjs")
-//            browser {
-//                testTask {
-//                    useKarma {
-//                        useChromeHeadless()
-//                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("js"))
-//                    }
-//                }
-//            }
-//            binaries.executable()
-//            generateVersion(OS.Wasm, Arch.Wasm, skiko)
-//
-//            val test by compilations.getting
-//            project.tasks.named<Copy>(test.processResourcesTaskName) {
-//                dependsOn(
-//                    test.compileTaskProvider,
-//                    tasks["compileTestKotlinWasmJs"],
-//                    project(":").tasks.named("compileKotlinJs"),
-//                    project(":").tasks.named("compileKotlinWasmJs"),
-//                    project(":").tasks.named("compileTestKotlinJs"),
-//                    project(":").tasks.named("compileTestKotlinWasmJs"),
-//                )
-//            }
-//
-//            setupImportsGeneratorPlugin(isSideModule = true)
-//        }
-//
-//        @OptIn(ExperimentalWasmDsl::class)
-//        wasmJs {
-//            outputModuleName.set("skiko-skottie-kjs-wasm")
-//            browser {
-//                testTask {
-//                    useKarma {
-//                        useChromeHeadless()
-//                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("wasm"))
-//                    }
-//                }
-//            }
-//            generateVersion(OS.Wasm, Arch.Wasm, skiko)
-//
-//            val test by compilations.getting
-//            project.tasks.named<Copy>(test.processResourcesTaskName) {
-//                dependsOn(
-//                    test.compileTaskProvider,
-//                    tasks["compileTestKotlinJs"],
-//                    project(":").tasks.named("compileKotlinJs"),
-//                    project(":").tasks.named("compileKotlinWasmJs"),
-//                    project(":").tasks.named("compileTestKotlinJs"),
-//                    project(":").tasks.named("compileTestKotlinWasmJs"),
-//                )
-//            }
-//
-//            setupImportsGeneratorPlugin(isSideModule = true)
-//        }
-//    }
+    if (supportWeb) {
+        skikoSkottieProjectContext.declareWasmTasks(
+            isSideModule = true,
+            extraIncludeDirs = listOf(
+                rootProject.projectDir.resolve("src/nativeJsMain/cpp"),
+                rootProject.projectDir.resolve("src/commonMain/cpp/common/include")
+            )
+        )
+
+        js {
+            outputModuleName.set("skiko-skottie-kjs")
+            browser {
+                testTask {
+                    useKarma {
+                        useChromeHeadless()
+                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("js"))
+                    }
+                }
+            }
+            binaries.executable()
+            generateVersion(OS.Wasm, Arch.Wasm, skiko)
+
+            val test by compilations.getting
+            project.tasks.named<Copy>(test.processResourcesTaskName) {
+                dependsOn(
+                    test.compileTaskProvider,
+                    tasks["compileTestKotlinWasmJs"],
+                    rootProject.tasks.named("compileKotlinJs"),
+                    rootProject.tasks.named("compileKotlinWasmJs"),
+                    rootProject.tasks.named("compileTestKotlinJs"),
+                    rootProject.tasks.named("compileTestKotlinWasmJs"),
+                )
+            }
+
+            setupImportsGeneratorPlugin()
+        }
+
+        @OptIn(ExperimentalWasmDsl::class)
+        wasmJs {
+            outputModuleName.set("skiko-skottie-kjs-wasm")
+            browser {
+                testTask {
+                    useKarma {
+                        useChromeHeadless()
+                        useConfigDirectory(rootProject.projectDir.resolve("karma.config.d").resolve("wasm"))
+                    }
+                }
+            }
+            generateVersion(OS.Wasm, Arch.Wasm, skiko)
+
+            val test by compilations.getting
+            project.tasks.named<Copy>(test.processResourcesTaskName) {
+                dependsOn(
+                    test.compileTaskProvider,
+                    tasks["compileTestKotlinJs"],
+                    rootProject.tasks.named("compileKotlinJs"),
+                    rootProject.tasks.named("compileKotlinWasmJs"),
+                    rootProject.tasks.named("compileTestKotlinJs"),
+                    rootProject.tasks.named("compileTestKotlinWasmJs"),
+                )
+            }
+
+            setupImportsGeneratorPlugin()
+        }
+    }
 
     if (supportNativeMac) {
         skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.X64, macosX64())
