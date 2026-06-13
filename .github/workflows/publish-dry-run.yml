@@ -32,6 +32,14 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               packageRelease
 
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Android Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-android
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
+
   Web:
     name: 'Web Publish Dry Run'
     runs-on: ubuntu-24.04
@@ -50,6 +58,14 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.wasm.enabled=true \
               :skiko:publishToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Web Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-web
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
 
   Linux:
     name: 'Linux x64 Publish Dry Run'
@@ -91,6 +107,14 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               :SkiaAwtSample:installDist
 
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Linux x64 Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-linux-x64
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
+
   LinuxArm:
     name: 'Linux arm64 Publish Dry Run'
     runs-on: ubuntu-24.04-arm
@@ -111,6 +135,14 @@ jobs:
               -Pskiko.awt.enabled=true \
               -Pskiko.arch=arm64 \
               :skiko:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Linux arm64 Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-linux-arm64
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
 
   macOS:
     name: 'macOS Publish Dry Run'
@@ -151,6 +183,14 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace \
             :SkiaAwtSample:installDist
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload macOS Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-macos
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
 
   Windows:
     name: 'Windows Publish Dry Run'
@@ -195,3 +235,11 @@ jobs:
         run: |
           ./gradlew --no-daemon --stacktrace \
             :SkiaAwtSample:installDist
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Windows Maven Local Artifacts'
+        with:
+          name: skiko-maven-local-windows
+          path: ~/.m2/repository/org/jetbrains/skiko/
+          if-no-files-found: error
+          retention-days: 7
