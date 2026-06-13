@@ -21,7 +21,8 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.android.enabled=true \
-              :skiko:publishToMavenLocal
+              :skiko:publishToMavenLocal \
+              :skiko:skiko-skottie:publishToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check Android Sample'
@@ -57,7 +58,8 @@ jobs:
           command: |
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.wasm.enabled=true \
-              :skiko:publishToMavenLocal
+              :skiko:publishToMavenLocal \
+              :skiko:skiko-skottie:publishToMavenLocal
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Web Maven Local Artifacts'
@@ -86,7 +88,8 @@ jobs:
               -Pskiko.native.enabled=true \
               -Pskiko.awt.enabled=true \
               -Pskiko.arch=x64 \
-               :skiko:publishToMavenLocal
+               :skiko:publishToMavenLocal \
+               :skiko:skiko-skottie:publishToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Publish Native Maven Local'
@@ -97,7 +100,9 @@ jobs:
               -Pskiko.native.enabled=true \
               -Pskiko.awt.enabled=false \
               :skiko:publishLinuxArm64PublicationToMavenLocal \
-              :skiko:publishLinuxX64PublicationToMavenLocal
+              :skiko:publishLinuxX64PublicationToMavenLocal \
+              :skiko:skiko-skottie:publishLinuxArm64PublicationToMavenLocal \
+              :skiko:skiko-skottie:publishLinuxX64PublicationToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check AWT Sample'
@@ -134,7 +139,8 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.awt.enabled=true \
               -Pskiko.arch=arm64 \
-              :skiko:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
+              :skiko:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal \
+              :skiko:skiko-skottie:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
 
       - uses: actions/upload-artifact@v4
         name: 'Upload Linux arm64 Maven Local Artifacts'
@@ -167,7 +173,8 @@ jobs:
             -Pskiko.native.enabled=true \
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=arm64 \
-            :skiko:publishToMavenLocal
+            :skiko:publishToMavenLocal \
+            :skiko:skiko-skottie:publishToMavenLocal
 
       # Build x64 separately (arm64 is built in publishToMavenLocal)
       - shell: bash
@@ -176,7 +183,8 @@ jobs:
           ./gradlew --no-daemon --stacktrace \
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=x64 \
-            :skiko:publishSkikoJvmRuntimeMacosX64PublicationToMavenLocal
+            :skiko:publishSkikoJvmRuntimeMacosX64PublicationToMavenLocal \
+            :skiko:skiko-skottie:publishSkikoJvmRuntimeMacosX64PublicationToMavenLocal
 
       - shell: bash
         name: 'Check AWT Sample'
@@ -219,7 +227,8 @@ jobs:
             -Pskiko.native.enabled=true \
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=x64 \
-             :skiko:publishToMavenLocal
+             :skiko:publishToMavenLocal \
+             :skiko:skiko-skottie:publishToMavenLocal
 
       # Build Arm64 separately (x64 is built in publishToMavenLocal)
       - shell: bash
@@ -228,7 +237,8 @@ jobs:
           ./gradlew --no-daemon --stacktrace \
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=arm64 \
-            :skiko:publishSkikoJvmRuntimeWindowsArm64PublicationToMavenLocal
+            :skiko:publishSkikoJvmRuntimeWindowsArm64PublicationToMavenLocal \
+            :skiko:skiko-skottie:publishSkikoJvmRuntimeWindowsArm64PublicationToMavenLocal
 
       - shell: bash
         name: 'Check AWT Sample'
