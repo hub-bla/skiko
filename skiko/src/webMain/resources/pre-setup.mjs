@@ -13,37 +13,37 @@ export const registerSkikoWasmReadyHook = (hook) => {
 
 const extensionLoadPromises = new Map();
 
-export const loadSkikoExtension = (filename) => {
-    if (extensionLoadPromises.has(filename)) return extensionLoadPromises.get(filename);
+export const loadSkikoExtension = (extensionPath) => {
+    if (extensionLoadPromises.has(extensionPath)) return extensionLoadPromises.get(extensionPath);
     const loadPromise = awaitSkikoCore.then(async (module) => {
         // Mimic the generated skiko.wasm loader: route this side module through
         // locateFile so Emscripten does not fall back to a file:// scriptDirectory.
         const originalLocateFile = module.locateFile;
         module.locateFile = (path, prefix) => {
-            if (path === filename || path.endsWith("/" + filename)) return filename;
+            if (path === extensionPath) return extensionPath;
             return originalLocateFile(path, prefix);
         };
 
         try {
-            await module.loadDynamicLibrary(filename, {
+            await module.loadDynamicLibrary(extensionPath, {
                 loadAsync: true,
                 global: true,
                 nodelete: true,
                 nodeJS: false
             });
 
-            const sideModuleExports = module.LDSO.loadedLibsByName[filename].exports;
+            const sideModuleExports = module.LDSO.loadedLibsByName[extensionPath].exports;
             Object.assign(loadedWasm._, sideModuleExports);
         } finally {
             module.locateFile = originalLocateFile;
         }
 
     }).catch((error) => {
-        extensionLoadPromises.delete(filename);
+        extensionLoadPromises.delete(extensionPath);
         throw error;
     });
 
-    extensionLoadPromises.set(filename, loadPromise);
+    extensionLoadPromises.set(extensionPath, loadPromise);
     return loadPromise;
 };
 

@@ -5,7 +5,7 @@ import {
 } from "./skiko.mjs";
 
 let skottieLoadPromise = null;
-const skottieWasm = "skiko-skottie.wasm";
+const skottieWasm = new URL("./skiko-skottie.wasm", import.meta.url).href;
 
 const ensureSkottieLoaded = () => {
     if (!skottieLoadPromise) {
