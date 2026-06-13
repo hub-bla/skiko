@@ -16,6 +16,9 @@ import joinToTitleCamelCase
 import mutableListOfLinkerOptions
 import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.getByName
@@ -35,6 +38,12 @@ fun String.withSuffix(isUikitSim: Boolean = false) =
 
 fun KotlinTarget.isUikitSimulator() =
     name.contains("Simulator", ignoreCase = true) || name == "tvosX64" // x64 tvOS is implicitly a simulator
+
+private fun nativeSymbolSourcesConfigurationName(os: OS, arch: Arch, isUikitSim: Boolean) =
+    "nativeSymbolSources${joinToTitleCamelCase(os.idWithSuffix(isUikitSim), arch.id)}"
+
+private fun nativeSymbolSourcesElementsConfigurationName(os: OS, arch: Arch, isUikitSim: Boolean) =
+    "nativeSymbolSourcesElements${joinToTitleCamelCase(os.idWithSuffix(isUikitSim), arch.id)}"
 
 fun Project.findXcodeSdkRoot(): String {
     val defaultPath = "/Applications/Xcode.app/Contents/Developer/Platforms"
@@ -171,6 +180,48 @@ fun SkikoProjectContext.compileNativeBridgesTask(
     }
 }
 
+private fun SkikoProjectContext.configureNativeSymbolSourcesElements(
+    os: OS,
+    arch: Arch,
+    isUikitSim: Boolean,
+    symbolSources: List<String>,
+    builtBy: TaskProvider<*>
+) = with(project) {
+    configurations.create(nativeSymbolSourcesElementsConfigurationName(os, arch, isUikitSim)) {
+        isCanBeConsumed = true
+        isCanBeResolved = false
+        symbolSources.forEach { source ->
+            outgoing.artifact(file(source)) {
+                this.builtBy(builtBy)
+            }
+        }
+    }
+}
+
+private fun SkikoProjectContext.nativeSymbolSourcesFrom(
+    os: OS,
+    arch: Arch,
+    isUikitSim: Boolean,
+    declaredSymbolSources: Configuration,
+): ConfigurableFileCollection = with(project) {
+    val configurationName = nativeSymbolSourcesConfigurationName(os, arch, isUikitSim)
+    val configuration = configurations.create(configurationName) {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+    declaredSymbolSources.dependencies.withType(ProjectDependency::class.java).forEach { dependency ->
+        dependencies.add(
+            configurationName,
+            dependencies.project(
+                mapOf(
+                    "path" to dependency.path,
+                    "configuration" to nativeSymbolSourcesElementsConfigurationName(os, arch, isUikitSim)
+                )
+            )
+        )
+    }
+    files(configuration)
+}
 
 fun configureCinterop(
     cinteropName: String,
@@ -198,7 +249,12 @@ fun configureCinterop(
     }
 }
 
-fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: KotlinNativeTarget) = with(this.project) {
+fun SkikoProjectContext.configureNativeTarget(
+    os: OS,
+    arch: Arch,
+    target: KotlinNativeTarget,
+    coreNativeSymbolSources: Configuration? = null
+) = with(this.project) {
     if (!os.isCompatibleWithHost) return
 
     target.generateVersion(os, arch, skiko)
@@ -355,13 +411,30 @@ fun SkikoProjectContext.configureNativeTarget(os: OS, arch: Arch, target: Kotlin
     // For iOS/tvOS: patch all Skia + skiko-bridge symbols after linking.
     val compilationDependency = if (requiresSymbolPatching) {
         val patchActionName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim)
+        val coreSymbolSources = if (kind == SkikoModuleKind.EXTENSION && dependsOnCore) {
+            nativeSymbolSourcesFrom(
+                os,
+                arch,
+                isUikitSim,
+                coreNativeSymbolSources ?: error("Core native symbol sources must be configured for $os $arch")
+            )
+        } else {
+            null
+        }
         project.registerSkikoTask<PatchSkiaSymbolsTask>(patchActionName, os, arch) {
             dependsOn(unzipper)
             dependsOn(linkTask)
+            if (coreSymbolSources != null) {
+                dependsOn(coreSymbolSources)
+            }
             skiaLibs.set(nativeArchives.map { File(it) })
-            symbolSourceLibs.set(emptyList())
+            symbolSourceLibs.set(coreSymbolSources ?: project.files())
             skikoBridge.set(File(bridgesLibraryPath))
             outputDir.set(patchedLibsDir)
+        }.also { patchTask ->
+            if (kind == SkikoModuleKind.CORE) {
+                configureNativeSymbolSourcesElements(os, arch, isUikitSim, nativeArchives + bridgesLibraryPath, patchTask)
+            }
         }
     } else {
         linkTask

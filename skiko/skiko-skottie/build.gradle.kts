@@ -44,6 +44,17 @@ val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
 
+val nativeCoreSymbolSources = if (supportAnyNative) {
+    configurations.create("nativeCoreSymbolSources") {
+        isCanBeConsumed = false
+        isCanBeResolved = false
+    }.also {
+        dependencies.add(it.name, project(":"))
+    }
+} else {
+    null
+}
+
 val coreDependencies: SkikoDependencyScope.() -> Unit = {
     dependsOnCore()
     targets {
@@ -73,7 +84,7 @@ val skikoSkottieProjectContext = SkikoProjectContext(
     createChecksumsTask = { targetOs: OS, targetArch: Arch, fileToChecksum: Provider<File> ->
         createChecksumsTask(targetOs, targetArch, fileToChecksum)
     },
-    additionalRuntimeLibraries = project.registerAdditionalLibraries(targetOs, targetArch, skiko, skikoSkottieArtifacts),
+    additionalRuntimeLibraries = emptyList(),
     configureDependencies = coreDependencies
 )
 
@@ -181,38 +192,41 @@ kotlin {
         }
     }
 
+    fun configuredNativeCoreSymbolSources() =
+        nativeCoreSymbolSources ?: error("nativeCoreSymbolSources must be configured when Native support is enabled")
+
     if (supportNativeMac) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.X64, macosX64())
-        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.Arm64, macosArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.X64, macosX64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.Arm64, macosArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeLinux) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.X64, linuxX64())
-        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.Arm64, linuxArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.X64, linuxX64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.Arm64, linuxArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeIosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeIosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeIosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.X64, iosX64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.X64, iosX64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeTvosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeTvosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64(), configuredNativeCoreSymbolSources())
     }
 
     if (supportNativeTvosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.X64, tvosX64())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.X64, tvosX64(), configuredNativeCoreSymbolSources())
     }
 
     sourceSets.commonMain.dependencies {

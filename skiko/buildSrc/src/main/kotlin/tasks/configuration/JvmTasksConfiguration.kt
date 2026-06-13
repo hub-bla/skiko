@@ -609,7 +609,7 @@ fun SkikoProjectContext.maybeSignOrSealTask(
     val target = targetId(targetOs, targetArch)
     outDir.set(project.layout.buildDirectory.dir("maybe-signed-$target"))
 
-    val toolsDir = project.layout.projectDirectory.dir("tools")
+    val toolsDir = project.rootProject.layout.projectDirectory.dir("tools")
     if (targetOs == OS.Linux) {
         // Linux requires additional sealing to run on wider set of platforms.
         // See https://github.com/olonho/sealer.
