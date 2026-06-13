@@ -301,8 +301,9 @@ jobs:
           command: |
             chmod +x ./build/bin/linuxArm64/debugTest/test.kexe
             ./build/bin/linuxArm64/debugTest/test.kexe
-            chmod +x ./skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
-            ./skiko-skottie/build/bin/linuxArm64/debugTest/test.kexe
+            cd ./skiko-skottie
+            chmod +x ./build/bin/linuxArm64/debugTest/test.kexe
+            ./build/bin/linuxArm64/debugTest/test.kexe
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Run AWT Tests'
