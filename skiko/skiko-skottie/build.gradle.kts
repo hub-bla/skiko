@@ -43,17 +43,7 @@ val skikoSkottieArtifacts = SkikoArtifacts(
 val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
-
-val nativeCoreSymbolSources = if (supportAnyNative) {
-    configurations.create("nativeCoreSymbolSources") {
-        isCanBeConsumed = false
-        isCanBeResolved = false
-    }.also {
-        dependencies.add(it.name, project(":"))
-    }
-} else {
-    null
-}
+val coreProject = project(":")
 
 val coreDependencies: SkikoDependencyScope.() -> Unit = {
     dependsOnCore()
@@ -153,10 +143,6 @@ kotlin {
                 dependsOn(
                     test.compileTaskProvider,
                     tasks["compileTestKotlinWasmJs"],
-                    rootProject.tasks.named("compileKotlinJs"),
-                    rootProject.tasks.named("compileKotlinWasmJs"),
-                    rootProject.tasks.named("compileTestKotlinJs"),
-                    rootProject.tasks.named("compileTestKotlinWasmJs"),
                 )
             }
 
@@ -181,10 +167,6 @@ kotlin {
                 dependsOn(
                     test.compileTaskProvider,
                     tasks["compileTestKotlinJs"],
-                    rootProject.tasks.named("compileKotlinJs"),
-                    rootProject.tasks.named("compileKotlinWasmJs"),
-                    rootProject.tasks.named("compileTestKotlinJs"),
-                    rootProject.tasks.named("compileTestKotlinWasmJs"),
                 )
             }
 
@@ -192,41 +174,43 @@ kotlin {
         }
     }
 
-    fun configuredNativeCoreSymbolSources() =
-        nativeCoreSymbolSources ?: error("nativeCoreSymbolSources must be configured when Native support is enabled")
+    fun coreNativeSymbolSources(os: OS, arch: Arch, isUikitSim: Boolean) =
+        skikoSkottieProjectContext.nativeSymbolSourcesFor(os, arch, isUikitSim).also {
+            dependencies.add(it.name, coreProject)
+        }
 
     if (supportNativeMac) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.X64, macosX64(), configuredNativeCoreSymbolSources())
-        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.Arm64, macosArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.X64, macosX64(), ::coreNativeSymbolSources)
+        skikoSkottieProjectContext.configureNativeTarget(OS.MacOS, Arch.Arm64, macosArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeLinux) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.X64, linuxX64(), configuredNativeCoreSymbolSources())
-        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.Arm64, linuxArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.X64, linuxX64(), ::coreNativeSymbolSources)
+        skikoSkottieProjectContext.configureNativeTarget(OS.Linux, Arch.Arm64, linuxArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeIosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeIosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.Arm64, iosSimulatorArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeIosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.X64, iosX64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.IOS, Arch.X64, iosX64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeTvosArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeTvosSimulatorArm64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.Arm64, tvosSimulatorArm64(), ::coreNativeSymbolSources)
     }
 
     if (supportNativeTvosX64) {
-        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.X64, tvosX64(), configuredNativeCoreSymbolSources())
+        skikoSkottieProjectContext.configureNativeTarget(OS.TVOS, Arch.X64, tvosX64(), ::coreNativeSymbolSources)
     }
 
     sourceSets.commonMain.dependencies {
@@ -288,11 +272,13 @@ kotlin {
     }
 
     skikoSkottieProjectContext.webTestSourceSet?.apply {
+        val coreWasmTestResources = skikoSkottieProjectContext.wasmTestResourcesFor().also {
+            dependencies.add(it.name, coreProject)
+        }
         resources.srcDirs(
             tasks.named("linkWasm"),
-            project(":").tasks.named("linkWasm"),
             wasmImports,
-            project(":").wasmImports,
+            coreWasmTestResources,
         )
     }
 
@@ -318,7 +304,15 @@ if (supportAndroid) {
         from(kotlin.targets.getByName("android").compilations.getByName("main").output.allOutputs)
     }
     for (arch in arrayOf(Arch.X64, Arch.Arm64)) {
-        skikoSkottieProjectContext.createSkikoJvmJarTask(os, arch, skikoSkottieAndroidArtifact)
+        val coreJvmLinkedLibrary = skikoSkottieProjectContext.jvmLinkedLibraryFor(os, arch).also {
+            dependencies.add(it.name, coreProject)
+        }
+        skikoSkottieProjectContext.createSkikoJvmJarTask(
+            os,
+            arch,
+            skikoSkottieAndroidArtifact,
+            files(coreJvmLinkedLibrary)
+        )
         skikoSkottieProjectContext.provideJvmRequiredSymbols(os, arch)
     }
 
@@ -347,7 +341,28 @@ if (supportAwt) {
         archiveBaseName.set("skiko-skottie-awt-test")
         from(kotlin.jvm("awt").compilations["main"].output.allOutputs)
     }
-    skikoSkottieProjectContext.setupJvmTestTask(skikoSkottieAwtJarForTests, targetOs, targetArch)
+    val coreJvmLinkedLibrary = skikoSkottieProjectContext.jvmLinkedLibraryFor(targetOs, targetArch).also {
+        dependencies.add(it.name, coreProject)
+    }
+    val macosX64CoreLinkedLibrary = if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
+        skikoSkottieProjectContext.jvmLinkedLibraryFor(OS.MacOS, Arch.X64).also {
+            dependencies.add(it.name, coreProject)
+        }
+    } else {
+        null
+    }
+    val coreJvmRuntimeJar = skikoSkottieProjectContext.jvmRuntimeJarFor(targetOs, targetArch).also {
+        dependencies.add(it.name, coreProject)
+    }
+
+    skikoSkottieProjectContext.setupJvmTestTask(
+        skikoSkottieAwtJarForTests,
+        targetOs,
+        targetArch,
+        files(coreJvmLinkedLibrary),
+        macosX64CoreLinkedLibrary?.let { files(it) },
+        coreJvmRuntimeJar
+    )
     skikoSkottieProjectContext.provideJvmRequiredSymbols(targetOs, targetArch)
     if (targetOs == OS.MacOS && targetArch == Arch.Arm64) {
         skikoSkottieProjectContext.provideJvmRequiredSymbols(OS.MacOS, Arch.X64)

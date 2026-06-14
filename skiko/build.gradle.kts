@@ -434,28 +434,6 @@ if (supportAwt) {
     skikoProjectContext.setupJvmTestTask(skikoAwtJarForTests, targetOs, targetArch)
 }
 
-val jvmRequiredSymbols = if (supportAwt || supportAndroid) {
-    configurations.create("jvmRequiredSymbols") {
-        isCanBeConsumed = false
-        isCanBeResolved = false
-    }.also {
-        dependencies.add(it.name, project(":skiko-skottie"))
-    }
-} else {
-    null
-}
-
-val wasmSideModules = if (supportWeb) {
-    configurations.create("wasmSideModules") {
-        isCanBeConsumed = false
-        isCanBeResolved = false
-    }.also {
-        dependencies.add(it.name, project(":skiko-skottie"))
-    }
-} else {
-    null
-}
-
 afterEvaluate {
     tasks.configureEach {
         if (group == "publishing") {
@@ -484,10 +462,10 @@ fun configureSymbolsFor(os: OS, arch: Arch) {
     val skiaBindingsDir = skikoProjectContext.registerOrGetSkiaDirProvider(os, arch)
     val coreCompile = tasks.named<CompileSkikoCppTask>("compileJvmBindings$suffix")
     val coreObjcCompile = if (os.isMacOs) tasks.named<CompileSkikoObjCTask>("objcCompile$suffix") else null
-    val requiredSymbolFiles = skikoProjectContext.jvmRequiredSymbolsFrom(
-        os,
-        arch,
-        jvmRequiredSymbols ?: error("jvmRequiredSymbols must be configured for $os $arch")
+    val requiredSymbolFiles = files(
+        skikoProjectContext.jvmRequiredSymbolsFor(os, arch).also {
+            dependencies.add(it.name, project(":skiko-skottie"))
+        }
     )
 
     skikoProjectContext.configureGenerateSymbolsList(
@@ -514,8 +492,17 @@ if (supportAndroid) {
 }
 
 if (supportWeb) {
+    skikoProjectContext.provideWasmTestResources()
+
+    val linkWasmSideModules = skikoProjectContext.wasmSideModulesFor("linkWasm").also {
+        dependencies.add(it.name, project(":skiko-skottie"))
+    }
+    val linkWasmD8SideModules = skikoProjectContext.wasmSideModulesFor("linkWasmD8WithES6").also {
+        dependencies.add(it.name, project(":skiko-skottie"))
+    }
     skikoProjectContext.configureWasmMainModuleSideModuleInputs(
-        wasmSideModules ?: error("wasmSideModules must be configured when Web support is enabled")
+        linkWasmSideModules,
+        linkWasmD8SideModules,
     )
 }
 

@@ -17,8 +17,8 @@ import mutableListOfLinkerOptions
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
-import org.gradle.api.artifacts.ProjectDependency
-import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.attributes.Usage
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.getByName
@@ -44,6 +44,17 @@ private fun nativeSymbolSourcesConfigurationName(os: OS, arch: Arch, isUikitSim:
 
 private fun nativeSymbolSourcesElementsConfigurationName(os: OS, arch: Arch, isUikitSim: Boolean) =
     "nativeSymbolSourcesElements${joinToTitleCamelCase(os.idWithSuffix(isUikitSim), arch.id)}"
+
+private val nativeSymbolSourcesOsAttribute =
+    Attribute.of("org.jetbrains.skiko.nativeSymbolSources.os", String::class.java)
+
+private val nativeSymbolSourcesArchAttribute =
+    Attribute.of("org.jetbrains.skiko.nativeSymbolSources.arch", String::class.java)
+
+private val nativeSymbolSourcesUikitSimAttribute =
+    Attribute.of("org.jetbrains.skiko.nativeSymbolSources.uikitSim", String::class.java)
+
+private const val NATIVE_SYMBOL_SOURCES_USAGE = "skiko-native-symbol-sources"
 
 fun Project.findXcodeSdkRoot(): String {
     val defaultPath = "/Applications/Xcode.app/Contents/Developer/Platforms"
@@ -190,6 +201,17 @@ private fun SkikoProjectContext.configureNativeSymbolSourcesElements(
     configurations.create(nativeSymbolSourcesElementsConfigurationName(os, arch, isUikitSim)) {
         isCanBeConsumed = true
         isCanBeResolved = false
+
+        attributes {
+            attribute(nativeSymbolSourcesOsAttribute, os.name)
+            attribute(nativeSymbolSourcesArchAttribute, arch.name)
+            attribute(nativeSymbolSourcesUikitSimAttribute, isUikitSim.toString())
+            attribute(
+                Usage.USAGE_ATTRIBUTE,
+                objects.named(Usage::class.java, NATIVE_SYMBOL_SOURCES_USAGE)
+            )
+        }
+
         symbolSources.forEach { source ->
             outgoing.artifact(file(source)) {
                 this.builtBy(builtBy)
@@ -198,29 +220,25 @@ private fun SkikoProjectContext.configureNativeSymbolSourcesElements(
     }
 }
 
-private fun SkikoProjectContext.nativeSymbolSourcesFrom(
+fun SkikoProjectContext.nativeSymbolSourcesFor(
     os: OS,
     arch: Arch,
     isUikitSim: Boolean,
-    declaredSymbolSources: Configuration,
-): ConfigurableFileCollection = with(project) {
-    val configurationName = nativeSymbolSourcesConfigurationName(os, arch, isUikitSim)
-    val configuration = configurations.create(configurationName) {
+): Configuration = with(project) {
+    configurations.create(nativeSymbolSourcesConfigurationName(os, arch, isUikitSim)) {
         isCanBeConsumed = false
         isCanBeResolved = true
-    }
-    declaredSymbolSources.dependencies.withType(ProjectDependency::class.java).forEach { dependency ->
-        dependencies.add(
-            configurationName,
-            dependencies.project(
-                mapOf(
-                    "path" to dependency.path,
-                    "configuration" to nativeSymbolSourcesElementsConfigurationName(os, arch, isUikitSim)
-                )
+
+        attributes {
+            attribute(nativeSymbolSourcesOsAttribute, os.name)
+            attribute(nativeSymbolSourcesArchAttribute, arch.name)
+            attribute(nativeSymbolSourcesUikitSimAttribute, isUikitSim.toString())
+            attribute(
+                Usage.USAGE_ATTRIBUTE,
+                objects.named(Usage::class.java, NATIVE_SYMBOL_SOURCES_USAGE)
             )
-        )
+        }
     }
-    files(configuration)
 }
 
 fun configureCinterop(
@@ -253,7 +271,7 @@ fun SkikoProjectContext.configureNativeTarget(
     os: OS,
     arch: Arch,
     target: KotlinNativeTarget,
-    coreNativeSymbolSources: Configuration? = null
+    coreNativeSymbolSourcesFor: ((OS, Arch, Boolean) -> Configuration)? = null
 ) = with(this.project) {
     if (!os.isCompatibleWithHost) return
 
@@ -412,12 +430,9 @@ fun SkikoProjectContext.configureNativeTarget(
     val compilationDependency = if (requiresSymbolPatching) {
         val patchActionName = "patchSkikoSymbols".withSuffix(isUikitSim = isUikitSim)
         val coreSymbolSources = if (kind == SkikoModuleKind.EXTENSION && dependsOnCore) {
-            nativeSymbolSourcesFrom(
-                os,
-                arch,
-                isUikitSim,
-                coreNativeSymbolSources ?: error("Core native symbol sources must be configured for $os $arch")
-            )
+            val symbolSources = coreNativeSymbolSourcesFor?.invoke(os, arch, isUikitSim)
+                ?: error("Core native symbol sources must be configured for $os $arch")
+            files(symbolSources)
         } else {
             null
         }
