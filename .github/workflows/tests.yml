@@ -9,10 +9,7 @@ on:
 jobs:
   macos:
     name: 'macOS'
-    # On `macos-15` UI tests blocked by a system popup with
-    # "bash" is requesting to bypass the system private window picker and directly access your screen and audio.
-    # TODO: Update once resolved
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         name: 'Check out code'
@@ -25,6 +22,27 @@ jobs:
 
       - uses: ./.github/actions/setup-prerequisites
         name: 'Setup Prerequisites'
+
+      - shell: bash
+        name: Disable ScreenCapture Nags
+        run: |
+          SCREEN_CAPTURE_APPROVALS="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
+          mkdir -p "$(dirname "$SCREEN_CAPTURE_APPROVALS")"
+          /usr/bin/plutil -create xml1 "$SCREEN_CAPTURE_APPROVALS"
+        
+          /usr/sbin/screencapture -x /tmp/skiko-screencapture-preflight.png 2>/dev/null &
+          SCREEN_CAPTURE_PID=$!
+        
+          FUTURE=$(/bin/date -j -v+100y +"%Y-%m-%d %H:%M:%S +0000")
+          /usr/bin/defaults write "$SCREEN_CAPTURE_APPROVALS" "/bin/bash" -dict \
+            kScreenCaptureApprovalLastAlerted -date "$FUTURE" \
+            kScreenCaptureApprovalLastUsed -date "$FUTURE"
+          /usr/bin/killall -HUP replayd
+          /usr/bin/killall -u "$USER" cfprefsd
+        
+          kill "$SCREEN_CAPTURE_PID" 2>/dev/null || true
+          wait "$SCREEN_CAPTURE_PID" 2>/dev/null || true
+          /usr/bin/killall -HUP replayd || true
 
       - shell: bash
         name: 'Run AWT Tests'
