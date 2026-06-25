@@ -24,14 +24,19 @@ jobs:
         name: 'Setup Prerequisites'
 
       - shell: bash
-        name: Disable ScreenCapture Nags
+        name: Start ScreenCapture Preflight
         run: |
           SCREEN_CAPTURE_APPROVALS="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
           mkdir -p "$(dirname "$SCREEN_CAPTURE_APPROVALS")"
           /usr/bin/plutil -create xml1 "$SCREEN_CAPTURE_APPROVALS"
         
           /usr/sbin/screencapture -x /tmp/skiko-screencapture-preflight.png 2>/dev/null &
-          SCREEN_CAPTURE_PID=$!
+          echo "SCREEN_CAPTURE_PID=$!" >> "$GITHUB_ENV"
+
+      - shell: bash
+        name: Disable ScreenCapture Nags
+        run: |
+          SCREEN_CAPTURE_APPROVALS="$HOME/Library/Group Containers/group.com.apple.replayd/ScreenCaptureApprovals.plist"
         
           FUTURE=$(/bin/date -j -v+100y +"%Y-%m-%d %H:%M:%S +0000")
           /usr/bin/defaults write "$SCREEN_CAPTURE_APPROVALS" "/bin/bash" -dict \
@@ -39,9 +44,11 @@ jobs:
             kScreenCaptureApprovalLastUsed -date "$FUTURE"
           /usr/bin/killall -HUP replayd
           /usr/bin/killall -u "$USER" cfprefsd
-        
+
+      - shell: bash
+        name: Stop ScreenCapture Preflight
+        run: |
           kill "$SCREEN_CAPTURE_PID" 2>/dev/null || true
-          wait "$SCREEN_CAPTURE_PID" 2>/dev/null || true
           /usr/bin/killall -HUP replayd || true
 
       - shell: bash
