@@ -23,6 +23,19 @@ jobs:
               -Pskiko.android.enabled=true \
               :skiko:publishToMavenLocal
 
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Android binaries'
+        with:
+          name: skiko-android-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
+
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check Android Sample'
         with:
@@ -50,6 +63,19 @@ jobs:
             ./gradlew --no-daemon --stacktrace \
               -Pskiko.wasm.enabled=true \
               :skiko:publishToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Web binaries'
+        with:
+          name: skiko-web-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
 
   Linux:
     name: 'Linux x64 Publish Dry Run'
@@ -83,6 +109,19 @@ jobs:
               :skiko:publishLinuxArm64PublicationToMavenLocal \
               :skiko:publishLinuxX64PublicationToMavenLocal
 
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Linux x64 binaries'
+        with:
+          name: skiko-linux-x64-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
+
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check AWT Sample'
         with:
@@ -111,6 +150,19 @@ jobs:
               -Pskiko.awt.enabled=true \
               -Pskiko.arch=arm64 \
               :skiko:publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Linux arm64 binaries'
+        with:
+          name: skiko-linux-arm64-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
 
   macOS:
     name: 'macOS Publish Dry Run'
@@ -145,6 +197,19 @@ jobs:
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=x64 \
             :skiko:publishSkikoJvmRuntimeMacosX64PublicationToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload macOS binaries'
+        with:
+          name: skiko-macos-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
 
       - shell: bash
         name: 'Check AWT Sample'
@@ -189,6 +254,19 @@ jobs:
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=arm64 \
             :skiko:publishSkikoJvmRuntimeWindowsArm64PublicationToMavenLocal
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload Windows binaries'
+        with:
+          name: skiko-windows-binaries
+          path: |
+            skiko/build/libs/*
+            skiko/build/publications/**/*
+            skiko/build/checksums-*/*
+            skiko/build/out/link/**/*
+            skiko/build/maybe-signed-*/*
+          if-no-files-found: error
+          retention-days: 2
 
       - shell: bash
         name: 'Check AWT Sample'

@@ -111,6 +111,16 @@ jobs:
 
       # TODO run iOS specific tests on iPhone simulator
 
+      - uses: actions/upload-artifact@v4
+        name: 'Upload iOS test executables'
+        if: always()
+        with:
+          name: ios-test-kexe
+          path: |
+            ./skiko/build/bin/ios*/debugTest/*.kexe
+          if-no-files-found: warn
+          retention-days: 5
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: failure()

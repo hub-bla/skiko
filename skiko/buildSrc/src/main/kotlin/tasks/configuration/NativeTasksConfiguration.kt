@@ -91,6 +91,10 @@ fun SkikoProjectContext.compileNativeBridgesTask(
                     *iosArchFlags,
                     *buildType.clangFlags,
                     "-stdlib=libc++",
+                    "-fvisibility=hidden",
+                    "-fvisibility-inlines-hidden",
+                    "-fno-rtti",
+                    "-fno-exceptions",
                     *skiaPreprocessorFlags(OS.IOS, buildType),
                 ))
             }

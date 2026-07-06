@@ -145,6 +145,7 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                     "CoreText",
                     "UIKit",
                 )
+                linkFlags("-dead_strip")
             }
 
             tvos {
