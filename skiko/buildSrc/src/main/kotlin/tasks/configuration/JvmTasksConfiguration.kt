@@ -104,8 +104,6 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-fno-exceptions",
                 "-fvisibility=hidden",
                 "-fvisibility-inlines-hidden",
-                "-fdata-sections",
-                "-ffunction-sections",
                 *archFlags,
             )
         }
@@ -132,8 +130,6 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
                 "-fno-rtti",
                 "-fno-exceptions",
                 "-fvisibility=hidden",
-                "-fdata-sections",
-                "-ffunction-sections",
                 "-fPIC"
             )
         }
@@ -345,7 +341,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
                         "-Wl,-z,relro,-z,now",
-                        "-Wl,--gc-sections",
                     )
                 )
                 addAll(resolvedBinaryInputs.dynamicLibNames.map { "-l$it" })
@@ -390,7 +385,6 @@ fun SkikoProjectContext.createLinkJvmBindings(
                 "-llog",
                 "-landroid",
                 "-latomic",
-                "-Wl,--gc-sections",
             )
             androidFlags.addAll(resolvedBinaryInputs.dynamicLibNames.map { "-l$it" })
             androidFlags.addAll(resolvedBinaryInputs.directStaticArchivePaths)
