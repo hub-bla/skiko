@@ -22,7 +22,7 @@ The JVM bindings compile on every AWT and Android runtime. Metal context and tex
 
 ## Core Boundary
 
-Graphite implementation files live under `skiko/skiko-graphite`; they do not become part of the core Skiko artifact. The module is always present in the Gradle project and documentation graph, like `skiko-skottie`, while its Kotlin target declarations remain limited to AWT, Android, and Apple native targets. Skiko core exposes only the minimum `InternalSkikoApi` needed for an extension module to wrap a native `SkSurface` pointer. Existing extension build wiring is generalized so both Skottie and Graphite contribute required native symbols without coupling core to either extension's API.
+Graphite implementation files live under `skiko/skiko-graphite`; they do not become part of the core Skiko artifact. The module is always present in the Gradle project and documentation graph, like `skiko-skottie`, while its Kotlin target declarations remain limited to AWT, Android, and Apple native targets. Skiko core exposes only the minimum `InternalSkikoApi` needed for an extension module to wrap a native `SkSurface` pointer. Graphite reuses core's existing JVM and native `skija::SurfaceProps::toSkSurfaceProps` marshalling helpers; the JVM declaration is exported for extension linkage rather than duplicated in the module. Existing extension build wiring is generalized so both Skottie and Graphite contribute required native symbols without coupling core to either extension's API.
 
 ## Explicit Exclusions
 
@@ -34,4 +34,4 @@ Native factory failures return `null` where the Skia factory itself is nullable 
 
 ## Validation
 
-Compile and link the Graphite module for macOS AWT and Kotlin/Native macOS on the local Apple host. Run focused tests for object creation/lifecycle and surface wrapping where a Metal device is available. Compile the non-Metal JNI path and verify Android target, runtime, and symbol-export configuration. Verify that AWT publication metadata contains the standard macOS, Linux, and Windows runtime variants, and that no web or Kotlin/Native Linux target is declared. Run affected Skiko and Skottie build checks to catch regressions in the generalized extension wiring.
+Compile and link the Graphite module for macOS AWT and Kotlin/Native macOS on the local Apple host. Run focused tests for object creation/lifecycle and surface wrapping where a Metal device is available. Verify the exported core surface-property marshalling symbol is consumed by both Graphite bridges. Compile the non-Metal JNI path and verify Android target, runtime, and symbol-export configuration. Verify that AWT publication metadata contains the standard macOS, Linux, and Windows runtime variants, and that no web or Kotlin/Native Linux target is declared. Run affected Skiko and Skottie build checks to catch regressions in the generalized extension wiring.
