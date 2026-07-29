@@ -2,6 +2,7 @@ package tasks.configuration
 
 import Arch
 import CompileSkikoCppTask
+import ConfiguredNativeTarget
 import PatchSkiaSymbolsTask
 import OS
 import SkiaBuildType
@@ -269,6 +270,7 @@ fun SkikoProjectContext.configureNativeTarget(
     coreNativeSymbolSourcesFor: ((OS, Arch, Boolean) -> Configuration)? = null
 ) = with(this.project) {
     if (!os.isCompatibleWithHost) return
+    nativeTargets += ConfiguredNativeTarget(os, arch, target)
 
     if (kind != SkikoModuleKind.EXTENSION) {
         target.generateVersion(os, arch, skiko)

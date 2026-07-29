@@ -1,0 +1,341 @@
+name: Skiko Binary Sizes
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_binaries:
+        description: 'Upload measured binaries as workflow artifacts'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: binary-sizes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Android:
+    name: 'Android binaries'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Build and report Android binaries'
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.android.enabled=true \
+              -PbinarySizeStageDir=binary-size-artifacts \
+              reportArchiveBinarySizes :skiko-skottie:reportArchiveBinarySizes
+
+      - shell: bash
+        name: 'Publish job summary'
+        run: cat skiko/{,*/}build/reports/binary-sizes/archives.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-android
+          path: skiko/**/build/reports/binary-sizes/archives.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-android
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  Web:
+    name: 'Web binaries'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Build and report Web binaries'
+        with:
+          image_name: linux-emscripten-amd64
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.wasm.enabled=true \
+              -PbinarySizeStageDir=binary-size-artifacts \
+              reportArchiveBinarySizes :skiko-skottie:reportArchiveBinarySizes
+
+      - shell: bash
+        name: 'Publish job summary'
+        run: cat skiko/{,*/}build/reports/binary-sizes/archives.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-web
+          path: skiko/**/build/reports/binary-sizes/archives.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-web
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  Linux:
+    name: 'Linux ${{ matrix.arch }} binaries'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Build and report Linux binaries'
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.awt.enabled=true \
+              -Pskiko.arch=${{ matrix.arch }} \
+              -PbinarySizeStageDir=binary-size-artifacts \
+              reportArchiveBinarySizes :skiko-skottie:reportArchiveBinarySizes
+
+      - shell: bash
+        name: 'Publish job summary'
+        run: cat skiko/{,*/}build/reports/binary-sizes/archives.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-linux-${{ matrix.arch }}
+          path: skiko/**/build/reports/binary-sizes/archives.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-linux-${{ matrix.arch }}
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  macOS:
+    name: 'macOS binaries'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: actions/setup-java@v4
+        name: 'Setup JDK 21'
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - shell: bash
+        name: 'Build and report macOS binaries'
+        run: |
+          ./gradlew -p skiko --no-daemon --stacktrace \
+            -Pskiko.awt.enabled=true \
+            -Pskiko.arch=arm64 \
+            -PbinarySizeStageDir=binary-size-artifacts \
+            reportArchiveBinarySizes :skiko-skottie:reportArchiveBinarySizes
+          cat skiko/{,*/}build/reports/binary-sizes/archives.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-macos
+          path: skiko/**/build/reports/binary-sizes/archives.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-macos
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  Windows:
+    name: 'Windows ${{ matrix.arch }} binaries'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: microsoft/setup-msbuild@v1
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - uses: actions/setup-java@v4
+        name: 'Setup JDK 21'
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - shell: bash
+        name: 'Build and report Windows binaries'
+        run: |
+          ./gradlew -p skiko --no-daemon --stacktrace \
+            -Pskiko.awt.enabled=true \
+            -Pskiko.arch=${{ matrix.arch }} \
+            -PbinarySizeStageDir=binary-size-artifacts \
+            reportArchiveBinarySizes :skiko-skottie:reportArchiveBinarySizes
+          cat skiko/{,*/}build/reports/binary-sizes/archives.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-windows-${{ matrix.arch }}
+          path: skiko/**/build/reports/binary-sizes/archives.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-windows-${{ matrix.arch }}
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  NativeLinux:
+    name: 'Linked Linux test executables'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Link and report Linux test executables'
+        with:
+          image_name: linux-amd64
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.native.linux.enabled=true \
+              -PbinarySizeStageDir=binary-size-artifacts \
+              reportKexeBinarySizes :skiko-skottie:reportKexeBinarySizes
+
+      - shell: bash
+        name: 'Publish job summary'
+        run: cat skiko/{,*/}build/reports/binary-sizes/executables.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-native-linux
+          path: skiko/**/build/reports/binary-sizes/executables.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-native-linux
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  NativeApple:
+    name: 'Linked Apple test executables'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: actions/setup-java@v4
+        name: 'Setup JDK 21'
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - uses: ./.github/actions/setup-prerequisites
+        name: 'Setup Prerequisites'
+
+      - shell: bash
+        name: 'Link and report macOS and iOS test executables'
+        run: |
+          ./gradlew -p skiko --no-daemon --stacktrace \
+            -Pskiko.native.mac.enabled=true \
+            -Pskiko.native.ios.enabled=true \
+            -PbinarySizeStageDir=binary-size-artifacts \
+            reportKexeBinarySizes :skiko-skottie:reportKexeBinarySizes
+          cat skiko/{,*/}build/reports/binary-sizes/executables.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store binary size report'
+        with:
+          name: binary-size-report-native-apple
+          path: skiko/**/build/reports/binary-sizes/executables.md
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        name: 'Upload measured binaries'
+        if: ${{ inputs.upload_binaries }}
+        with:
+          name: skiko-binaries-native-apple
+          path: skiko/**/build/binary-size-artifacts
+          if-no-files-found: error
+
+  SizeReport:
+    name: 'Combined Binary Size Report'
+    needs: [Android, Web, Linux, macOS, Windows, NativeLinux, NativeApple]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - shell: bash
+        name: 'Prepare report directory'
+        run: mkdir -p binary-size-reports
+
+      - uses: actions/download-artifact@v4
+        name: 'Download binary size reports'
+        continue-on-error: true
+        with:
+          pattern: binary-size-report-*
+          path: binary-size-reports
+          merge-multiple: true
+
+      - shell: bash
+        name: 'Render combined binary size report'
+        run: |
+          python3 skiko/tools/ci/aggregate_binary_size_reports.py binary-size-reports sizes-all.md
+          cat sizes-all.md >> "$GITHUB_STEP_SUMMARY"

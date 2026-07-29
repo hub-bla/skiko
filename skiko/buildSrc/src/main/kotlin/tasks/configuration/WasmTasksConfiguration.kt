@@ -215,6 +215,7 @@ fun SkikoProjectContext.declareWasmTasks() {
             println("Wasm and JS at: ${archiveFile.get().asFile.absolutePath}")
         }
     }
+    wasmRuntimeJar = skikoWasmJar
 }
 
 fun SkikoProjectContext.provideWasmSideModules() {
