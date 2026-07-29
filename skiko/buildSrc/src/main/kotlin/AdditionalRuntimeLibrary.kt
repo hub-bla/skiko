@@ -12,6 +12,9 @@ import org.gradle.jvm.tasks.Jar
 
 interface AdditionalRuntimeLibrary {
     val jarTask: TaskProvider<Jar>
+    val targetOs: OS
+    val targetArch: Arch
+    val artifactId: String
 
     fun registerMavenPublication(
         container: PublicationContainer,
@@ -33,6 +36,7 @@ fun Project.registerAdditionalRuntimeLibrary(
 ): AdditionalRuntimeLibrary {
     val visibleName = "${toTitleCase(name)} Runtime"
     val targetId = targetId(targetOs, targetArch)
+    val runtimeArtifactId = artifacts.jvmAdditionalRuntimeArtifactIdFor(name, targetOs, targetArch)
     val taskSuffix = "${toTitleCase(name)}${toTitleCase(targetOs.id)}${toTitleCase(targetArch.id)}"
 
     val archiveFileName = archiveUrl.substringAfterLast('/')
@@ -78,6 +82,9 @@ fun Project.registerAdditionalRuntimeLibrary(
 
     return object : AdditionalRuntimeLibrary {
         override val jarTask = jarTask
+        override val targetOs = targetOs
+        override val targetArch = targetArch
+        override val artifactId = runtimeArtifactId
         
         override fun registerMavenPublication(
             container: PublicationContainer,
@@ -86,7 +93,7 @@ fun Project.registerAdditionalRuntimeLibrary(
         ) {
             container.create("skikoJvmRuntime$taskSuffix", MavenPublication::class.java) {
                 pomNameForPublication[this.name] = "${artifacts.displayName} $visibleName for ${targetOs.id} ${targetArch.id}"
-                artifactId = artifacts.jvmAdditionalRuntimeArtifactIdFor(name, targetOs, targetArch)
+                artifactId = runtimeArtifactId
                 afterEvaluate {
                     artifact(jarTask.map { it.archiveFile.get() })
                     artifact(emptySourcesJar)

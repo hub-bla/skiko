@@ -8,6 +8,7 @@ import org.gradle.api.tasks.bundling.Jar
 import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import java.io.File
 import dsl.*
 
@@ -39,6 +40,8 @@ class SkikoProjectContext(
     }
 
     val allJvmRuntimeJars = mutableMapOf<Pair<OS, Arch>, TaskProvider<Jar>>()
+    var wasmRuntimeJar: TaskProvider<Jar>? = null
+    val nativeTargets = mutableListOf<ConfiguredNativeTarget>()
 
     val projectPath: String = if (kind == SkikoModuleKind.CORE) ":" else ":${project.name}"
     val libBaseName: String = artifacts.artifactIdPrefix
@@ -85,6 +88,12 @@ class SkikoProjectContext(
         )
     }
 }
+
+data class ConfiguredNativeTarget(
+    val os: OS,
+    val arch: Arch,
+    val target: KotlinNativeTarget,
+)
 
 fun SkikoProjectContext.declareSkiaTasks() {
     mapOf(
