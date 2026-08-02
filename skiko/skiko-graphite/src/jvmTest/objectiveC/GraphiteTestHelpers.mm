@@ -28,3 +28,25 @@ Java_org_jetbrains_skia_gpu_graphite_GraphiteTestHelpersKt__1nReleaseMetalObject
     CFRelease(reinterpret_cast<CFTypeRef>(devicePtr));
     CFRelease(reinterpret_cast<CFTypeRef>(queuePtr));
 }
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_jetbrains_skia_gpu_graphite_GraphiteTestHelpersKt__1nCreateMetalTexture(
+        JNIEnv*, jclass) {
+    @autoreleasepool {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        MTLTextureDescriptor* descriptor = [MTLTextureDescriptor
+                texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                      width:8
+                                     height:8
+                                  mipmapped:NO];
+        descriptor.usage = MTLTextureUsageRenderTarget;
+        id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
+        return reinterpret_cast<jlong>((__bridge_retained void*)texture);
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_jetbrains_skia_gpu_graphite_GraphiteTestHelpersKt__1nReleaseMetalTexture(
+        JNIEnv*, jclass, jlong texturePtr) {
+    CFRelease(reinterpret_cast<CFTypeRef>(texturePtr));
+}

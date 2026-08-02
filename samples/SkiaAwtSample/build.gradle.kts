@@ -41,10 +41,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.5.0")
     implementation("org.jetbrains.skiko:skiko-awt-runtime-$target:$version")
+    implementation("org.jetbrains.skiko:skiko-graphite-awt-runtime-$target:$version")
     implementation("org.jetbrains.runtime:jbr-api:1.5.0")
-    if (System.getProperty("os.name").startsWith("Win")) {
-        implementation("org.jetbrains.skiko:skiko-awt-runtime-angle-$target:$version")
-    }
+//    if (System.getProperty("os.name").startsWith("Win")) {
+//        implementation("org.jetbrains.skiko:skiko-awt-runtime-angle-$target:$version")
+//    }
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
 }
@@ -88,6 +89,12 @@ tasks.register("runWithAngleEnabled") {
 tasks.register("runWithTransparency") {
     group = "application"
     additionalArguments += mapOf("skiko.transparency" to "true")
+    dependsOn(casualRun)
+}
+
+tasks.register("runWithGraphiteDawn") {
+    group = "application"
+    additionalArguments += mapOf("skiko.graphite.dawn" to "true")
     dependsOn(casualRun)
 }
 

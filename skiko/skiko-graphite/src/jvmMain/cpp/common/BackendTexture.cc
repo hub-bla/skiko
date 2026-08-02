@@ -4,6 +4,9 @@
 #if defined(SK_METAL)
 #include "include/gpu/graphite/mtl/MtlGraphiteTypes_cpp.h"
 #endif
+#if defined(SK_DIRECT3D)
+#include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
+#endif
 
 static void deleteBackendTexture(skgpu::graphite::BackendTexture* texture) {
     delete texture;
@@ -21,6 +24,21 @@ Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt__1nMakeMetal(
     auto texture = skgpu::graphite::BackendTextures::MakeMetal(
             SkISize::Make(width, height),
             reinterpret_cast<CFTypeRef>(static_cast<uintptr_t>(texturePtr)));
+    return reinterpret_cast<jlong>(new skgpu::graphite::BackendTexture(texture));
+#else
+    return 0;
+#endif
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_jetbrains_skia_gpu_graphite_BackendTextureKt__1nMakeDawn(
+        JNIEnv*, jclass, jlong texturePtr) {
+#if defined(SK_DIRECT3D)
+    auto texture = skgpu::graphite::BackendTextures::MakeDawn(
+            reinterpret_cast<WGPUTexture>(static_cast<uintptr_t>(texturePtr)));
+    if (!texture.isValid()) {
+        return 0;
+    }
     return reinterpret_cast<jlong>(new skgpu::graphite::BackendTexture(texture));
 #else
     return 0;

@@ -19,3 +19,8 @@ internal actual fun makeTestGraphiteContext(): GraphiteContext? {
     }
     return GraphiteContext.makeMetal(device.objcPtr(), queue.objcPtr())
 }
+
+@OptIn(ExperimentalSkikoApi::class)
+internal actual fun useTestExternalBackendTexture(
+    block: (GraphiteContext, BackendTexture) -> Unit,
+): Boolean = false

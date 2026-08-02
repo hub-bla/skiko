@@ -13,3 +13,9 @@ internal fun requireMetalSupport() {
         else -> throw UnsupportedOperationException("Graphite Metal is not supported on ${hostOs.id}")
     }
 }
+
+internal fun requireDawnD3DSupport() {
+    if (hostOs != OS.Windows) {
+        throw UnsupportedOperationException("Graphite Dawn D3D is not supported on ${hostOs.id}")
+    }
+}

@@ -11,7 +11,7 @@ import kotlin.math.sin
 
 open class ClocksAwt(
     private val scaleProvider: () -> Float,
-    private val renderProvider: () -> GraphicsApi = { GraphicsApi.UNKNOWN }
+    private val renderProvider: () -> Any = { GraphicsApi.UNKNOWN }
 ) : SkikoRenderDelegate, MouseMotionListener {
     constructor(layer: SkiaLayer) : this(
         { layer.contentScale },

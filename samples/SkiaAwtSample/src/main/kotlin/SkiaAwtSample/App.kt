@@ -12,16 +12,31 @@ import javax.swing.*
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
+import org.jetbrains.skiko.OS
 
 fun main(args: Array<String>) {
     setupSkikoLoggerFactory { DefaultConsoleLogger.fromLevel(System.getProperty("skiko.log.level", "INFO")) }
     val windows = parseArgs(args)
     repeat(windows) {
-        when (System.getProperty("skiko.swing.interop")) {
-            "true" -> swingSkia()
+        when {
+            System.getProperty("skiko.graphite.dawn") == "true" -> createGraphiteDawnWindow("Graphite Dawn window $it", windows == 1)
+            System.getProperty("skiko.swing.interop") == "true" -> swingSkia()
             else -> createWindow("window $it", windows == 1)
         }
     }
+}
+
+@OptIn(ExperimentalSkikoApi::class)
+private fun createGraphiteDawnWindow(title: String, exitOnClose: Boolean) = SwingUtilities.invokeLater {
+    check(hostOs == OS.Windows) { "Graphite Dawn D3D is supported by this sample on Windows only" }
+    val clocks = ClocksAwt({ 1f }) { "Graphite Dawn D3D" }
+    val layer = GraphiteDawnLayer(clocks)
+    val window = JFrame(title)
+    window.defaultCloseOperation = if (exitOnClose) WindowConstants.EXIT_ON_CLOSE else WindowConstants.DISPOSE_ON_CLOSE
+    window.contentPane.add(layer)
+    window.preferredSize = Dimension(800, 600)
+    window.pack()
+    window.isVisible = true
 }
 
 fun createWindow(title: String, exitOnClose: Boolean) = SwingUtilities.invokeLater {

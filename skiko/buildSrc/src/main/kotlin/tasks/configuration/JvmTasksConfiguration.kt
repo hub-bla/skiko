@@ -287,6 +287,11 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
             includeHeadersNonRecursive(skiaDir.resolve("third_party/externals/angle2/include"))
             includeHeadersNonRecursive(skiaDir.resolve("include/gpu"))
             includeHeadersNonRecursive(skiaDir.resolve("src/gpu"))
+            includeHeadersNonRecursive(
+                skiaDir.resolve(
+                    "out/${buildType.id}-${targetId(targetOs, targetArch)}/gen/third_party/dawn/include"
+                )
+            )
             val targetArgs = if (targetArch == Arch.Arm64) arrayOf("/clang:--target=arm64-windows") else arrayOf()
             osFlags = arrayOf(
                 "/nologo",

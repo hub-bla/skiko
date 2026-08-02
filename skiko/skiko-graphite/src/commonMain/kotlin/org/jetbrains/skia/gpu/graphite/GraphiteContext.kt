@@ -33,6 +33,22 @@ class GraphiteContext internal constructor(ptr: NativePointer) : Managed(ptr, _F
             check(ptr != NullPointer) { "Failed to create a Graphite Metal context" }
             return GraphiteContext(ptr)
         }
+
+        /**
+         * Creates a Graphite context backed by a Dawn device using the Direct3D 12 backend.
+         *
+         * Dawn selects the system's default Direct3D 12 adapter and owns the instance, device,
+         * and queue for the lifetime of the returned context.
+         *
+         * @return a Graphite context backed by Dawn Direct3D 12.
+         */
+        fun makeDawnD3D(): GraphiteContext {
+            requireDawnD3DSupport()
+            Stats.onNativeCall()
+            val ptr = _nMakeDawnD3D()
+            check(ptr != NullPointer) { "Failed to create a Graphite Dawn D3D context" }
+            return GraphiteContext(ptr)
+        }
     }
 
     /**
@@ -92,6 +108,9 @@ private external fun _nGetGraphiteContextFinalizer(): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeMetal")
 private external fun _nMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeDawnD3D")
+private external fun _nMakeDawnD3D(): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeRecorder")
 private external fun _nMakeRecorder(contextPtr: NativePointer): NativePointer
