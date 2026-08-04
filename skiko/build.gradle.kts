@@ -493,6 +493,8 @@ if (supportWeb) {
 }
 
 skikoProjectContext.declarePublications()
+project.configureBinarySizeReports()
+project.configureBinarySizeReportAggregation()
 
 val mavenCentral = MavenCentralProperties(project)
 if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {

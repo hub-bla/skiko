@@ -17,10 +17,41 @@ jobs:
   tests:
     name: 'Tests'
     uses: ./.github/workflows/tests.yml
+    with:
+      report_binary_sizes: true
 
   skiko-publish:
     name: 'Skiko Publish (Dry Run)'
     uses: ./.github/workflows/publish-dry-run.yml
+    with:
+      report_binary_sizes: true
+
+  binary-sizes:
+    name: 'Combined Binary Size Report'
+    needs: [tests, skiko-publish]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        name: 'Check out code'
+
+      - uses: actions/setup-java@v4
+        name: 'Setup JDK 21'
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - uses: actions/download-artifact@v4
+        name: 'Download binary size reports'
+        with:
+          pattern: binary-size-report-*
+          path: skiko/binary-size-reports
+
+      - shell: bash
+        name: 'Render combined binary size report'
+        run: |
+          ./gradlew -p skiko --no-daemon aggregateBinarySizeReports
+          cat skiko/build/reports/binary-sizes/combined.md >> "$GITHUB_STEP_SUMMARY"
 
   docs-publish:
     name: 'Documentation Publish (Dry Run)'

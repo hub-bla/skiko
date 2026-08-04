@@ -2,6 +2,10 @@ name: Skiko Publish Dry Run
 
 on:
   workflow_call: # Allow being called by other workflows
+    inputs:
+      report_binary_sizes:
+        type: boolean
+        default: false
 
 jobs:
   Android:
@@ -22,6 +26,24 @@ jobs:
             ./gradlew -p skiko --no-daemon --stacktrace \
               -Pskiko.android.enabled=true \
               publishToMavenLocal
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Report Android binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.android.enabled=true \
+              reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store Android binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-android
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
 
       - uses: ./.github/actions/docker-skiko-run
         name: 'Check Android Sample'
@@ -56,6 +78,24 @@ jobs:
             ./gradlew -p skiko --no-daemon --stacktrace \
               -Pskiko.wasm.enabled=true \
               publishToMavenLocal
+
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Report Web binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          image_name: linux-emscripten-amd64
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.wasm.enabled=true \
+              reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store Web binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-web
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
 
       - uses: actions/setup-node@v4
         name: 'Setup Node.js'
@@ -110,6 +150,25 @@ jobs:
               publishLinuxX64PublicationToMavenLocal
 
       - uses: ./.github/actions/docker-skiko-run
+        name: 'Report Linux x64 binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.awt.enabled=true \
+              -Pskiko.arch=x64 \
+              reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store Linux x64 binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-linux-x64
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
+
+      - uses: ./.github/actions/docker-skiko-run
         name: 'Check AWT Sample'
         with:
           image_name: linux-compat
@@ -147,6 +206,25 @@ jobs:
               -Pskiko.arch=arm64 \
               publishSkikoJvmRuntimeLinuxArm64PublicationToMavenLocal
 
+      - uses: ./.github/actions/docker-skiko-run
+        name: 'Report Linux arm64 binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          image_name: linux-compat
+          command: |
+            ./gradlew -p skiko --no-daemon --stacktrace \
+              -Pskiko.awt.enabled=true \
+              -Pskiko.arch=arm64 \
+              reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store Linux arm64 binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-linux-arm64
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
+
   macOS:
     name: 'macOS Publish Dry Run'
     runs-on: macos-15
@@ -180,6 +258,23 @@ jobs:
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=x64 \
             publishSkikoJvmRuntimeMacosX64PublicationToMavenLocal
+
+      - shell: bash
+        name: 'Report macOS binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        run: |
+          ./gradlew -p skiko --no-daemon --stacktrace \
+            -Pskiko.awt.enabled=true \
+            -Pskiko.arch=arm64 \
+            reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store macOS binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-macos
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
 
       - shell: bash
         name: 'Check AWT Sample'
@@ -242,6 +337,23 @@ jobs:
             -Pskiko.awt.enabled=true \
             -Pskiko.arch=arm64 \
             publishSkikoJvmRuntimeWindowsArm64PublicationToMavenLocal
+
+      - shell: bash
+        name: 'Report Windows binary sizes'
+        if: ${{ inputs.report_binary_sizes }}
+        run: |
+          ./gradlew -p skiko --no-daemon --stacktrace \
+            -Pskiko.awt.enabled=true \
+            -Pskiko.arch=x64 \
+            reportArchiveBinarySizes
+
+      - uses: actions/upload-artifact@v4
+        name: 'Store Windows binary size report'
+        if: ${{ inputs.report_binary_sizes }}
+        with:
+          name: binary-size-report-windows
+          path: skiko/**/build/reports/binary-sizes/archives.tsv
+          retention-days: 1
 
       - shell: bash
         name: 'Check AWT Sample'

@@ -347,6 +347,7 @@ if (supportAwt) {
 }
 
 skikoSkottieProjectContext.declarePublications()
+project.configureBinarySizeReports()
 
 val mavenCentral = MavenCentralProperties(project)
 if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {
