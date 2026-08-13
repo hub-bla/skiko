@@ -4,7 +4,6 @@ import org.jetbrains.skia.impl.*
 import org.jetbrains.skia.impl.Library.Companion.staticLoad
 import org.jetbrains.skiko.RenderException
 import org.jetbrains.skiko.loadOpenGLLibrary
-
 class DirectContext internal constructor(ptr: NativePointer, managed: Boolean = true) : RefCnt(ptr, managed) {
     companion object {
         fun makeGL(): DirectContext {
@@ -15,9 +14,9 @@ class DirectContext internal constructor(ptr: NativePointer, managed: Boolean = 
             return DirectContext(ptr)
         }
 
-        fun makeMetal(devicePtr: NativePointer, queuePtr: NativePointer): DirectContext {
+        fun makeMetal(devicePtr: NativePointer, queuePtr: NativePointer, path: String=""): DirectContext {
             Stats.onNativeCall()
-            return DirectContext(_nMakeMetal(devicePtr, queuePtr))
+            return interopScope { DirectContext(_nMakeMetal(devicePtr, queuePtr, toInterop(path))) }
         }
 
         /**
@@ -171,7 +170,7 @@ private external fun DirectContext_nSetResourceCacheLimit(ptr: NativePointer, ma
 private external fun _nMakeGL(): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nMakeMetal")
-private external fun _nMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer
+private external fun _nMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer, path: InteropPointer): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_DirectContext__1nMakeDirect3D")
 private external fun _nMakeDirect3D(adapterPtr: NativePointer, devicePtr: NativePointer, queuePtr: NativePointer): NativePointer

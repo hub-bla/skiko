@@ -25,13 +25,15 @@ SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nMakeGLWithInterf
 }
 
 SKIKO_EXPORT KNativePointer org_jetbrains_skia_DirectContext__1nMakeMetal
-  (KNativePointer devicePtr, KNativePointer queuePtr) {
+  (KNativePointer devicePtr, KNativePointer queuePtr, KInteropPointer pathPtr) {
 #ifdef SK_METAL
     GrMtlBackendContext backendContext = {};
     GrMTLHandle device = reinterpret_cast<GrMTLHandle>((devicePtr));
     GrMTLHandle queue = reinterpret_cast<GrMTLHandle>((queuePtr));
     backendContext.fDevice.retain(device);
     backendContext.fQueue.retain(queue);
+    const char* str = reinterpret_cast<const char*>(pathPtr);
+    backendContext.fPath = str ? std::string(str) : std::string();
     sk_sp<GrDirectContext> instance = GrDirectContexts::MakeMetal(backendContext);
     return static_cast<KNativePointer>(instance.release());
 #else

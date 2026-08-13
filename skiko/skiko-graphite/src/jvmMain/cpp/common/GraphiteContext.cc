@@ -1,15 +1,22 @@
 #include <jni.h>
 
 #include "GraphiteImageProvider.hh"
+#include "GraphitePrecompile.hh"
+#include "include/core/SkData.h"
 #include "include/gpu/graphite/Context.h"
 #include "include/gpu/graphite/ContextOptions.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
+#include "include/gpu/graphite/PrecompileContext.h"
 #include "include/gpu/graphite/Recorder.h"
 #if defined(SK_METAL)
 #include "include/gpu/graphite/mtl/MtlBackendContext.h"
 #endif
 
 static void deleteGraphiteContext(skgpu::graphite::Context* context) {
+    delete context;
+}
+
+static void deletePrecompileContext(skgpu::graphite::PrecompileContext* context) {
     delete context;
 }
 
@@ -45,6 +52,46 @@ Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nMakeRecorder(
     skgpu::graphite::RecorderOptions options{};
     options.fImageProvider = SkikoGraphiteImageProvider::Make();
     return reinterpret_cast<jlong>(context->makeRecorder(options).release());
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_jetbrains_skia_gpu_graphite_GraphiteContextKt__1nMakePrecompileContext(
+        JNIEnv*, jclass, jlong contextPtr) {
+    auto context = reinterpret_cast<skgpu::graphite::Context*>(
+            static_cast<uintptr_t>(contextPtr));
+    return reinterpret_cast<jlong>(context->makePrecompileContext().release());
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_org_jetbrains_skia_gpu_graphite_PrecompileContextKt__1nGetFinalizer(JNIEnv*, jclass) {
+    return static_cast<jlong>(reinterpret_cast<uintptr_t>(&deletePrecompileContext));
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_jetbrains_skia_gpu_graphite_PrecompileContextKt__1nPrecompile(
+        JNIEnv* env, jclass, jlong contextPtr, jbyteArray serializedPipelineKey, jint size) {
+    if (!serializedPipelineKey || size <= 0 || size > env->GetArrayLength(serializedPipelineKey)) {
+        return JNI_FALSE;
+    }
+
+    jbyte* bytes = env->GetByteArrayElements(serializedPipelineKey, nullptr);
+    if (!bytes) {
+        return JNI_FALSE;
+    }
+    auto data = SkData::MakeWithCopy(bytes, size);
+    env->ReleaseByteArrayElements(serializedPipelineKey, bytes, JNI_ABORT);
+
+    auto context = reinterpret_cast<skgpu::graphite::PrecompileContext*>(
+            static_cast<uintptr_t>(contextPtr));
+    return context->precompile(std::move(data)) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_jetbrains_skia_gpu_graphite_PrecompileContextKt__1nPrecompileImpellerLikePipelines(
+        JNIEnv*, jclass, jlong contextPtr, jboolean includeMSAA) {
+    auto context = reinterpret_cast<skgpu::graphite::PrecompileContext*>(
+            static_cast<uintptr_t>(contextPtr));
+    skiko::graphite::PrecompileComposeBaselinePipelines(context, includeMSAA);
 }
 
 extern "C" JNIEXPORT void JNICALL

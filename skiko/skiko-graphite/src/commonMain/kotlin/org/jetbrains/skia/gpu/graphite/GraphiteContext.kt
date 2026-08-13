@@ -1,9 +1,11 @@
 package org.jetbrains.skia.gpu.graphite
 
 import org.jetbrains.skia.ExternalSymbolName
+import org.jetbrains.skia.impl.InteropPointer
 import org.jetbrains.skia.impl.Managed
 import org.jetbrains.skia.impl.NativePointer
 import org.jetbrains.skia.impl.Stats
+import org.jetbrains.skia.impl.interopScope
 import org.jetbrains.skia.impl.reachabilityBarrier
 import org.jetbrains.skiko.ExperimentalSkikoApi
 
@@ -24,12 +26,12 @@ class GraphiteContext internal constructor(ptr: NativePointer) : Managed(ptr, _F
          * @param queuePtr native pointer to the Metal command queue.
          * @return a Graphite context backed by Metal.
          */
-        fun makeMetal(devicePtr: NativePointer, queuePtr: NativePointer): GraphiteContext {
+        fun makeMetal(devicePtr: NativePointer, queuePtr: NativePointer, path: String = ""): GraphiteContext {
             requireMetalSupport()
             require(devicePtr != NullPointer) { "Metal device pointer is null" }
             require(queuePtr != NullPointer) { "Metal queue pointer is null" }
             Stats.onNativeCall()
-            val ptr = _nMakeMetal(devicePtr, queuePtr)
+            val ptr = interopScope { _nMakeMetal(devicePtr, queuePtr, toInterop(path)) }
             check(ptr != NullPointer) { "Failed to create a Graphite Metal context" }
             return GraphiteContext(ptr)
         }
@@ -46,6 +48,23 @@ class GraphiteContext internal constructor(ptr: NativePointer) : Managed(ptr, _F
             val ptr = _nMakeRecorder(nativePtr)
             check(ptr != NullPointer) { "Failed to create a Graphite recorder" }
             Recorder(ptr)
+        } finally {
+            reachabilityBarrier(this)
+        }
+    }
+
+    /**
+     * Creates a context that can recreate pipelines from serialized Graphite pipeline keys.
+     *
+     * The returned context can be moved to a worker thread. Keys must have been produced by
+     * Graphite's pipeline caching callback for a compatible Skia and GPU configuration.
+     */
+    fun makePrecompileContext(): PrecompileContext {
+        return try {
+            Stats.onNativeCall()
+            val ptr = _nMakePrecompileContext(nativePtr)
+            check(ptr != NullPointer) { "Failed to create a Graphite precompile context" }
+            PrecompileContext(ptr)
         } finally {
             reachabilityBarrier(this)
         }
@@ -91,10 +110,17 @@ class GraphiteContext internal constructor(ptr: NativePointer) : Managed(ptr, _F
 private external fun _nGetGraphiteContextFinalizer(): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeMetal")
-private external fun _nMakeMetal(devicePtr: NativePointer, queuePtr: NativePointer): NativePointer
+private external fun _nMakeMetal(
+    devicePtr: NativePointer,
+    queuePtr: NativePointer,
+    path: InteropPointer,
+): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakeRecorder")
 private external fun _nMakeRecorder(contextPtr: NativePointer): NativePointer
+
+@ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nMakePrecompileContext")
+private external fun _nMakePrecompileContext(contextPtr: NativePointer): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_gpu_graphite_GraphiteContext__1nInsertRecording")
 private external fun _nInsertRecording(contextPtr: NativePointer, recordingPtr: NativePointer)
