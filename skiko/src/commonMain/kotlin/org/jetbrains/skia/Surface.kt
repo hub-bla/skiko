@@ -267,68 +267,6 @@ class Surface : RefCnt {
          * @return              Surface if all parameters are valid; otherwise, null
          * @see [https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture](https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture)
          */
-        fun makeFromBackendRenderTarget(
-            context: DirectContext,
-            rt: BackendRenderTarget,
-            origin: SurfaceOrigin,
-            colorFormat: SurfaceColorFormat,
-            colorSpace: ColorSpace?,
-            surfaceProps: SurfaceProps? = null
-        ): Surface? {
-            return try {
-                Stats.onNativeCall()
-                val ptr = interopScope {
-                    _nMakeFromBackendRenderTarget(
-                        getPtr(context),
-                        getPtr(rt),
-                        origin.ordinal,
-                        colorFormat.ordinal,
-                        getPtr(colorSpace),
-                        toInterop(surfaceProps?.packToIntArray())
-                    )
-                }
-                if (ptr == NullPointer)
-                    null
-                else
-                    Surface(ptr, context, rt)
-            } finally {
-                reachabilityBarrier(context)
-                reachabilityBarrier(rt)
-                reachabilityBarrier(colorSpace)
-            }
-        }
-
-        fun makeFromMTKView(
-            context: DirectContext,
-            mtkViewPtr: NativePointer,
-            origin: SurfaceOrigin,
-            sampleCount: Int,
-            colorFormat: SurfaceColorFormat,
-            colorSpace: ColorSpace?,
-            surfaceProps: SurfaceProps?
-        ): Surface {
-            return try {
-                Stats.onNativeCall()
-                val ptr = interopScope {
-                    _nMakeFromMTKView(
-                        getPtr(context),
-                        mtkViewPtr,
-                        origin.ordinal,
-                        sampleCount,
-                        colorFormat.ordinal,
-                        getPtr(colorSpace),
-                        toInterop(surfaceProps?.packToIntArray())
-                    )
-                }
-                require(ptr != NullPointer) {
-                    "Failed Surface.makeFromMTKView($context, $mtkViewPtr $origin, $colorFormat, $surfaceProps)"
-                }
-                Surface(ptr, context)
-            } finally {
-                reachabilityBarrier(context)
-                reachabilityBarrier(colorSpace)
-            }
-        }
 
         /**
          *
@@ -373,13 +311,6 @@ class Surface : RefCnt {
          * width, or height, or both, may be zero
          * @return                      new SkSurface
          */
-        fun makeRenderTarget(
-            context: DirectContext,
-            budgeted: Boolean,
-            imageInfo: ImageInfo
-        ): Surface {
-            return makeRenderTarget(context, budgeted, imageInfo, 0, SurfaceOrigin.BOTTOM_LEFT, null, false)
-        }
 
         /**
          *
@@ -403,23 +334,6 @@ class Surface : RefCnt {
          * fonts; may be null
          * @return                      new SkSurface
          */
-        fun makeRenderTarget(
-            context: DirectContext,
-            budgeted: Boolean,
-            imageInfo: ImageInfo,
-            sampleCount: Int,
-            surfaceProps: SurfaceProps?
-        ): Surface {
-            return makeRenderTarget(
-                context,
-                budgeted,
-                imageInfo,
-                sampleCount,
-                SurfaceOrigin.BOTTOM_LEFT,
-                surfaceProps,
-                false
-            )
-        }
 
         /**
          *
@@ -444,16 +358,6 @@ class Surface : RefCnt {
          * fonts; may be null
          * @return                      new SkSurface
          */
-        fun makeRenderTarget(
-            context: DirectContext,
-            budgeted: Boolean,
-            imageInfo: ImageInfo,
-            sampleCount: Int,
-            origin: SurfaceOrigin,
-            surfaceProps: SurfaceProps?
-        ): Surface {
-            return makeRenderTarget(context, budgeted, imageInfo, sampleCount, origin, surfaceProps, false)
-        }
 
         /**
          *
@@ -482,41 +386,6 @@ class Surface : RefCnt {
          * @param shouldCreateWithMips  hint that SkSurface will host mip map images
          * @return                      new SkSurface
          */
-        fun makeRenderTarget(
-            context: DirectContext,
-            budgeted: Boolean,
-            imageInfo: ImageInfo,
-            sampleCount: Int,
-            origin: SurfaceOrigin,
-            surfaceProps: SurfaceProps?,
-            shouldCreateWithMips: Boolean
-        ): Surface {
-            return try {
-                Stats.onNativeCall()
-                val ptr = interopScope {
-                    _nMakeRenderTarget(
-                        getPtr(context),
-                        budgeted,
-                        imageInfo.width,
-                        imageInfo.height,
-                        imageInfo.colorInfo.colorType.ordinal,
-                        imageInfo.colorInfo.alphaType.ordinal,
-                        getPtr(imageInfo.colorInfo.colorSpace),
-                        sampleCount,
-                        origin.ordinal,
-                        toInterop(surfaceProps?.packToIntArray()),
-                        shouldCreateWithMips
-                    )
-                }
-                require(ptr != NullPointer) {
-                    "Failed Surface.makeRenderTarget($context, $budgeted, $imageInfo, $sampleCount, $origin, $surfaceProps, $shouldCreateWithMips)"
-                }
-                Surface(ptr, context)
-            } finally {
-                reachabilityBarrier(context)
-                reachabilityBarrier(imageInfo.colorInfo.colorSpace)
-            }
-        }
 
         /**
          * Returns Surface without backing pixels. Drawing to Canvas returned from Surface
@@ -540,9 +409,7 @@ class Surface : RefCnt {
         }
     }
 
-    internal val _context: DirectContext?
-
-    internal val _renderTarget: BackendRenderTarget?
+    private val _owners: Array<out Any?>
 
     /**
      *
@@ -626,22 +493,6 @@ class Surface : RefCnt {
         }
     }
 
-    /**
-     *
-     * Returns the recording context being used by the Surface.
-     *
-     * The returned context is borrowed from the Surface and must not be closed.
-     *
-     * @return the recording context, if available; null otherwise
-     */
-    val recordingContext: DirectContext?
-        get() = try {
-            Stats.onNativeCall()
-            val ptr = _nGetSurfaceRecordingContext(_ptr)
-            if (ptr == NullPointer) null else DirectContext(ptr, managed = false)
-        } finally {
-            reachabilityBarrier(this)
-        }
 
     /**
      *
@@ -958,41 +809,6 @@ class Surface : RefCnt {
         }
     }
 
-    /**
-     *
-     * Call to ensure all reads/writes of the surface have been issued to the underlying 3D API.
-     *
-     *
-     * Skia will correctly order its own draws and pixel operations.
-     * This must to be used to ensure correct ordering when the surface backing store is accessed
-     * outside Skia (e.g. direct use of the 3D API or a windowing system).
-     * DirectContext has additional flush and submit methods that apply to all surfaces and images created from
-     * a DirectContext.
-     */
-    fun flushAndSubmit() {
-        _context?.flushAndSubmit(this)
-    }
-
-    /**
-     *
-     * Call to ensure all reads/writes of the surface have been issued to the underlying 3D API.
-     *
-     *
-     * Skia will correctly order its own draws and pixel operations.
-     * This must to be used to ensure correct ordering when the surface backing store is accessed
-     * outside Skia (e.g. direct use of the 3D API or a windowing system).
-     * DirectContext has additional flush and submit methods that apply to all surfaces and images created from
-     * a DirectContext.
-     *
-     * @param syncCpu a flag determining if cpu should be synced
-     */
-    fun flushAndSubmit(syncCpu: Boolean) {
-        _context?.flushAndSubmit(this, syncCpu)
-    }
-
-    fun flush() {
-        _context?.flush(this)
-    }
 
     /**
      *
@@ -1010,19 +826,8 @@ class Surface : RefCnt {
         }
 
     @InternalSkikoApi
-    constructor(ptr: NativePointer) : super(ptr) {
-        _context = null
-        _renderTarget = null
-    }
-
-    internal constructor(ptr: NativePointer, context: DirectContext?) : super(ptr) {
-        _context = context
-        _renderTarget = null
-    }
-
-    internal constructor(ptr: NativePointer, context: DirectContext?, renderTarget: BackendRenderTarget?) : super(ptr) {
-        _context = context
-        _renderTarget = renderTarget
+    constructor(ptr: NativePointer, vararg owners: Any?) : super(ptr) {
+        _owners = owners
     }
 }
 
@@ -1072,41 +877,6 @@ private external fun _nMakeRaster(
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeRasterN32Premul")
 private external fun _nMakeRasterN32Premul(width: Int, height: Int): NativePointer
 
-@ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeFromBackendRenderTarget")
-private external fun _nMakeFromBackendRenderTarget(
-    pContext: NativePointer,
-    pBackendRenderTarget: NativePointer,
-    surfaceOrigin: Int,
-    colorType: Int,
-    colorSpacePtr: NativePointer,
-    surfaceProps: InteropPointer
-): NativePointer
-
-@ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeFromMTKView")
-private external fun _nMakeFromMTKView(
-    contextPtr: NativePointer,
-    mtkViewPtr: NativePointer,
-    surfaceOrigin: Int,
-    sampleCount: Int,
-    colorType: Int,
-    colorSpacePtr: NativePointer,
-    surfaceProps: InteropPointer
-): NativePointer
-
-@ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeRenderTarget")
-private external fun _nMakeRenderTarget(
-    contextPtr: NativePointer,
-    budgeted: Boolean,
-    width: Int,
-    height: Int,
-    colorType: Int,
-    alphaType: Int,
-    colorSpacePtr: NativePointer,
-    sampleCount: Int,
-    surfaceOrigin: Int,
-    surfaceProps: InteropPointer,
-    shouldCreateWithMips: Boolean
-): NativePointer
 
 
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nMakeNull")
@@ -1118,8 +888,6 @@ private external fun _nGenerationId(ptr: NativePointer): Int
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nNotifyContentWillChange")
 private external fun _nNotifyContentWillChange(ptr: NativePointer, mode: Int)
 
-@ExternalSymbolName("org_jetbrains_skia_Surface__1nGetSurfaceRecordingContext")
-private external fun _nGetSurfaceRecordingContext(ptr: NativePointer): NativePointer
 
 @ExternalSymbolName("org_jetbrains_skia_Surface__1nGetCanvas")
 private external fun _nGetCanvas(ptr: NativePointer): NativePointer

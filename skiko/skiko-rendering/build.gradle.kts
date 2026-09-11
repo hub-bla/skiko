@@ -37,6 +37,7 @@ val buildType = skiko.buildType
 val targetOs = hostOs
 val targetArch = skiko.targetArch
 val coreProject = project(":")
+val ganeshProject = project(":skiko-ganesh")
 
 val renderingDependencies: SkikoDependencyScope.() -> Unit = {
     dependsOnCore()
@@ -221,12 +222,14 @@ if (supportWeb) {
             - implementation("org.jetbrains.skiko:skiko-rendering-x")
          */
         compileOnly(project(":"))
+        compileOnly(ganeshProject)
     }
 
     sourceSets.commonTest.dependencies {
         implementation(kotlin("test"))
         implementation(kotlin("test-annotations-common"))
         implementation(project(":"))
+        implementation(ganeshProject)
         implementation(project(":test-utils"))
     }
 
