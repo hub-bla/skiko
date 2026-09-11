@@ -423,6 +423,7 @@ fun SkikoProjectContext.createObjcCompileTask(
             *os.clangFlags,
             *buildType.clangFlags,
             *skiaPreprocessorFlags(os, buildType),
+            *dependencyRegistry.getCompilerFlags(os, arch, TargetEnv.JVM).toTypedArray(),
             "-fPIC"
         )
     )
@@ -734,9 +735,7 @@ fun SkikoProjectContext.skikoJvmRuntimeJarTask(
         archiveClassifier.set(target)
         nativeFiles.forEach { provider -> from(provider) }
     }
-    if (kind == SkikoModuleKind.CORE) {
-        configureJvmRuntimeJarElements(targetOs, targetArch, runtimeJar)
-    }
+    configureJvmRuntimeJarElements(targetOs, targetArch, runtimeJar)
     return runtimeJar
 }
 

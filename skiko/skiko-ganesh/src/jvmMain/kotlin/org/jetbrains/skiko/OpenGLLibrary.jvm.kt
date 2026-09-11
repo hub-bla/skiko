@@ -1,6 +1,6 @@
 package org.jetbrains.skiko
 
-import org.jetbrains.skia.impl.Library
+import org.jetbrains.skia.GaneshLibrary
 
 private external fun loadOpenGLLibraryWindows()
 
@@ -9,11 +9,11 @@ private var isLoaded = false
 @Synchronized
 @InternalSkikoApi
 actual fun loadOpenGLLibrary() {
+    GaneshLibrary.load()
     if (!isLoaded) {
         when {
             // On Windows it is linked dynamically
             hostOs.isWindows -> {
-                Library.staticLoad()
                 loadOpenGLLibraryWindows()
             }
             // it was deprecated in macOS 10.14
