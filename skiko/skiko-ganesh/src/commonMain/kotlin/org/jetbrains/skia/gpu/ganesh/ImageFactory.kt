@@ -14,6 +14,21 @@ import org.jetbrains.skia.impl.Stats
 import org.jetbrains.skia.impl.getPtr
 import org.jetbrains.skia.impl.reachabilityBarrier
 
+/**
+ * Creates GPU-backed SkImage from backendTexture associated with context.
+ *
+ * Skia will assume ownership of the resource and will release it when no longer needed.
+ * A non-null Image is returned if format of backendTexture is recognized and supported.
+ * Recognized formats vary by GPU backend.
+ *
+ * @param context         GPU context
+ * @param backendTexture  texture residing on GPU
+ * @param origin          origin of backendTexture
+ * @param colorType       color type of the resulting Image
+ * @return                created Image
+ *
+ * @throws RuntimeException - if nullPtr is returned.
+ */
 fun Image.Companion.adoptTextureFrom(
     context: DirectContext,
     backendTexture: BackendTexture,
@@ -21,6 +36,22 @@ fun Image.Companion.adoptTextureFrom(
     colorType: ColorType,
 ): Image = adoptTextureFrom(context, backendTexture, origin, colorType, null)
 
+/**
+ * Creates GPU-backed SkImage from backendTexture associated with context.
+ *
+ * Skia will assume ownership of the resource and will release it when no longer needed.
+ * A non-null Image is returned if format of backendTexture is recognized and supported.
+ * Recognized formats vary by GPU backend.
+ *
+ * @param context         GPU context
+ * @param backendTexture  texture residing on GPU
+ * @param origin          origin of backendTexture
+ * @param colorType       color type of the resulting Image
+ * @param alphaType       alpha type of the resulting Image
+ * @return                created Image
+ *
+ * @throws RuntimeException - if nullPtr is returned.
+ */
 fun Image.Companion.adoptTextureFrom(
     context: DirectContext,
     backendTexture: BackendTexture,
@@ -56,11 +87,56 @@ fun Image.readPixels(context: DirectContext, dst: Bitmap, srcX: Int, srcY: Int):
     readPixels(context, dst, srcX, srcY, false)
 
 /**
- * Reads pixels using the supplied Ganesh context.
  *
- * This has a separate native bridge from core's context-free [Image.readPixels]. A real
- * [DirectContext] must be passed to Skia for texture-backed images; delegating to the context-free
- * pixmap overload would not be equivalent and may fail to read GPU-backed pixels.
+ * Copies Rect of pixels from Image to Bitmap. Copy starts at offset (srcX, srcY),
+ * and does not exceed Image (width, height).
+ *
+ *
+ * Image ColorType and Bitmap ColorType must match, or be a combination of
+ * ColorType.RGBA_8888 and ColorType.BGRA_8888.
+ * Image ColorSpace and Bitmap ColorSpace must match. Image AlphaType and
+ * Bitmap AlphaType must match, or be a combination of AlphaType.PREMUL and
+ * AlphaType.UNPREMUL. If Bitmap pixels are unallocated, Bitmap row bytes must be zero.
+ *
+ *
+ * srcX and srcY may be negative to copy only top or left of source. Returns false if
+ * Bitmap pixels could not be allocated or pixel conversion is not possible.
+ *
+ *
+ * If Bitmap pixels are unallocated, Bitmap is resized to fit Image width and height.
+ * If Bitmap pixels are allocated, only pixels fitting both Image and Bitmap are copied.
+ * Bitmap pixel address does not change unless pixels are reallocated.
+ *
+ *
+ * On success, pixels are copied to Bitmap and true is returned.
+ *
+ *
+ * Returns false if Image is texture-backed and context is null.
+ *
+ *
+ * Returns false if srcX &lt; 0 and -srcX is equal to or greater than Bitmap width.
+ *
+ *
+ * Returns false if srcY &lt; 0 and -srcY is equal to or greater than Bitmap height.
+ *
+ *
+ * Returns false if srcX is equal to or greater than Image width.
+ *
+ *
+ * Returns false if srcY is equal to or greater than Image height.
+ *
+ *
+ * Returns false if abs(srcX) &gt;= Image.getWidth(), or if abs(srcY) &gt;= Image.getHeight().
+ *
+ *
+ * If cache is true, pixels may be retained locally, otherwise pixels are not added to the local cache.
+ *
+ * @param context the DirectContext in play, if it exists
+ * @param dst     destination bitmap
+ * @param srcX    column index whose absolute value is less than getWidth()
+ * @param srcY    row index whose absolute value is less than getHeight()
+ * @param cache   whether the pixels should be cached locally
+ * @return        true if pixels are copied to dstPixels
  */
 fun Image.readPixels(
     context: DirectContext,

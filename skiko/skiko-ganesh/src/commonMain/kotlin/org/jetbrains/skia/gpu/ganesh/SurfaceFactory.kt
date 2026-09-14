@@ -17,6 +17,29 @@ import org.jetbrains.skia.impl.getPtr
 import org.jetbrains.skia.impl.interopScope
 import org.jetbrains.skia.impl.reachabilityBarrier
 
+/**
+ *
+ * Wraps a GPU-backed buffer into [Surface].
+ *
+ *
+ * Caller must ensure backendRenderTarget is valid for the lifetime of returned [Surface].
+ *
+ *
+ * [Surface] is returned if all parameters are valid. backendRenderTarget is valid if its pixel
+ * configuration agrees with colorSpace and context;
+ * for instance, if backendRenderTarget has an sRGB configuration, then context must support sRGB,
+ * and colorSpace must be present. Further, backendRenderTarget width and height must not exceed
+ * context capabilities, and the context must be able to support back-end render targets.
+ *
+ * @param context       GPU context
+ * @param rt            texture residing on GPU
+ * @param origin        surfaceOrigin pins either the top-left or the bottom-left corner to the origin.
+ * @param colorFormat   color format
+ * @param colorSpace    range of colors; may be null
+ * @param surfaceProps  LCD striping orientation and setting for device independent fonts; may be null
+ * @return              Surface if all parameters are valid; otherwise, null
+ * @see [https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture](https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture)
+ */
 fun Surface.Companion.makeFromBackendRenderTarget(
     context: DirectContext,
     rt: BackendRenderTarget,
@@ -37,7 +60,7 @@ fun Surface.Companion.makeFromBackendRenderTarget(
                 toInterop(surfaceProps?.packToIntArray()),
             )
         }
-        if (ptr == NullPointer) null else Surface(ptr, context, rt)
+        if (ptr == NullPointer) null else Surface(ptr, arrayOf(context, rt))
     } finally {
         reachabilityBarrier(context)
         reachabilityBarrier(rt)
@@ -77,12 +100,47 @@ fun Surface.Companion.makeFromMTKView(
     }
 }
 
+/**
+ *
+ * Returns Surface on GPU indicated by context. Allocates memory for
+ * pixels, based on the width, height, and ColorType in ImageInfo.
+ * describes the pixel format in ColorType, and transparency in
+ * AlphaType, and color matching in ColorSpace.
+ *
+ * @param context               GPU context
+ * @param budgeted              selects whether allocation for pixels is tracked by context
+ * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
+ * width, or height, or both, may be zero
+ * @return                      new SkSurface
+ */
 fun Surface.Companion.makeRenderTarget(
     context: DirectContext,
     budgeted: Boolean,
     imageInfo: ImageInfo,
 ): Surface = makeRenderTarget(context, budgeted, imageInfo, 0, SurfaceOrigin.BOTTOM_LEFT, null, false)
 
+/**
+ *
+ * Returns Surface on GPU indicated by context. Allocates memory for
+ * pixels, based on the width, height, and ColorType in ImageInfo.
+ * describes the pixel format in ColorType, and transparency in
+ * AlphaType, and color matching in ColorSpace.
+ *
+ *
+ * sampleCount requests the number of samples per pixel.
+ * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
+ * up to the next supported count, or rounded down if it is larger than the
+ * maximum supported count.
+ *
+ * @param context               GPU context
+ * @param budgeted              selects whether allocation for pixels is tracked by context
+ * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
+ * width, or height, or both, may be zero
+ * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
+ * @param surfaceProps          LCD striping orientation and setting for device independent
+ * fonts; may be null
+ * @return                      new SkSurface
+ */
 fun Surface.Companion.makeRenderTarget(
     context: DirectContext,
     budgeted: Boolean,
@@ -99,6 +157,29 @@ fun Surface.Companion.makeRenderTarget(
     false,
 )
 
+/**
+ *
+ * Returns Surface on GPU indicated by context. Allocates memory for
+ * pixels, based on the width, height, and ColorType in ImageInfo.
+ * describes the pixel format in ColorType, and transparency in
+ * AlphaType, and color matching in ColorSpace.
+ *
+ *
+ * sampleCount requests the number of samples per pixel.
+ * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
+ * up to the next supported count, or rounded down if it is larger than the
+ * maximum supported count.
+ *
+ * @param context               GPU context
+ * @param budgeted              selects whether allocation for pixels is tracked by context
+ * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
+ * width, or height, or both, may be zero
+ * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
+ * @param origin                pins either the top-left or the bottom-left corner to the origin.
+ * @param surfaceProps          LCD striping orientation and setting for device independent
+ * fonts; may be null
+ * @return                      new SkSurface
+ */
 fun Surface.Companion.makeRenderTarget(
     context: DirectContext,
     budgeted: Boolean,
@@ -108,6 +189,33 @@ fun Surface.Companion.makeRenderTarget(
     surfaceProps: SurfaceProps?,
 ): Surface = makeRenderTarget(context, budgeted, imageInfo, sampleCount, origin, surfaceProps, false)
 
+/**
+ *
+ * Returns Surface on GPU indicated by context. Allocates memory for
+ * pixels, based on the width, height, and ColorType in ImageInfo.
+ * describes the pixel format in ColorType, and transparency in
+ * AlphaType, and color matching in ColorSpace.
+ *
+ *
+ * sampleCount requests the number of samples per pixel.
+ * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
+ * up to the next supported count, or rounded down if it is larger than the
+ * maximum supported count.
+ *
+ *
+ * shouldCreateWithMips hints that Image returned by [.makeImageSnapshot] is mip map.
+ *
+ * @param context               GPU context
+ * @param budgeted              selects whether allocation for pixels is tracked by context
+ * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
+ * width, or height, or both, may be zero
+ * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
+ * @param origin                pins either the top-left or the bottom-left corner to the origin.
+ * @param surfaceProps          LCD striping orientation and setting for device independent
+ * fonts; may be null
+ * @param shouldCreateWithMips  hint that SkSurface will host mip map images
+ * @return                      new SkSurface
+ */
 fun Surface.Companion.makeRenderTarget(
     context: DirectContext,
     budgeted: Boolean,

@@ -24,6 +24,7 @@ dependencyResolutionManagement {
 
             library("skiko", "org.jetbrains.skiko", "skiko").versionRef("skiko")
             library("skiko-ganesh", "org.jetbrains.skiko", "skiko-ganesh").versionRef("skiko")
+            library("skiko-ganesh-wasm-js", "org.jetbrains.skiko", "skiko-ganesh-wasm-js").versionRef("skiko")
             library("skiko-js-wasm-runtime", "org.jetbrains.skiko", "skiko-js-wasm-runtime").versionRef("skiko")
             library("skiko-wasm-js", "org.jetbrains.skiko", "skiko-wasm-js").versionRef("skiko")
             library("browser", "org.jetbrains.kotlinx", "kotlinx-browser").versionRef("kotlinxBrowser")

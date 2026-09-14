@@ -55,6 +55,10 @@ val ganeshDependencies: SkikoDependencyScope.() -> Unit = {
             windows {
                 staticSkiaLibs("d3d12allocator")
                 compilerFlags("-DSK_DIRECT3D", "-DSK_ANGLE")
+                arm64 {
+                    // The Ganesh ARM64 link reports "misaligned ldr/str offset" with ICF enabled.
+                    linkFlags("/OPT:NOICF")
+                }
             }
             linux {
                 dynamicSystemLibs("GL")

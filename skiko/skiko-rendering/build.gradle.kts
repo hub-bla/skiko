@@ -230,14 +230,14 @@ if (supportWeb) {
             - implementation("org.jetbrains.skiko:skiko-rendering-x")
          */
         compileOnly(project(":"))
-        compileOnly(ganeshProject)
+        compileOnly(project(":skiko-ganesh"))
     }
 
     sourceSets.commonTest.dependencies {
         implementation(kotlin("test"))
         implementation(kotlin("test-annotations-common"))
         implementation(project(":"))
-        implementation(ganeshProject)
+        implementation(project(":skiko-ganesh"))
         implementation(project(":test-utils"))
     }
 

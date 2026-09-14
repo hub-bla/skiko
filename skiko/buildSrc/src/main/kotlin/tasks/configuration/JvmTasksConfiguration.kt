@@ -316,7 +316,7 @@ fun SkikoProjectContext.createCompileJvmBindingsTask(
         listOf(
             *skiaPreprocessorFlags(targetOs, buildType),
             *osFlags,
-            *dependencyRegistry.getCompilerFlags(targetOs, targetArch, TargetEnv.JVM).toTypedArray(),
+            *compilerFlags(targetOs, targetArch, TargetEnv.JVM).toTypedArray(),
         )
     )
 }
@@ -423,7 +423,7 @@ fun SkikoProjectContext.createObjcCompileTask(
             *os.clangFlags,
             *buildType.clangFlags,
             *skiaPreprocessorFlags(os, buildType),
-            *dependencyRegistry.getCompilerFlags(os, arch, TargetEnv.JVM).toTypedArray(),
+            *compilerFlags(os, arch, TargetEnv.JVM).toTypedArray(),
             "-fPIC"
         )
     )

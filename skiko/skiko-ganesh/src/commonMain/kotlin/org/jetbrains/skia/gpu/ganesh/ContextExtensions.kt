@@ -22,6 +22,13 @@ fun Bitmap.Companion.makeFromImage(image: Image, context: DirectContext): Bitmap
     }
 }
 
+/**
+ * Returns the recording context being used by this Canvas.
+ *
+ * The returned context is borrowed from the Canvas and must not be closed.
+ *
+ * @return the recording context, if available; null otherwise
+ */
 val Canvas.recordingContext: DirectContext?
     get() = try {
         GaneshLibrary.load()
@@ -32,6 +39,14 @@ val Canvas.recordingContext: DirectContext?
         reachabilityBarrier(this)
     }
 
+/**
+ *
+ * Returns the recording context being used by the Surface.
+ *
+ * The returned context is borrowed from the Surface and must not be closed.
+ *
+ * @return the recording context, if available; null otherwise
+ */
 val Surface.recordingContext: DirectContext?
     get() = try {
         GaneshLibrary.load()
@@ -42,10 +57,34 @@ val Surface.recordingContext: DirectContext?
         reachabilityBarrier(this)
     }
 
+/**
+ *
+ * Call to ensure all reads/writes of the surface have been issued to the underlying 3D API.
+ *
+ *
+ * Skia will correctly order its own draws and pixel operations.
+ * This must to be used to ensure correct ordering when the surface backing store is accessed
+ * outside Skia (e.g. direct use of the 3D API or a windowing system).
+ * DirectContext has additional flush and submit methods that apply to all surfaces and images created from
+ * a DirectContext.
+ */
 fun Surface.flushAndSubmit() {
     recordingContext?.flushAndSubmit(this)
 }
 
+/**
+ *
+ * Call to ensure all reads/writes of the surface have been issued to the underlying 3D API.
+ *
+ *
+ * Skia will correctly order its own draws and pixel operations.
+ * This must to be used to ensure correct ordering when the surface backing store is accessed
+ * outside Skia (e.g. direct use of the 3D API or a windowing system).
+ * DirectContext has additional flush and submit methods that apply to all surfaces and images created from
+ * a DirectContext.
+ *
+ * @param syncCpu a flag determining if cpu should be synced
+ */
 fun Surface.flushAndSubmit(syncCpu: Boolean) {
     recordingContext?.flushAndSubmit(this, syncCpu)
 }

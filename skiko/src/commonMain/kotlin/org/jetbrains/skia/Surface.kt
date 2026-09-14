@@ -224,52 +224,6 @@ class Surface : RefCnt {
         }
         /**
          *
-         * Wraps a GPU-backed buffer into [Surface].
-         *
-         *
-         * Caller must ensure backendRenderTarget is valid for the lifetime of returned [Surface].
-         *
-         *
-         * [Surface] is returned if all parameters are valid. backendRenderTarget is valid if its pixel
-         * configuration agrees with colorSpace and context;
-         * for instance, if backendRenderTarget has an sRGB configuration, then context must support sRGB,
-         * and colorSpace must be present. Further, backendRenderTarget width and height must not exceed
-         * context capabilities, and the context must be able to support back-end render targets.
-         *
-         * @param context       GPU context
-         * @param rt            texture residing on GPU
-         * @param origin        surfaceOrigin pins either the top-left or the bottom-left corner to the origin.
-         * @param colorFormat   color format
-         * @param colorSpace    range of colors; may be null
-         * @param surfaceProps  LCD striping orientation and setting for device independent fonts; may be null
-         * @return              Surface if all parameters are valid; otherwise, null
-         * @see [https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture](https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture)
-         */
-        /**
-         *
-         * Wraps a GPU-backed buffer into [Surface].
-         *
-         *
-         * Caller must ensure backendRenderTarget is valid for the lifetime of returned [Surface].
-         *
-         *
-         * [Surface] is returned if all parameters are valid. backendRenderTarget is valid if its pixel
-         * configuration agrees with colorSpace and context;
-         * for instance, if backendRenderTarget has an sRGB configuration, then context must support sRGB,
-         * and colorSpace must be present. Further, backendRenderTarget width and height must not exceed
-         * context capabilities, and the context must be able to support back-end render targets.
-         *
-         * @param context       GPU context
-         * @param rt            texture residing on GPU
-         * @param origin        surfaceOrigin pins either the top-left or the bottom-left corner to the origin.
-         * @param colorFormat   color format
-         * @param colorSpace    range of colors; may be null
-         * @return              Surface if all parameters are valid; otherwise, null
-         * @see [https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture](https://fiddle.skia.org/c/@Surface_MakeFromBackendTexture)
-         */
-
-        /**
-         *
          * Allocates raster [Surface].
          *
          *
@@ -299,95 +253,6 @@ class Surface : RefCnt {
         }
 
         /**
-         *
-         * Returns Surface on GPU indicated by context. Allocates memory for
-         * pixels, based on the width, height, and ColorType in ImageInfo.
-         * describes the pixel format in ColorType, and transparency in
-         * AlphaType, and color matching in ColorSpace.
-         *
-         * @param context               GPU context
-         * @param budgeted              selects whether allocation for pixels is tracked by context
-         * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
-         * width, or height, or both, may be zero
-         * @return                      new SkSurface
-         */
-
-        /**
-         *
-         * Returns Surface on GPU indicated by context. Allocates memory for
-         * pixels, based on the width, height, and ColorType in ImageInfo.
-         * describes the pixel format in ColorType, and transparency in
-         * AlphaType, and color matching in ColorSpace.
-         *
-         *
-         * sampleCount requests the number of samples per pixel.
-         * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
-         * up to the next supported count, or rounded down if it is larger than the
-         * maximum supported count.
-         *
-         * @param context               GPU context
-         * @param budgeted              selects whether allocation for pixels is tracked by context
-         * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
-         * width, or height, or both, may be zero
-         * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
-         * @param surfaceProps          LCD striping orientation and setting for device independent
-         * fonts; may be null
-         * @return                      new SkSurface
-         */
-
-        /**
-         *
-         * Returns Surface on GPU indicated by context. Allocates memory for
-         * pixels, based on the width, height, and ColorType in ImageInfo.
-         * describes the pixel format in ColorType, and transparency in
-         * AlphaType, and color matching in ColorSpace.
-         *
-         *
-         * sampleCount requests the number of samples per pixel.
-         * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
-         * up to the next supported count, or rounded down if it is larger than the
-         * maximum supported count.
-         *
-         * @param context               GPU context
-         * @param budgeted              selects whether allocation for pixels is tracked by context
-         * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
-         * width, or height, or both, may be zero
-         * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
-         * @param origin                pins either the top-left or the bottom-left corner to the origin.
-         * @param surfaceProps          LCD striping orientation and setting for device independent
-         * fonts; may be null
-         * @return                      new SkSurface
-         */
-
-        /**
-         *
-         * Returns Surface on GPU indicated by context. Allocates memory for
-         * pixels, based on the width, height, and ColorType in ImageInfo.
-         * describes the pixel format in ColorType, and transparency in
-         * AlphaType, and color matching in ColorSpace.
-         *
-         *
-         * sampleCount requests the number of samples per pixel.
-         * Pass zero to disable multi-sample anti-aliasing.  The request is rounded
-         * up to the next supported count, or rounded down if it is larger than the
-         * maximum supported count.
-         *
-         *
-         * shouldCreateWithMips hints that Image returned by [.makeImageSnapshot] is mip map.
-         *
-         * @param context               GPU context
-         * @param budgeted              selects whether allocation for pixels is tracked by context
-         * @param imageInfo             width, height, ColorType, AlphaType, ColorSpace;
-         * width, or height, or both, may be zero
-         * @param sampleCount           samples per pixel, or 0 to disable full scene anti-aliasing
-         * @param origin                pins either the top-left or the bottom-left corner to the origin.
-         * @param surfaceProps          LCD striping orientation and setting for device independent
-         * fonts; may be null
-         * @param shouldCreateWithMips  hint that SkSurface will host mip map images
-         * @return                      new SkSurface
-         */
-
-        /**
          * Returns Surface without backing pixels. Drawing to Canvas returned from Surface
          * has no effect. Calling makeImageSnapshot() on returned Surface returns null.
          *
@@ -409,7 +274,8 @@ class Surface : RefCnt {
         }
     }
 
-    private val _owners: Array<out Any?>
+    // Keeps resources owned by another module alive for as long as this Surface uses them.
+    private val lifetimeOwner: Any?
 
     /**
      *
@@ -826,8 +692,8 @@ class Surface : RefCnt {
         }
 
     @InternalSkikoApi
-    constructor(ptr: NativePointer, vararg owners: Any?) : super(ptr) {
-        _owners = owners
+    constructor(ptr: NativePointer, lifetimeOwner: Any? = null) : super(ptr) {
+        this.lifetimeOwner = lifetimeOwner
     }
 }
 
