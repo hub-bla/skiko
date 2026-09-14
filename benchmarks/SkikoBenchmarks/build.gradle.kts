@@ -233,6 +233,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.skiko)
+            implementation(libs.skiko.ganesh)
         }
 
         val jvmMain by getting {
