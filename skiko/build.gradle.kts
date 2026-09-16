@@ -53,10 +53,14 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "skresources",
                 "png",
                 "jpeg",
+                "jpeg12",
+                "jpeg16",
                 "webp",
                 "webp_sse41",
-                "zlib",
                 "expat",
+                "wuffs",
+                "skcms",
+                "bentleyottmann",
             )
         }
         jvm {
@@ -78,16 +82,13 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
             }
 
             windows {
-                    staticSkiaLibs("d3d12allocator")
-                    // m151 SkSL adopted Chromium's raw_ptr<T> (BackupRefPtr/MiraclePtr), which is
-                    // active on Windows (no-op elsewhere). skia.lib now references partition_alloc
-                    // and raw_ptr symbols that live in these split-out static libs, so link them.
-                    // allocator_shim is intentionally omitted: it overrides global malloc and is not
-                    // referenced by skia.
-                    staticSkiaLibs("raw_ptr", "allocator_core", "allocator_base")
+                staticSkiaLibs("d3d12allocator", "spirv_cross")
             }
 
             linux {
+                staticSkiaLibs("piex", "dng_sdk", "freetype2")
+                // Keep system libraries after Skia archives for older GNU linkers.
+                linkFlags("-pthread", "-ldl")
                 // Hack to fix problem with linker not always finding certain declarations.
                 directStaticSkiaLibs(
                     "skia",
@@ -113,6 +114,7 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
             )
 
             linux {
+                staticSkiaLibs("freetype2")
                 // Hack to fix problem with linker not always finding certain declarations.
                 directStaticSkiaLibs(
                     "skshaper",
@@ -154,12 +156,7 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
         }
         wasm {
             staticSkiaLibs(
-                "bentleyottmann",
                 "freetype2",
-                "jpeg12",
-                "jpeg16",
-                "wuffs",
-                "skcms",
                 "brotli",
             )
             linkFlags(
@@ -175,6 +172,11 @@ val coreDependencies: SkikoDependencyScope.() -> Unit = {
                 "-s", "STACK_SIZE=1048576", // 1 MB
                 "--bind",
             )
+        }
+        // zlib is a leaf dependency of DNG and other archives. Keep it last for
+        // linkers that only scan a static archive once.
+        all {
+            staticSkiaLibs("zlib")
         }
     }
 }

@@ -533,6 +533,8 @@ fun SkikoProjectContext.createLinkJvmBindings(
                         // `libstdc++.so.6.*` binaries are forward-compatible and used from GCC 3.4 to 16+,
                         // so do not use `-static-libstdc++` to avoid issues with complex setup.
                         "-static-libgcc",
+                        // Do not defer missing symbols in the core library until System.load().
+                        *if (kind == SkikoModuleKind.CORE) arrayOf("-Wl,-z,defs") else emptyArray(),
                         // Enforce immediate symbol resolution at library load time to prevent
                         // lazy-binding issues and make GOT read-only afterwards.
                         "-Wl,-z,relro,-z,now",
@@ -563,6 +565,7 @@ fun SkikoProjectContext.createLinkJvmBindings(
                     arrayOf(
                         "/NOLOGO",
                         "/DLL",
+                        "/MAP",
                         "Advapi32.lib",
                         "gdi32.lib",
                         "Dwmapi.lib",

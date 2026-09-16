@@ -346,6 +346,7 @@ jobs:
             ./skiko/**/build/reports/tests
             ./skiko/**/src/jvmTest/screenshots/*_actual.png
             ./skiko/**/hs_err_pid*.log
+            ./skiko/**/build/**/*.map
           retention-days: 5
 
       - uses: test-summary/action@v2
