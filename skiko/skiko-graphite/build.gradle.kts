@@ -23,6 +23,7 @@ val skiko = SkikoProperties(rootProject)
 val targetOs = hostOs
 val targetArch = skiko.targetArch
 val coreProject = project(":")
+val gpuProject = project(":skiko-gpu")
 val graphiteArtifacts = SkikoArtifacts(
     artifactIdPrefix = "skiko-graphite",
     displayName = "Skiko Graphite",
@@ -103,6 +104,14 @@ repositories {
     google()
 }
 
+configurations.matching {
+    it.name == "metadataApiElements" ||
+        (it.name.startsWith("ios") && it.name.endsWith("ApiElements") && "CInterop" !in it.name)
+}.configureEach {
+    outgoing.capability("${project.group}:${graphiteArtifacts.artifactIdPrefix}:${project.version}")
+    outgoing.capability("${project.group}:skiko-gpu-backend:${project.version}")
+}
+
 kotlin.run {
     compilerOptions {
         languageVersion.set(skikoKotlinLanguageVersion)
@@ -169,6 +178,12 @@ kotlin.run {
         implementation(kotlin("test"))
         implementation(coreProject)
     }
+    sourceSets.named("iosMain") {
+        dependencies {
+            // skiko-gpu is published explicitly by the downstream Compose module.
+            compileOnly(gpuProject)
+        }
+    }
 
     if (supportAwt) {
         graphiteProjectContext.jvmMainSourceSet?.dependencies {
@@ -229,6 +244,7 @@ if (supportAwt) {
 }
 
 graphiteProjectContext.declarePublications()
+configurePackedKlibMetadataForIos()
 
 val mavenCentral = MavenCentralProperties(project)
 if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {
@@ -241,6 +257,9 @@ if (skiko.isTeamcityCIBuild || mavenCentral.signArtifacts) {
 
 tasks.withType<KotlinNativeCompile>().configureEach {
     compilerOptions.freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
+    if (name.contains("Ios")) {
+        compilerOptions.moduleName.set("${project.group}:skiko-gpu-provider")
+    }
 }
 
 tasks.withType<KotlinCompilationTask<*>>().configureEach {

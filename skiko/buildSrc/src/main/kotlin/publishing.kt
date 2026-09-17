@@ -1,4 +1,5 @@
 import org.gradle.api.attributes.Attribute
+import org.gradle.api.Project
 import org.gradle.api.attributes.Bundling
 import org.gradle.api.attributes.Category
 import org.gradle.api.attributes.LibraryElements
@@ -23,6 +24,48 @@ import kotlin.jvm.java
 
 
 private val SkikoProjectContext.publishing get() = project.extensions.getByType(PublishingExtension::class.java)
+
+fun Project.configurePackedKlibMetadataForIos() {
+    tasks.configureEach {
+        val isIosPublication = name.startsWith("generateMetadataFileForIos") &&
+            name.endsWith("Publication")
+        val isRootPublication = name == "generateMetadataFileForKotlinMultiplatformPublication"
+        if (!isIosPublication && !isRootPublication) return@configureEach
+
+        doLast {
+            val metadataFile = outputs.files.singleFile
+            val original = metadataFile.readText()
+            if (isRootPublication) {
+                val iosRedirectCapabilities = Regex(
+                    """("name"\s*:\s*"ios[^"]+ApiElements-published"[\s\S]*?"available-at"\s*:\s*\{[^}]*})\s*,\s*"capabilities"\s*:\s*\[[\s\S]*?]"""
+                )
+                check(iosRedirectCapabilities.findAll(original).count() > 0) {
+                    "Expected iOS redirect capabilities in ${metadataFile.absolutePath}"
+                }
+                metadataFile.writeText(
+                    original.replace(iosRedirectCapabilities, "$1")
+                )
+                return@doLast
+            }
+
+            val rootModule = Regex(""""module"\s*:\s*"([^"]+)"""")
+                .find(original)?.groupValues?.get(1)
+                ?: error("Missing component module in ${metadataFile.absolutePath}")
+            val targetSuffix = name
+                .removePrefix("generateMetadataFileFor")
+                .removeSuffix("Publication")
+                .lowercase()
+            val platformModule = "$rootModule-$targetSuffix"
+            val rootCapability = Regex("""("name"\s*:\s*)"${Regex.escape(rootModule)}"""")
+            check(rootCapability.findAll(original).count() == 1) {
+                "Expected one $rootModule capability in ${metadataFile.absolutePath}"
+            }
+            metadataFile.writeText(
+                original.replace(rootCapability, "$1\"$platformModule\"")
+            )
+        }
+    }
+}
 
 /**
  * Shared POM metadata for all Skiko publications (license, project URL, SCM, developers).
