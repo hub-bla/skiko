@@ -2,7 +2,7 @@ package tasks.configuration
 
 import Arch
 import CompileSkikoCppTask
-import MergeAppleStaticArchivesTask
+import MergeStaticArchivesTask
 import PatchSkiaSymbolsTask
 import OS
 import SkiaBuildType
@@ -292,22 +292,31 @@ fun SkikoProjectContext.configureNativeTarget(
     // inserting the `skiko` namespace into the mangled name; C symbols and
     // unsupported shapes fall back to a "_skiko" suffix.
     val requiresSymbolPatching = os == OS.IOS || os == OS.TVOS
-    // iOS/tvOS KLIBs contain a single deduplicated Skia archive per module.
-    val requiresSkiaArchiveMerging = os == OS.IOS || os == OS.TVOS
+    val requiresSkiaArchiveMerging = os == OS.Linux || os == OS.IOS || os == OS.TVOS
     val patchedLibsDir = layout.buildDirectory.dir("nativeBridges/patched/$targetString").get().asFile
 
     val skiaBinDir = "$skiaDir/out/${buildType.id}-$targetString"
     val resolvedBinaryInputs = resolveBinaryInputs(os, arch, TargetEnv.NATIVE, skiaBinDir)
-    val mergedAppleArchive = layout.buildDirectory.file("mergedSkiaArchives/$targetString/libskia_static.a")
-    val mergeAppleArchivesTask = if (requiresSkiaArchiveMerging) {
-        project.tasks.register<MergeAppleStaticArchivesTask>("mergeSkiaArchives$targetString") {
+    val isAppleTarget = os == OS.IOS || os == OS.TVOS
+    val archivesToMerge = (resolvedBinaryInputs.staticArchivePaths +
+            if (os == OS.Linux) resolvedBinaryInputs.directStaticArchivePaths else emptyList()).distinct()
+    val mergedSkiaArchive = layout.buildDirectory.file("mergedSkiaArchives/$targetString/libskia_static.a")
+    val mergeSkiaArchivesTask = if (requiresSkiaArchiveMerging) {
+        val taskNameSuffix = joinToTitleCamelCase(os.idWithSuffix(isUikitSim), arch.id)
+        project.tasks.register<MergeStaticArchivesTask>("mergeSkiaArchives$taskNameSuffix") {
             dependsOn(unzipper)
-            archives.set(resolvedBinaryInputs.staticArchivePaths.distinct().map(::File))
-            output.set(mergedAppleArchive)
+            archives.set(archivesToMerge.map(::File))
+            appleTarget.set(isAppleTarget)
+            archiverCommand.set(when {
+                isAppleTarget -> listOf("xcrun", "ar")
+                arch == Arch.Arm64 && hostArch != Arch.Arm64 -> listOf("aarch64-linux-gnu-ar")
+                else -> listOf("ar")
+            })
+            output.set(mergedSkiaArchive)
         }
     } else null
-    val nativeArchives = if (mergeAppleArchivesTask != null) {
-        listOf(mergedAppleArchive.get().asFile.absolutePath)
+    val nativeArchives = if (mergeSkiaArchivesTask != null) {
+        listOf(mergedSkiaArchive.get().asFile.absolutePath)
     } else {
         resolvedBinaryInputs.staticArchivePaths.distinct()
     }
@@ -371,7 +380,7 @@ fun SkikoProjectContext.configureNativeTarget(
                 "-L/usr/lib64",
                 "-L/usr/lib/${if (arch == Arch.Arm64) "aarch64" else "x86_64"}-linux-gnu",
             )
-            options.addAll(resolvedBinaryInputs.directStaticArchivePaths)
+            options.add(mergedSkiaArchive.get().asFile.absolutePath)
             options.addAll(resolvedBinaryInputs.dynamicLibNames.map { "-l$it" })
             options.addAll(resolvedBinaryInputs.linkFlags)
             // When cross-compiling for ARM64 from x64, use the ARM toolchain sysroot
@@ -451,7 +460,7 @@ fun SkikoProjectContext.configureNativeTarget(
         }
         project.registerSkikoTask<PatchSkiaSymbolsTask>(patchActionName, os, arch) {
             dependsOn(unzipper)
-            mergeAppleArchivesTask?.let { dependsOn(it) }
+            mergeSkiaArchivesTask?.let { dependsOn(it) }
             dependsOn(linkTask)
             if (coreSymbolSources != null) {
                 dependsOn(coreSymbolSources)
@@ -471,6 +480,7 @@ fun SkikoProjectContext.configureNativeTarget(
 
     hideSkiaSymbols.configure {
         dependsOn(unzipper)
+        mergeSkiaArchivesTask?.let { dependsOn(it) }
         dependsOn(compilationDependency)
     }
 
