@@ -48,7 +48,6 @@ val graphiteDependencies: SkikoDependencyScope.() -> Unit = {
             }
             windows {
                 staticSkiaLibs("skia_graphite_ext")
-                linkFlags("/OPT:NOICF")
                 if (skiko.buildType == SkiaBuildType.DEBUG) {
                     staticSkiaLibs("spvtools", "spvtools_val")
                 }
