@@ -67,7 +67,7 @@ class SkiaLayerTest {
                 TextStyle().apply {
                     color = Color.RED.rgb
                     fontSize = size
-                    if (hostOs == OS.Linux) fontFamilies = arrayOf("DejaVu Sans")
+//                    if (hostOs == OS.Linux) fontFamilies = arrayOf("DejaVu Sans")
                 }
             )
             .addText(text)

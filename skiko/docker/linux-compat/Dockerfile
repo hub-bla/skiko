@@ -16,7 +16,7 @@ RUN yum install -y xorg-x11-server-Xvfb xorg-x11-server-Xorg && \
 # Install libraries for native builds
 RUN yum install -y \
     fontconfig fontconfig-devel \
-    dejavu-sans-fonts \
+#    dejavu-sans-fonts \
     freetype freetype-devel \
     mesa-libGL mesa-libGL-devel \
     mesa-libEGL mesa-libEGL-devel \
